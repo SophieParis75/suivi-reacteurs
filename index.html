@@ -3,111 +3,369 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Suivi des Indisponibilités Réacteurs</title>
+    <title>Analyseur de Flux EDF Local (Audit des Pics & Variations)</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 20px; color: #333; }
-        .filter-box { background: #f5f7fa; padding: 20px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #e1e6eb; }
-        .form-group { margin-bottom: 15px; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 1200px; margin: 20px auto; padding: 0 20px; color: #333; background-color: #f8f9fa; }
+        .config-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 5px solid #0056b3; }
+        .flex-inputs { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 15px; }
+        .step { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #eee; }
+        .step:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         label { font-weight: bold; display: block; margin-bottom: 5px; }
-        input[type="date"], input[type="text"] { padding: 8px; width: 100%; max-width: 300px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 9px 15px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #0052a3; }
-        .article { background: #fff; border-left: 4px solid #ff9900; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; padding: 15px; border-radius: 0 4px 4px 0; }
-        .date-badge { background: #e1e6eb; padding: 3px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; }
-        .no-result { color: #666; font-style: italic; background: #f9f9f9; padding: 20px; text-align: center; border-radius: 4px; }
+        input[type="datetime-local"], input[type="file"], input[type="password"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        button { padding: 10px 20px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        button:hover { background: #003d7a; }
+        .btn-link { background: #6c757d; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; font-weight: bold; display: inline-block; margin-top: 5px; }
+        .btn-link:hover { background: #5a6268; }
+        h2 { border-bottom: 2px solid #0056b3; padding-bottom: 5px; color: #0056b3; margin-top: 30px; }
+        h3 { color: #dc3545; margin-top: 20px; border-bottom: 1px solid #dc3545; padding-bottom: 3px;}
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-radius: 4px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+        th { background-color: #f1f3f5; font-weight: bold; }
+        tr:hover { background-color: #f8f9fa; }
+        .highlight { font-weight: bold; color: #dc3545; }
+        .badge { background: #e2e8f0; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; }
+        .stable { color: #6c757d; font-style: italic; }
+        
+        /* Styles des compteurs de variation */
+        .delta-box { display: flex; gap: 20px; margin-top: 15px; }
+        .delta-card { background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex: 1; text-align: center; }
+        .delta-val { font-size: 24px; font-weight: bold; margin-top: 5px; }
+        .plus { color: #dc3545; font-weight: bold; }
+        .moins { color: #28a745; font-weight: bold; }
+
+        /* Styles de l'écran de verrouillage */
+        #ecranVerrouillage { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #343a40; display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center; max-width: 350px; width: 100%; }
+        .login-card h2 { border-bottom: none; color: #333; margin-top: 0; }
+        .login-card input { width: 80%; margin-bottom: 15px; text-align: center; font-size: 16px; }
+        .login-card button { width: 88%; background: #28a745; }
+        .login-card button:hover { background: #218838; }
+        #msgErreur { color: #dc3545; font-weight: bold; font-size: 14px; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
 
-    <h1>🚨 Filtrage des Indisponibilités Réacteurs</h1>
-    <p>Ce programme extrait les arrêts liés aux causes environnementales pour une date choisie.</p>
-
-    <div class="filter-box">
-        <div class="form-group">
-            <label for="urlFlux">URL du Flux RSS :</label>
-            <input type="text" id="urlFlux" style="max-width: 100%;" value="REMPLACEZ_PAR_L_URL_DE_VOTRE_FLUX_RSS">
-        </div>
-        <div class="form-group">
-            <label for="dateFiltre">Choisir une date cible :</label>
-            <input type="date" id="dateFiltre">
-            <button onclick="chargerEtFiltrerRSS()">Filtrer le flux</button>
+    <div id="ecranVerrouillage">
+        <div class="login-card">
+            <h2>Accès Sécurisé</h2>
+            <p>Veuillez entrer le code d'accès :</p>
+            <input type="password" id="codeSaisi" placeholder="Code secret" maxlength="10" onkeydown="if(event.key === 'Enter') verifierCode()">
+            <button onclick="verifierCode()">Déverrouiller</button>
+            <div id="msgErreur">⚠️ Code incorrect</div>
         </div>
     </div>
 
-    <div id="contenu">Veuillez renseigner l'URL du flux et cliquer sur Filtrer.</div>
+    <div id="applicationContent" style="display: none;">
+        <h1>--------- ZONE D'AUDIT ET DE VÉRIFICATION DES CALCULS ---------</h1>
+        
+        <div class="config-box">
+            <div class="step">
+                <label>1. Télécharger le flux d'EDF :</label>
+                <a href="https://www.edf.fr/en/toutes-les-indisponibilites-doaat/feed" target="_blank" class="btn-link">⬇️ Télécharger le flux</a>
+            </div>
+            
+            <div class="step">
+                <label for="fichierRss">2. Charger le fichier téléchargé :</label>
+                <input type="file" id="fichierRss" accept=".xml,.feed">
+            </div>
+
+            <div class="step">
+                <label>3. Bornes temporelles de l'analyse :</label>
+                <div class="flex-inputs">
+                    <div>
+                        <label for="datePivot" style="font-size: 0.9em; color: #555;">Date/Heure Initiale (T1) :</label>
+                        <input type="datetime-local" id="datePivot">
+                    </div>
+                    <div>
+                        <label for="dateComparaison" style="font-size: 0.9em; color: #555;">Date/Heure Comparaison (T2) :</label>
+                        <input type="datetime-local" id="dateComparaison">
+                    </div>
+                </div>
+                <button onclick="chargerFichierLocal()">Lancer l'analyse</button>
+            </div>
+        </div>
+        
+        <div id="resultats" style="display:none;">
+            <h2>Tableau 1 : Résumé Global demandé</h2>
+            <table id="tableResume">
+                <thead>
+                    <tr>
+                        <th>Indisponibilité à T1</th>
+                        <th>Indisponibilité à T2</th>
+                        <th>Pic Aujourd'hui (Max à T2)</th>
+                        <th>Créneau(x) Pic Aujourd'hui</th>
+                        <th>% Du parc indisponible au pic Aujourd'hui</th>
+                        <th>Pic Demain (Max à T2)</th>
+                        <th>Créneau(x) Pic Demain</th>
+                        <th>% Du parc indisponible au pic Demain</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h2>🔄 Journal des Changements constatés entre T1 et T2</h2>
+            <div class="delta-box">
+                <div class="delta-card" style="border-top: 4px solid #dc3545;">
+                    <div>Nouvelles restrictions / Hausse de panne</div>
+                    <div id="countPlus" class="delta-val plus">0</div>
+                </div>
+                <div class="delta-card" style="border-top: 4px solid #28a745;">
+                    <div>Retours réseau / Baisse de panne</div>
+                    <div id="countMoins" class="delta-val moins">0</div>
+                </div>
+            </div>
+            
+            <table id="tableChangements">
+                <thead>
+                    <tr>
+                        <th>Réacteur (Unit)</th>
+                        <th>État à T1</th>
+                        <th>État à T2</th>
+                        <th>Variation</th>
+                        <th>Type d'évolution</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h2>🔍 Listes des réacteurs simultanément indisponibles aux Pics d'aujourd'hui et demain (basé sur T2)</h2>
+            
+            <h3>Réacteurs retenus pour le PIC d'AUJOURD'HUI</h3>
+            <table id="tableAuditAuj">
+                <thead>
+                    <tr>
+                        <th>Réacteur (Unit)</th>
+                        <th>Indisponibilité (MW)</th>
+                        <th>From (Date / Heure)</th>
+                        <th>To (Date / Heure)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h3>Réacteurs retenus pour le PIC de DEMAIN</h3>
+            <table id="tableAuditDemain">
+                <thead>
+                    <tr>
+                        <th>Réacteur (Unit)</th>
+                        <th>Indisponibilité (MW)</th>
+                        <th>From (Date / Heure)</th>
+                        <th>To (Date / Heure)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
 
     <script>
-        // Mettre la date du jour par défaut dans le calendrier
-        document.getElementById('dateFiltre').valueAsDate = new Date();
+        const CAPACITE_TOTALE = 62990;
+        
+        // Configuration du code secret
+        const CODE_SECRET = "75008";
 
-        function chargerEtFiltrerRSS() {
-            const urlFluxRSS = document.getElementById('urlFlux').value;
-            const dateCible = document.getElementById('dateFiltre').value; // Format YYYY-MM-DD
-            const zoneContenu = document.getElementById('contenu');
+        function verifierCode() {
+            const saisie = document.getElementById('codeSaisi').value;
+            if (saisie === CODE_SECRET) {
+                document.getElementById('ecranVerrouillage').style.display = 'none';
+                document.getElementById('applicationContent').style.display = 'block';
+            } else {
+                document.getElementById('msgErreur').style.display = 'block';
+                document.getElementById('codeSaisi').value = '';
+            }
+        }
+
+        const t1 = new Date();
+        t1.setMinutes(t1.getMinutes() - t1.getTimezoneOffset());
+        document.getElementById('datePivot').value = t1.toISOString().slice(0,16);
+
+        const t2 = new Date();
+        t2.setHours(t2.getHours() + 1);
+        t2.setMinutes(t2.getMinutes() - t2.getTimezoneOffset());
+        document.getElementById('dateComparaison').value = t2.toISOString().slice(0,16);
+
+        function formaterDate(dateObj) { return dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+        function formaterHeure(dateObj) { return dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); }
+        function formaterFull(dateObj) { return formaterDate(dateObj) + " à " + formaterHeure(dateObj); }
+
+        function extraireChampStrict(texte, cle) {
+            const regex = new RegExp(`<li>${cle}\\s*:\\s*([^<]+)</li>`, 'i');
+            const match = texte.match(regex);
+            return match ? match[1].trim() : '';
+        }
+
+        function chargerFichierLocal() {
+            const fileInput = document.getElementById('fichierRss');
+            if (fileInput.files.length === 0) { alert("Veuillez sélectionner le fichier XML."); return; }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) { analyserDonneesBrutes(e.target.result); };
+            reader.readAsText(file);
+        }
+
+        function analyserDonneesBrutes(strXML) {
+            const datePivot = new Date(document.getElementById('datePivot').value);
+            const dateT2 = new Date(document.getElementById('dateComparaison').value);
             
-            if(!urlFluxRSS || urlFluxRSS.includes("REMPLACEZ_PAR_L_URL")) {
-                zoneContenu.innerHTML = "<p style='color:red;'>⚠️ Veuillez entrer une URL de flux RSS valide.</p>";
-                return;
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(strXML, "text/xml");
+            const items = xmlDoc.getElementsByTagName("item");
+
+            let evenementsFiltres = [];
+            let tousLesReacteursUniques = new Set();
+
+            for (let i = 0; i < items.length; i++) {
+                const descNode = items[i].getElementsByTagName("description")[0];
+                if (!descNode) continue;
+                
+                const texteHTML = descNode.textContent || descNode.innerHTML;
+
+                const eventStatus = extraireChampStrict(texteHTML, "Event status");
+                const remarks = extraireChampStrict(texteHTML, "Remarks");
+                const fuelType = extraireChampStrict(texteHTML, "Fuel type");
+
+                if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
+                    const remLower = remarks.toLowerCase();
+                    if (remLower.includes("causes externes liées à l'environnement") || remLower.includes("environmental issues")) {
+                        
+                        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
+                        const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+                        const unavailable = parseInt(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+                        const available = installed - unavailable;
+                        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
+                        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+
+                        if(eventStartStr && eventStopStr) {
+                            evenementsFiltres.push({
+                                asset, installed, unavailable, available, 
+                                dateDebut: new Date(eventStartStr), 
+                                dateFin: new Date(eventStopStr)
+                            });
+                            tousLesReacteursUniques.add(asset);
+                        }
+                    }
+                }
             }
 
-            zoneContenu.innerHTML = "Analyse du flux en cours...";
+            let pannesA_T1 = {};
+            let pannesA_T2 = {};
+            tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
 
-            // Utilisation du proxy gratuit pour contourner le CORS
-            const urlAPI = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(urlFluxRSS)}`;
+            let sommeMaintenant = 0;
+            let totalT2 = 0;
 
-            fetch(urlAPI)
-                .then(response => response.json())
-                .then(data => {
-                    if(data.status !== 'ok') {
-                        zoneContenu.innerHTML = "<p style='color:red;'>❌ Impossible de lire le flux RSS. Vérifiez l'URL.</p>";
-                        return;
-                    }
+            evenementsFiltres.forEach(ev => {
+                if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
+                    pannesA_T1[ev.asset] += ev.unavailable;
+                    sommeMaintenant += ev.unavailable;
+                }
+                if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
+                    pannesA_T2[ev.asset] += ev.unavailable;
+                    totalT2 += ev.unavailable;
+                }
+            });
 
-                    let html = '';
-                    let compteurMacthes = 0;
+            let htmlChangements = '';
+            let countPlus = 0;
+            let countMoins = 0;
 
-                    data.items.forEach(item => {
-                        // 1. On récupère tout le texte de l'élément (titre + description/contenu)
-                        const texteComplet = (item.title + " " + item.description + " " + (item.content || "")).toLowerCase();
-                        
-                        // 2. On définit nos mots-clés environnementaux
-                        const aCauseEnvironnementale = texteComplet.includes("causes externes liées à l'environnement") || 
-                                                       texteComplet.includes("environmental issues");
-                        
-                        // 3. Gestion de la date (on cherche si la date cible est mentionnée dans l'article ou sa date de publication)
-                        // Note : Selon le flux, la date de l'indisponibilité est écrite dans le texte. 
-                        // Ce script cherche si la date (ex: "2026-07-09" ou transformée au format local) apparaît.
-                        const dateObjet = new Date(dateCible);
-                        const dateFormatLocal = dateObjet.toLocaleDateString('fr-FR'); // ex: "09/07/2026"
-                        
-                        const correspondALaDate = texteComplet.includes(dateCible) || 
-                                                  texteComplet.includes(dateFormatLocal) || 
-                                                  item.pubDate.includes(dateCible);
+            tousLesReacteursUniques.forEach(reacteur => {
+                const capT1 = pannesA_T1[reacteur];
+                const capT2 = pannesA_T2[reacteur];
+                const diff = capT2 - capT1;
 
-                        // 4. Si les critères correspondent, on affiche
-                        if (aCauseEnvironnementale && correspondALaDate) {
-                            compteurMacthes++;
-                            html += `
-                                <div class="article">
-                                    <h2>📌 ${item.title}</h2>
-                                    <p><span class="date-badge">Publié le : ${item.pubDate}</span></p>
-                                    <div class="description">${item.description}</div>
-                                    <p><a href="${item.link}" target="_blank" style="color: #0066cc;">👉 Voir la fiche d'indisponibilité officielle</a></p>
-                                </div>
-                            `;
-                        }
+                if (diff > 0) {
+                    countPlus++;
+                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Restriction accrue / Nouvel arrêt</td></tr>`;
+                } else if (diff < 0) {
+                    countMoins++;
+                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
+                }
+            });
+
+            document.getElementById('countPlus').innerText = countPlus;
+            document.getElementById('countMoins').innerText = countMoins;
+            document.getElementById('tableChangements').getElementsByTagName('tbody')[0].innerHTML = htmlChangements || `<tr><td colspan="5" class="stable">Aucun changement constaté sur le parc entre ces deux jalons. Indisponibilité stable.</td></tr>`;
+
+            const deAuj = new Date(dateT2); deAuj.setHours(0,0,0,0);
+            const aAuj = new Date(dateT2); aAuj.setHours(23,59,59,999);
+            const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
+            const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
+
+            function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
+                let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
+                evenementsFiltres.forEach(ev => {
+                    if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
+                    if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
+                });
+
+                let chronologie = Array.from(pointsDeTemps).sort((a, b) => a - b);
+                let segments = [];
+                let maxPuissance = 0;
+                let topInstantMilli = null;
+
+                for (let i = 0; i < chronologie.length - 1; i++) {
+                    let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
+                    let puissanceSegment = 0;
+
+                    evenementsFiltres.forEach(ev => {
+                        if (instantMilieu >= ev.dateDebut && instantMilieu <= ev.dateFin) puissanceSegment += ev.unavailable;
                     });
 
-                    if(compteurMacthes === 0) {
-                        zoneContenu.innerHTML = `<div class="no-result">Aucun réacteur indisponible trouvé pour des causes environnementales à la date du ${new Date(dateCible).toLocaleDateString('fr-FR')}.</div>`;
-                    } else {
-                        zoneContenu.innerHTML = `<h3>Résultat : ${compteurMacthes} alerte(s) trouvée(s)</h3>` + html;
+                    if (puissanceSegment > maxPuissance) {
+                        maxPuissance = puissanceSegment;
+                        topInstantMilli = instantMilieu.getTime();
                     }
-                })
-                .catch(error => {
-                    zoneContenu.innerHTML = "<p style='color:red;'>❌ Erreur réseau ou technique lors de la récupération.</p>";
-                    console.error(error);
-                });
+                    segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
+                }
+
+                let creneauxPic = [];
+                if (maxPuissance > 0) {
+                    segments.forEach(seg => {
+                        if (seg.h === maxPuissance) creneauxPic.push(`${formaterHeure(seg.start)}-${formaterHeure(seg.end)}`);
+                    });
+                }
+
+                let reacteursDuPic = [];
+                if (topInstantMilli) {
+                    let cible = new Date(topInstantMilli);
+                    evenementsFiltres.forEach(ev => {
+                        if (cible >= ev.dateDebut && cible <= ev.dateFin) reacteursDuPic.push(ev);
+                    });
+                }
+
+                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', list: reacteursDuPic };
+            }
+
+            const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
+            const resultatDemain = analyserPicJourEtExtraireReacteurs(deDemain, aDemain);
+
+            document.getElementById('tableResume').getElementsByTagName('tbody')[0].innerHTML = `
+                <tr>
+                    <td class="highlight">${sommeMaintenant} MW</td>
+                    <td class="highlight">${totalT2} MW</td>
+                    <td class="highlight">${resultatAuj.max} MW</td>
+                    <td>${resultatAuj.intervals}</td>
+                    <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
+                    <td class="highlight">${resultatDemain.max} MW</td>
+                    <td>${resultatDemain.intervals}</td>
+                    <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
+                </tr>
+            `;
+
+            let htmlAuditAuj = '';
+            resultatAuj.list.forEach(ev => {
+                htmlAuditAuj += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            });
+            document.getElementById('tableAuditAuj').getElementsByTagName('tbody')[0].innerHTML = htmlAuditAuj || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
+
+            let htmlAuditDemain = '';
+            resultatDemain.list.forEach(ev => {
+                htmlAuditDemain += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            });
+            document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
+
+            document.getElementById('resultats').style.display = 'block';
         }
     </script>
 </body>
