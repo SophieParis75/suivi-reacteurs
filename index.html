@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi des Indisponibilités Réacteurs</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 20px; color: #333; }
+        .filter-box { background: #f5f7fa; padding: 20px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #e1e6eb; }
+        .form-group { margin-bottom: 15px; }
+        label { font-weight: bold; display: block; margin-bottom: 5px; }
+        input[type="date"], input[type="text"] { padding: 8px; width: 100%; max-width: 300px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 9px 15px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0052a3; }
+        .article { background: #fff; border-left: 4px solid #ff9900; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; padding: 15px; border-radius: 0 4px 4px 0; }
+        .date-badge { background: #e1e6eb; padding: 3px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold; }
+        .no-result { color: #666; font-style: italic; background: #f9f9f9; padding: 20px; text-align: center; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚨 Filtrage des Indisponibilités Réacteurs</h1>
+    <p>Ce programme extrait les arrêts liés aux causes environnementales pour une date choisie.</p>
+
+    <div class="filter-box">
+        <div class="form-group">
+            <label for="urlFlux">URL du Flux RSS :</label>
+            <input type="text" id="urlFlux" style="max-width: 100%;" value="REMPLACEZ_PAR_L_URL_DE_VOTRE_FLUX_RSS">
+        </div>
+        <div class="form-group">
+            <label for="dateFiltre">Choisir une date cible :</label>
+            <input type="date" id="dateFiltre">
+            <button onclick="chargerEtFiltrerRSS()">Filtrer le flux</button>
+        </div>
+    </div>
+
+    <div id="contenu">Veuillez renseigner l'URL du flux et cliquer sur Filtrer.</div>
+
+    <script>
+        // Mettre la date du jour par défaut dans le calendrier
+        document.getElementById('dateFiltre').valueAsDate = new Date();
+
+        function chargerEtFiltrerRSS() {
+            const urlFluxRSS = document.getElementById('urlFlux').value;
+            const dateCible = document.getElementById('dateFiltre').value; // Format YYYY-MM-DD
+            const zoneContenu = document.getElementById('contenu');
+            
+            if(!urlFluxRSS || urlFluxRSS.includes("REMPLACEZ_PAR_L_URL")) {
+                zoneContenu.innerHTML = "<p style='color:red;'>⚠️ Veuillez entrer une URL de flux RSS valide.</p>";
+                return;
+            }
+
+            zoneContenu.innerHTML = "Analyse du flux en cours...";
+
+            // Utilisation du proxy gratuit pour contourner le CORS
+            const urlAPI = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(urlFluxRSS)}`;
+
+            fetch(urlAPI)
+                .then(response => response.json())
+                .then(data => {
+                    if(data.status !== 'ok') {
+                        zoneContenu.innerHTML = "<p style='color:red;'>❌ Impossible de lire le flux RSS. Vérifiez l'URL.</p>";
+                        return;
+                    }
+
+                    let html = '';
+                    let compteurMacthes = 0;
+
+                    data.items.forEach(item => {
+                        // 1. On récupère tout le texte de l'élément (titre + description/contenu)
+                        const texteComplet = (item.title + " " + item.description + " " + (item.content || "")).toLowerCase();
+                        
+                        // 2. On définit nos mots-clés environnementaux
+                        const aCauseEnvironnementale = texteComplet.includes("causes externes liées à l'environnement") || 
+                                                       texteComplet.includes("environmental issues");
+                        
+                        // 3. Gestion de la date (on cherche si la date cible est mentionnée dans l'article ou sa date de publication)
+                        // Note : Selon le flux, la date de l'indisponibilité est écrite dans le texte. 
+                        // Ce script cherche si la date (ex: "2026-07-09" ou transformée au format local) apparaît.
+                        const dateObjet = new Date(dateCible);
+                        const dateFormatLocal = dateObjet.toLocaleDateString('fr-FR'); // ex: "09/07/2026"
+                        
+                        const correspondALaDate = texteComplet.includes(dateCible) || 
+                                                  texteComplet.includes(dateFormatLocal) || 
+                                                  item.pubDate.includes(dateCible);
+
+                        // 4. Si les critères correspondent, on affiche
+                        if (aCauseEnvironnementale && correspondALaDate) {
+                            compteurMacthes++;
+                            html += `
+                                <div class="article">
+                                    <h2>📌 ${item.title}</h2>
+                                    <p><span class="date-badge">Publié le : ${item.pubDate}</span></p>
+                                    <div class="description">${item.description}</div>
+                                    <p><a href="${item.link}" target="_blank" style="color: #0066cc;">👉 Voir la fiche d'indisponibilité officielle</a></p>
+                                </div>
+                            `;
+                        }
+                    });
+
+                    if(compteurMacthes === 0) {
+                        zoneContenu.innerHTML = `<div class="no-result">Aucun réacteur indisponible trouvé pour des causes environnementales à la date du ${new Date(dateCible).toLocaleDateString('fr-FR')}.</div>`;
+                    } else {
+                        zoneContenu.innerHTML = `<h3>Résultat : ${compteurMacthes} alerte(s) trouvée(s)</h3>` + html;
+                    }
+                })
+                .catch(error => {
+                    zoneContenu.innerHTML = "<p style='color:red;'>❌ Erreur réseau ou technique lors de la récupération.</p>";
+                    console.error(error);
+                });
+        }
+    </script>
+</body>
+</html>
