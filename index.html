@@ -11,7 +11,7 @@
         .step { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #eee; }
         .step:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         label { font-weight: bold; display: block; margin-bottom: 5px; }
-        input[type="datetime-local"], input[type="file"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        input[type="datetime-local"], input[type="file"], input[type="password"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
         button { padding: 10px 20px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
         button:hover { background: #003d7a; }
         .btn-link { background: #6c757d; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; font-weight: bold; display: inline-block; margin-top: 5px; }
@@ -32,113 +32,148 @@
         .delta-val { font-size: 24px; font-weight: bold; margin-top: 5px; }
         .plus { color: #dc3545; font-weight: bold; }
         .moins { color: #28a745; font-weight: bold; }
+
+        /* Styles de l'écran de verrouillage */
+        #ecranVerrouillage { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #343a40; display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center; max-width: 350px; width: 100%; }
+        .login-card h2 { border-bottom: none; color: #333; margin-top: 0; }
+        .login-card input { width: 80%; margin-bottom: 15px; text-align: center; font-size: 16px; }
+        .login-card button { width: 88%; background: #28a745; }
+        .login-card button:hover { background: #218838; }
+        #msgErreur { color: #dc3545; font-weight: bold; font-size: 14px; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
 
-    <h1>--------- ZONE D'AUDIT ET DE VÉRIFICATION DES CALCULS ---------</h1>
-    
-    <div class="config-box">
-        <div class="step">
-            <label>1. Télécharger le flux d'EDF (Clic droit ; Enregistrer le lien sous) :</label>
-            <a href="https://www.edf.fr/en/toutes-les-indisponibilites-doaat/feed" target="_blank" class="btn-link">⬇️ Télécharger le flux (Clic droit ; Enregistrer le lien sous)</a>
-        </div>
-        
-        <div class="step">
-            <label for="fichierRss">2. Charger le fichier téléchargé :</label>
-            <input type="file" id="fichierRss" accept=".xml,.feed">
-        </div>
-
-        <div class="step">
-            <label>3. Comparer entre ces deux dates :</label>
-            <div class="flex-inputs">
-                <div>
-                    <label for="datePivot" style="font-size: 0.9em; color: #555;">Précédente Date/Heure (T1) :</label>
-                    <input type="datetime-local" id="datePivot">
-                </div>
-                <div>
-                    <label for="dateComparaison" style="font-size: 0.9em; color: #555;">Date/Heure de Comparaison (T2) :</label>
-                    <input type="datetime-local" id="dateComparaison">
-                </div>
-            </div>
-            <button onclick="chargerFichierLocal()">Lancer l'analyse</button>
+    <div id="ecranVerrouillage">
+        <div class="login-card">
+            <h2>Accès Sécurisé</h2>
+            <p>Veuillez entrer le code d'accès :</p>
+            <input type="password" id="codeSaisi" placeholder="Code secret" maxlength="10" onkeydown="if(event.key === 'Enter') verifierCode()">
+            <button onclick="verifierCode()">Déverrouiller</button>
+            <div id="msgErreur">⚠️ Code incorrect</div>
         </div>
     </div>
-    
-    <div id="resultats" style="display:none;">
-        <h2>Résumé</h2>
-        <table id="tableResume">
-            <thead>
-                <tr>
-                    <th>Indisponibilité précédente</th>
-                    <th>Indisponibilité à T2</th>
-                    <th>Pic Aujourd'hui (Max à T2)</th>
-                    <th>Créneau(x) du Pic Aujourd'hui</th>
-                    <th>% Du parc indisponible au pic Aujourd'hui</th>
-                    <th>Pic Demain (Max à T2)</th>
-                    <th>Créneau(x) du Pic Demain</th>
-                    <th>% Du parc indisponible au pic Demain</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
 
-        <h2>🔄 Changements constatés depuis la précédente date </h2>
-        <div class="delta-box">
-            <div class="delta-card" style="border-top: 4px solid #dc3545;">
-                <div>Nouvelles indisponibilités/ Hausse des indisponibilités</div>
-                <div id="countPlus" class="delta-val plus">0</div>
+    <div id="applicationContent" style="display: none;">
+        <h1>--------- ZONE D'AUDIT ET DE VÉRIFICATION DES CALCULS ---------</h1>
+        
+        <div class="config-box">
+            <div class="step">
+                <label>1. Télécharger le flux RSS d'EDF :</label>
+                <a href="https://www.edf.fr/en/toutes-les-indisponibilites-doaat/feed" target="_blank" class="btn-link">⬇️ Télécharger le flux (Clic droit ; Enregistrer le lien sous ; Enregistrer)</a>
             </div>
-            <div class="delta-card" style="border-top: 4px solid #28a745;">
-                <div>Retours de capacité sur le réseau / Baisse des indisponibilités</div>
-                <div id="countMoins" class="delta-val moins">0</div>
+            
+            <div class="step">
+                <label for="fichierRss">2. Charger le fichier téléchargé :</label>
+                <input type="file" id="fichierRss" accept=".xml,.feed">
+            </div>
+
+            <div class="step">
+                <label>3. Bornes temporelles de l'analyse :</label>
+                <div class="flex-inputs">
+                    <div>
+                        <label for="datePivot" style="font-size: 0.9em; color: #555;">Date/Heure précédente (T1) :</label>
+                        <input type="datetime-local" id="datePivot">
+                    </div>
+                    <div>
+                        <label for="dateComparaison" style="font-size: 0.9em; color: #555;">Date/Heure Comparaison (T2 ; Date et heures actuelles par défaut) :</label>
+                        <input type="datetime-local" id="dateComparaison">
+                    </div>
+                </div>
+                <button onclick="chargerFichierLocal()">ZOU !</button>
             </div>
         </div>
         
-        <table id="tableChangements">
-            <thead>
-                <tr>
-                    <th>Réacteur (Unit)</th>
-                    <th>État à T1</th>
-                    <th>État à T2</th>
-                    <th>Variation</th>
-                    <th>Type d'évolution</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+        <div id="resultats" style="display:none;">
+            <h2>Résumé</h2>
+            <table id="tableResume">
+                <thead>
+                    <tr>
+                        <th>Indisponibilités simultanées à T1</th>
+                        <th>Indisponibilités simultanées à T2</th>
+                        <th>Pic d'indisponibilités simultanées Aujourd'hui (Max à T2)</th>
+                        <th>Créneau(x) du Pic d'Aujourd'hui</th>
+                        <th>% Du parc indisponible au pic d'Aujourd'hui</th>
+                        <th>Pic d'indisponibilités simultanées Demain (Max à T2)</th>
+                        <th>Créneau(x) du Pic de Demain</th>
+                        <th>% Du parc indisponible au pic Demain</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
 
-        <h2>🔍 Listes des réacteurs simultanément indisponibles aux Pics d'aujourd'hui et demain (basé sur T2)</h2>
-        
-        <h3>Réacteurs indisponibles au PIC d'AUJOURD'HUI</h3>
-        <table id="tableAuditAuj">
-            <thead>
-                <tr>
-                    <th>Réacteur (Unit)</th>
-                    <th>Indisponibilité (MW)</th>
-                    <th>From (Date / Heure)</th>
-                    <th>To (Date / Heure)</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+            <h2>🔄 Changements constatés entre les dates T1 et T2</h2>
+            <div class="delta-box">
+                <div class="delta-card" style="border-top: 4px solid #dc3545;">
+                    <div>Nouvelles réductions / Hausse des indisponibilités</div>
+                    <div id="countPlus" class="delta-val plus">0</div>
+                </div>
+                <div class="delta-card" style="border-top: 4px solid #28a745;">
+                    <div>Retours de capacités surle réseau / Baisse des indisponibilités</div>
+                    <div id="countMoins" class="delta-val moins">0</div>
+                </div>
+            </div>
+            
+            <table id="tableChangements">
+                <thead>
+                    <tr>
+                        <th>Réacteur (Unit)</th>
+                        <th>État à T1</th>
+                        <th>État à T2</th>
+                        <th>Variation</th>
+                        <th>Type d'évolution</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
 
-        <h3>Réacteurs indisponibles au PIC de DEMAIN</h3>
-        <table id="tableAuditDemain">
-            <thead>
-                <tr>
-                    <th>Réacteur (Unit)</th>
-                    <th>Indisponibilité (MW)</th>
-                    <th>From (Date / Heure)</th>
-                    <th>To (Date / Heure)</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+            <h2>🔍 Listes des réacteurs simultanément indisponibles aux Pics d'aujourd'hui et demain (basé sur T2)</h2>
+            
+            <h3>Réacteurs retenus pour le PIC d'AUJOURD'HUI</h3>
+            <table id="tableAuditAuj">
+                <thead>
+                    <tr>
+                        <th>Réacteur (Unit)</th>
+                        <th>Indisponibilité (MW)</th>
+                        <th>From (Date / Heure)</th>
+                        <th>To (Date / Heure)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <h3>Réacteurs retenus pour le PIC de DEMAIN</h3>
+            <table id="tableAuditDemain">
+                <thead>
+                    <tr>
+                        <th>Réacteur (Unit)</th>
+                        <th>Indisponibilité (MW)</th>
+                        <th>From (Date / Heure)</th>
+                        <th>To (Date / Heure)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
         const CAPACITE_TOTALE = 62990;
+        
+        // Configuration du code secret
+        const CODE_SECRET = "1789";
+
+        function verifierCode() {
+            const saisie = document.getElementById('codeSaisi').value;
+            if (saisie === CODE_SECRET) {
+                document.getElementById('ecranVerrouillage').style.display = 'none';
+                document.getElementById('applicationContent').style.display = 'block';
+            } else {
+                document.getElementById('msgErreur').style.display = 'block';
+                document.getElementById('codeSaisi').value = '';
+            }
+        }
 
         const t1 = new Date();
         t1.setMinutes(t1.getMinutes() - t1.getTimezoneOffset());
