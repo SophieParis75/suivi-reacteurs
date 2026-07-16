@@ -69,18 +69,34 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const valeurReacteur = context.raw.valeur;
-                                const instantSurvole = new Date(context.raw.x[0]);
-                                let totalGlobal = 0;
-                                
-                                rawData.forEach(item => {
-                                    if (instantSurvole >= new Date(item.dateDebut) && instantSurvole <= new Date(item.dateFin)) {
-                                        totalGlobal += item.unavailable;
-                                    }
-                                });
+    tooltip: {
+        callbacks: {
+            label: function(context) {
+                // 1. On récupère la date sous la souris grâce à l'échelle X
+                const instantSurvole = new Date(context.chart.scales.x.getValueForPixel(context.element.x));
+                
+                // 2. Valeur du réacteur survolé
+                const valeurReacteur = context.raw.valeur;
+                
+                // 3. Calcul du total à cet instant précis
+                let totalGlobal = 0;
+                rawData.forEach(item => {
+                    const dD = new Date(item.dateDebut).getTime();
+                    const dF = new Date(item.dateFin).getTime();
+                    if (instantSurvole.getTime() >= dD && instantSurvole.getTime() <= dF) {
+                        totalGlobal += item.unavailable;
+                    }
+                });
+
+                return [
+                    `Date ciblée: ${instantSurvole.toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'})}`,
+                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
+                    `Total parc indisponible: ${totalGlobal} MW`
+                ];
+            }
+        }
+    }
+},
 
                                 return [
                                     `Indisponibilité réacteur: ${valeurReacteur} MW`,
