@@ -2,107 +2,89 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Planning Indisponibilités</title>
+    <title>Graphique des Indisponibilités</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body>
-    <h2>Planning des Indisponibilités</h2>
-    <div style="width: 95%; margin: auto; height: 600px;">
+    <h2>Indisponibilités nucléaires cumulées par jour</h2>
+    <div style="width: 90%; margin: auto; height: 500px;">
         <canvas id="myChart"></canvas>
     </div>
 
     <script>
-        const rawData = JSON.parse(localStorage.getItem('graphData'));
-        const config = {
-            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
-            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-        };
+        const dataJson = localStorage.getItem('graphData');
+        
+        if (dataJson) {
+            const rawData = JSON.parse(dataJson);
+            
+            // Dictionnaire en MAJUSCULES pour correspondre au XML
+            const configReacteurs = {
+                "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
+                "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
+                "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
+                "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
+                "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
+                "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
+                "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
+                "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
+                "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
+                "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
+                "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
+                "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
+                "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
+                "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
+                "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
+                "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
+                "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
+                "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
+                "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
+                "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
+                "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
+                "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
+                "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
+                "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
+                "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
+                "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
+                "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
+                "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
+                "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
+                "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
+            };
 
-        new Chart(document.getElementById('myChart'), {
-            type: 'bar',
-            data: {
-                datasets: [{
-                    label: 'Indisponibilité (MW)',
-                    data: rawData.map(i => ({
-                        x: [new Date(i.dateDebut), new Date(i.dateFin)],
-                        y: i.asset,
-                        valeur: i.unavailable
-                    })),
-                    backgroundColor: rawData.map(item => {
-                        const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
-                        return typeof patternomaly !== 'undefined' ? patternomaly.draw(cfg.pattern, cfg.color) : cfg.color;
-                    })
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { 
-                        type: 'category' // On force en catégorie pour supprimer l'erreur de date
-                    }
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return `Indispo: ${context.raw.valeur} MW`;
-                            }
-                        }
-                    }
+            const getJour = (d) => new Date(d).toISOString().split('T')[0];
+            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
+            const reacteurs = [...new Set(rawData.map(i => i.asset))];
+            
+            const datasets = reacteurs.map(r => {
+                // On met le nom trouvé dans le XML en majuscules pour comparer
+                const nomRecherche = r.toUpperCase().trim();
+                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+                
+                let bg = cfg.color;
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
                 }
-            }
-                                });
+                
+                return {
+                    label: r,
+                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
+                    backgroundColor: bg
+                };
+            });
 
-                                return [
-                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
-                                    `Total parc indisponible: ${totalGlobal} MW`
-                                ];
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { 
-                        type: 'time', 
-                        time: { unit: 'day' },
-                        min: new Date().toISOString(),
-                        max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-                    }
+            new Chart(document.getElementById('myChart'), {
+                type: 'bar',
+                data: { labels: dates, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
                 }
-            }
-        });
+            });
+        } else {
+            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
+        }
     </script>
 </body>
 </html>
