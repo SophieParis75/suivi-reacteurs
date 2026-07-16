@@ -2,24 +2,23 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Graphique des Indisponibilités</title>
+    <title>Planning Indisponibilités</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
 </head>
 <body>
-    <h2>Indisponibilités nucléaires cumulées par jour</h2>
-    <div style="width: 90%; margin: auto; height: 500px;">
+    <h2>Planning des Indisponibilités</h2>
+    <div style="width: 95%; margin: auto; height: 800px;">
         <canvas id="myChart"></canvas>
     </div>
 
     <script>
-        const dataJson = localStorage.getItem('listReacteursT2');
-        
+        const dataJson = localStorage.getItem('graphData');
         if (dataJson) {
             const rawData = JSON.parse(dataJson);
             
-            // Dictionnaire en MAJUSCULES pour correspondre au XML
-            const configReacteurs = {
+            const config = {
                 "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
                 "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
                 "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
@@ -52,38 +51,29 @@
                 "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
             };
 
-            const getJour = (d) => new Date(d).toISOString().split('T')[0];
-            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
-            const reacteurs = [...new Set(rawData.map(i => i.asset))];
-            
-            const datasets = reacteurs.map(r => {
-                // On met le nom trouvé dans le XML en majuscules pour comparer
-                const nomRecherche = r.toUpperCase().trim();
-                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
-                
-                let bg = cfg.color;
-                if (typeof pattern !== 'undefined' && pattern.draw) {
-                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
-                }
-                
-                return {
-                    label: r,
-                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
-                    backgroundColor: bg
-                };
-            });
+            const datasets = [{
+                data: rawData.map(item => ({
+                    x: [item.dateDebut, item.dateFin],
+                    y: item.asset,
+                    valeur: item.unavailable
+                })),
+                backgroundColor: rawData.map(item => {
+                    const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
+                    return (typeof pattern !== 'undefined') ? pattern.draw(cfg.pattern, cfg.color) : cfg.color;
+                })
+            }];
 
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
-                data: { labels: dates, datasets: datasets },
+                data: { datasets: datasets },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+                    indexAxis: 'y',
+                    plugins: {
+                        tooltip: { callbacks: { label: (ctx) => ` Indisponibilité : ${ctx.raw.valeur} MW` } }
+                    },
+                    scales: { x: { type: 'time', time: { unit: 'day' } } }
                 }
             });
-        } else {
-            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
         }
     </script>
 </body>
