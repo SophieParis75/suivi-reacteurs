@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Graphique des Indisponibilités</title>
+    <!-- Chargement des bibliothèques -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
 </head>
@@ -14,9 +15,11 @@
 
     <script>
         const dataJson = localStorage.getItem('graphData');
+        
         if (dataJson) {
             const rawData = JSON.parse(dataJson);
             
+            // Configuration des couleurs et textures
             const configReacteurs = {
                 "Belleville 1": { pattern: 'diagonal', color: '#FF306B' },
                 "Belleville 2": { pattern: 'diagonal', color: '#FFACC4' },
@@ -50,47 +53,42 @@
                 "Tricastin 4": { pattern: 'disc', color: '#E6AAAF' }
             };
 
-            const dates = [...new Set(rawData.map(i => i.dateDebut.substring(0, 10)))].sort();
+            // Normalisation des dates en format ISO (YYYY-MM-DD) pour la fiabilité
+            const getJour = (d) => new Date(d).toISOString().split('T')[0];
+            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
             const reacteurs = [...new Set(rawData.map(i => i.asset))];
             
-            // Affichage dans la console pour vérifier les noms exacts
-            console.log("Liste des réacteurs trouvés dans le XML :", reacteurs);
-            
             const datasets = reacteurs.map(r => {
-                // Nettoyage du nom pour faciliter la correspondance (enlève les espaces, met tout en majuscules)
-                const nomRecherche = r.trim().toUpperCase();
-                
-                // Recherche dans votre liste configReacteurs en ignorant la casse
-                const nomMatch = Object.keys(configReacteurs).find(key => key.toUpperCase() === nomRecherche);
-                
-                // Si aucune correspondance n'est trouvée, on met du gris clair et on affiche une alerte
-                if (!nomMatch) {
-                    console.warn(`Aucune couleur trouvée pour le réacteur : "${r}"`);
-                }
-                
-                const cfg = nomMatch ? configReacteurs[nomMatch] : { pattern: 'solid', color: '#cccccc' };
-                
+                const cfg = configReacteurs[r] || { pattern: 'solid', color: '#ccc' };
                 let bg = cfg.color;
-                if (typeof pattern !== 'undefined' && cfg.pattern !== 'solid') {
-                    bg = pattern.draw(cfg.pattern, cfg.color);
+                
+                // Tentative d'application de la texture avec gestion d'erreur
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) { console.warn("Erreur pattern:", r); }
                 }
                 
                 return {
                     label: r,
-                    data: dates.map(d => rawData.filter(i => i.asset === r && i.dateDebut.substring(0, 10) === d).reduce((s, i) => s + i.unavailable, 0)),
+                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
                     backgroundColor: bg
                 };
             });
 
+            // Création du graphique
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
-                options: { 
-                    responsive: true, 
+                options: {
+                    responsive: true,
                     maintainAspectRatio: false,
-                    scales: { x: { stacked: true }, y: { stacked: true } } 
+                    scales: { 
+                        x: { stacked: true }, 
+                        y: { stacked: true, beginAtZero: true } 
+                    }
                 }
             });
+        } else {
+            document.body.innerHTML = "<h2>Aucune donnée.</h2><p>Lancez l'analyse sur la page principale avant d'ouvrir cette page.</p>";
         }
     </script>
 </body>
