@@ -127,6 +127,11 @@
                 </thead>
                 <tbody></tbody>
             </table>
+	    <h2>📝 Synthèse des changements</h2>
+	<div class="news-box" style="border-top: 4px solid #0056b3;">
+	    <div id="changesBody"></div>
+	</div>
+
 
             <h2>📌 Liste des réacteurs indisponibles à T2</h2>
             <table id="tableIndisponiblesT2">
@@ -387,7 +392,47 @@
             });
             document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
 
+// --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
+            let phrases = [];
+            tousLesReacteursUniques.forEach(reacteur => {
+                const capT1 = pannesA_T1[reacteur];
+                const capT2 = pannesA_T2[reacteur];
+                const diff = capT2 - capT1;
+
+                // Chercher les événements pour comparer les dates de fin
+                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
+                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
+
+                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
+                    let phrase = `<strong>${reacteur}</strong> : `;
+                    
+                    // Analyse capacité
+                    if (capT1 === 0 && capT2 > 0) phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
+                    else if (capT1 > 0 && capT2 === 0) phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
+                    else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
+
+                    // Analyse durée
+                    if (evT1 && evT2) {
+                        const deltaMs = evT2.dateFin - evT1.dateFin;
+                        if (Math.abs(deltaMs) >= 3600000) {
+                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
+                            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
+                        }
+                    }
+                    phrases.push(phrase);
+                }
+            });
+            document.getElementById('changesBody').innerHTML = phrases.length > 0 
+                ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
+                : 'Aucun changement significatif de capacité ou de durée constaté.';
+	// --- AJOUTS POUR LE GRAPHIQUE ---
+            localStorage.setItem('graphData', JSON.stringify(listReacteursT2));
+            document.getElementById('resultats').innerHTML += 
+                '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
+
             document.getElementById('resultats').style.display = 'block';
+
+
         }
     </script>
 </body>
