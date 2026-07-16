@@ -1,35 +1,57 @@
-<script>
-        const dataJson = localStorage.getItem('graphData');
-        console.log("Données brutes :", dataJson); // 1. Vérification des données
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Planning Indisponibilités</title>
+    <!-- Chargement ordonné -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
+</head>
+<body>
+    <h2>Planning des Indisponibilités</h2>
+    <div style="width: 95%; margin: auto; height: 600px;">
+        <canvas id="myChart"></canvas>
+    </div>
 
-        if (dataJson) {
-            try {
-                const rawData = JSON.parse(dataJson);
-                console.log("Données parsées :", rawData); // 2. Vérification du format
-
-                const datasets = [{
-                    data: rawData.map(item => ({
-                        x: [item.dateDebut, item.dateFin],
-                        y: item.asset,
-                        valeur: item.unavailable
-                    })),
-                    backgroundColor: 'blue' // Temporaire pour test
-                }];
-
-                new Chart(document.getElementById('myChart'), {
-                    type: 'bar',
-                    data: { datasets: datasets },
-                    options: {
-                        indexAxis: 'y',
-                        scales: { x: { type: 'time', time: { unit: 'day' } } }
-                    }
-                });
-                console.log("Graphique généré !");
-            } catch(err) {
-                console.error("ERREUR CRITIQUE :", err);
-                document.body.innerHTML += "<p style='color:red'>Erreur : " + err.message + "</p>";
+    <script>
+        window.addEventListener('DOMContentLoaded', (event) => {
+            console.log("DOM chargé, démarrage...");
+            const dataJson = localStorage.getItem('graphData');
+            
+            if (!dataJson) {
+                console.error("Pas de données trouvées dans localStorage !");
+                return;
             }
-        } else {
-            document.body.innerHTML += "<p>Aucune donnée trouvée dans le localStorage.</p>";
-        }
+
+            const rawData = JSON.parse(dataJson);
+            const ctx = document.getElementById('myChart').getContext('2d');
+
+            const datasets = [{
+                label: 'Indisponibilité',
+                data: rawData.map(item => ({
+                    x: [item.dateDebut, item.dateFin],
+                    y: item.asset,
+                    valeur: item.unavailable
+                })),
+                backgroundColor: 'rgba(54, 162, 235, 0.5)' // Couleur simple pour tester
+            }];
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: { datasets: datasets },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'day' } }
+                    }
+                }
+            });
+            console.log("Graphique créé.");
+        });
     </script>
+</body>
+</html>
