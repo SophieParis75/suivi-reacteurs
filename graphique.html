@@ -93,6 +93,23 @@
                 scales: {
                     x: { 
                         type: 'time', 
+                        time: { unit: 'day' }
+                        // On supprime 'min' et 'max' pour laisser Chart.js s'adapter aux données
+                    }
+                }
+            }
+
+                                return [
+                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
+                                    `Total parc indisponible: ${totalGlobal} MW`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { 
+                        type: 'time', 
                         time: { unit: 'day' },
                         min: new Date().toISOString(),
                         max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
