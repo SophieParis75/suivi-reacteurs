@@ -72,21 +72,28 @@
     tooltip: {
         callbacks: {
             label: function(context) {
-                // 1. On récupère la date sous la souris grâce à l'échelle X
-                const instantSurvole = new Date(context.chart.scales.x.getValueForPixel(context.element.x));
-                
-                // 2. Valeur du réacteur survolé
+                // Utilisation de la date de début de la donnée source (plus sûr que getValueForPixel)
+                const instantSurvole = new Date(context.raw.x[0]);
                 const valeurReacteur = context.raw.valeur;
                 
-                // 3. Calcul du total à cet instant précis
                 let totalGlobal = 0;
                 rawData.forEach(item => {
                     const dD = new Date(item.dateDebut).getTime();
                     const dF = new Date(item.dateFin).getTime();
+                    // On vérifie si l'événement est actif à la date de début de la barre survolée
                     if (instantSurvole.getTime() >= dD && instantSurvole.getTime() <= dF) {
                         totalGlobal += item.unavailable;
                     }
                 });
+
+                return [
+                    `Réacteur: ${valeurReacteur} MW`,
+                    `Total parc: ${totalGlobal} MW`
+                ];
+            }
+        }
+    }
+},
 
                 return [
                     `Date ciblée: ${instantSurvole.toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'})}`,
