@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Graphique des Indisponibilités</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h2>Indisponibilités Nucléaires (T2)</h2>
+    <div style="width: 80%; margin: auto;">
+        <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+        // Récupération des données envoyées par la page principale
+        const rawData = JSON.parse(localStorage.getItem('graphData'));
+        
+        if (rawData) {
+            const ctx = document.getElementById('myChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: rawData.map(item => item.asset),
+                    datasets: [{
+                        label: 'Indisponibilité (MW)',
+                        data: rawData.map(item => item.unavailable),
+                        backgroundColor: '#0056b3'
+                    }]
+                }
+            });
+        } else {
+            document.body.innerHTML = "Aucune donnée trouvée. Veuillez lancer l'analyse sur la page principale d'abord.";
+        }
+    </script>
+</body>
+</html>
