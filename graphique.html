@@ -1,88 +1,16 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Planning Indisponibilités</title>
-    <!-- On charge seulement Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
-</head>
-<body>
-    <h2>Planning des Indisponibilités (1 mois)</h2>
-    <div style="width: 95%; margin: auto; height: 700px;">
-        <canvas id="myChart"></canvas>
-    </div>
+<script>
+    const dataJson = localStorage.getItem('graphData');
+    const body = document.body;
 
-    <script>
-        const dataJson = localStorage.getItem('graphData');
+    if (!dataJson) {
+        body.innerHTML += "<h3 style='color:red'>ERREUR : localStorage est VIDE.</h3>";
+    } else {
+        const rawData = JSON.parse(dataJson);
+        body.innerHTML += "<p>Données trouvées ! Nombre d'éléments : " + rawData.length + "</p>";
         
-        if (!dataJson) {
-            document.body.innerHTML += "<h3>Erreur : Aucune donnée trouvée.</h3>";
-        } else {
-            const rawData = JSON.parse(dataJson);
-            
-            const config = {
-                "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-                "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-                "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-                "BLAYAIS 2": { pattern: 'solid', color: '#858266' },
-                "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-                "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-                "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-                "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-                "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-                "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-                "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-                "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-                "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-                "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-                "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-                "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-                "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-                "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-                "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-                "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-                "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-                "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-                "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-                "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-                "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-                "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-                "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-                "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-                "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-                "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-            };
-
-            const ctx = document.getElementById('myChart').getContext('2d');
-            
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: rawData.map(i => i.asset),
-                    datasets: [{
-                        label: 'Indisponibilité (MW)',
-                        data: rawData.map(i => ({
-                            x: [i.dateDebut, i.dateFin],
-                            y: i.asset,
-                            valeur: i.unavailable
-                        })),
-                        backgroundColor: rawData.map(item => {
-                            const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
-                            return (typeof pattern !== 'undefined') ? pattern.draw(cfg.pattern, cfg.color) : cfg.color;
-                        })
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { type: 'category' } // On force 'category' pour éviter les erreurs de format de date
-                    }
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+        // On affiche les 3 premiers éléments pour voir s'ils sont lisibles
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(rawData.slice(0, 3), null, 2);
+        body.appendChild(pre);
+    }
+</script>
