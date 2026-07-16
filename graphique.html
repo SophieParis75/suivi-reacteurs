@@ -49,34 +49,59 @@
         };
 
        new Chart(document.getElementById('myChart'), {
-    type: 'bar',
-    data: {
-        datasets: [{
-            label: 'Indisponibilité (MW)',
-            data: rawData.map(i => ({
-                x: [new Date(i.dateDebut), new Date(i.dateFin)], // Intervalle de temps
-                y: i.asset
-            })),
-            backgroundColor: rawData.map(item => {
-                const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
-                return typeof patternomaly !== 'undefined' ? patternomaly.draw(cfg.pattern, cfg.color) : cfg.color;
-            })
-        }]
-    },
-    options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-            x: { 
-                type: 'time', // Important : on précise que c'est du temps
-                time: { unit: 'day' },
-                min: new Date().toISOString(), // Commence à aujourd'hui
-                max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Sur 30 jours
+            type: 'bar',
+            data: {
+                datasets: [{
+                    label: 'Indisponibilité (MW)',
+                    data: rawData.map(i => ({
+                        x: [new Date(i.dateDebut), new Date(i.dateFin)],
+                        y: i.asset,
+                        valeur: i.unavailable // On garde cette donnée pour le tooltip
+                    })),
+                    backgroundColor: rawData.map(item => {
+                        const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
+                        return typeof patternomaly !== 'undefined' ? patternomaly.draw(cfg.pattern, cfg.color) : cfg.color;
+                    })
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                // --- AJOUTEZ CE BLOC ICI ---
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const valeurReacteur = context.raw.valeur;
+                                const instantSurvole = new Date(context.raw.x[0]);
+                                let totalGlobal = 0;
+                                
+                                rawData.forEach(item => {
+                                    if (instantSurvole >= new Date(item.dateDebut) && instantSurvole <= new Date(item.dateFin)) {
+                                        totalGlobal += item.unavailable;
+                                    }
+                                });
+
+                                return [
+                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
+                                    `Total parc indisponible: ${totalGlobal} MW`
+                                ];
+                            }
+                        }
+                    }
+                },
+                // --- FIN DU BLOC ---
+                scales: {
+                    x: { 
+                        type: 'time', 
+                        time: { unit: 'day' },
+                        min: new Date().toISOString(),
+                        max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+                    }
+                }
             }
-        }
-    }
-});
+        });
     </script>
 </body>
 </html>
