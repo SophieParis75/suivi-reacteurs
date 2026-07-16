@@ -2,34 +2,46 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Graphique des Indisponibilités</title>
+    <title>Graphique cumulé</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h2>Indisponibilités Nucléaires (T2)</h2>
+    <h2>Indisponibilités nucléaires cumulées par jour</h2>
     <div style="width: 80%; margin: auto;">
         <canvas id="myChart"></canvas>
     </div>
 
     <script>
-        // Récupération des données envoyées par la page principale
-        const rawData = JSON.parse(localStorage.getItem('graphData'));
-        
-        if (rawData) {
+        const dataJson = localStorage.getItem('graphData');
+        if (dataJson) {
+            const rawData = JSON.parse(dataJson);
+
+            // 1. Fonction pour extraire la date (format YYYY-MM-DD)
+            const getJour = (dateStr) => new Date(dateStr).toISOString().split('T')[0];
+
+            // 2. Agrégation des données par jour et par réacteur
+            let dates = [...new Set(rawData.map(item => getJour(item.dateDebut)))].sort();
+            let reacteurs = [...new Set(rawData.map(item => item.asset))];
+            
+            let datasets = reacteurs.map(r => ({
+                label: r,
+                data: dates.map(d => {
+                    // Somme des indisponibilités pour ce réacteur ce jour-là
+                    return rawData.filter(item => item.asset === r && getJour(item.dateDebut) === d)
+                                  .reduce((sum, item) => sum + item.unavailable, 0);
+                })
+            }));
+
+            // 3. Affichage du graphique empilé
             const ctx = document.getElementById('myChart').getContext('2d');
             new Chart(ctx, {
                 type: 'bar',
-                data: {
-                    labels: rawData.map(item => item.asset),
-                    datasets: [{
-                        label: 'Indisponibilité (MW)',
-                        data: rawData.map(item => item.unavailable),
-                        backgroundColor: '#0056b3'
-                    }]
+                data: { labels: dates, datasets: datasets },
+                options: {
+                    responsive: true,
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
                 }
             });
-        } else {
-            document.body.innerHTML = "Aucune donnée trouvée. Veuillez lancer l'analyse sur la page principale d'abord.";
         }
     </script>
 </body>
