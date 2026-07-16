@@ -1,16 +1,19 @@
-<script>
-    const dataJson = localStorage.getItem('graphData');
-    const body = document.body;
-
-    if (!dataJson) {
-        body.innerHTML += "<h3 style='color:red'>ERREUR : localStorage est VIDE.</h3>";
-    } else {
-        const rawData = JSON.parse(dataJson);
-        body.innerHTML += "<p>Données trouvées ! Nombre d'éléments : " + rawData.length + "</p>";
-        
-        // On affiche les 3 premiers éléments pour voir s'ils sont lisibles
-        const pre = document.createElement('pre');
-        pre.textContent = JSON.stringify(rawData.slice(0, 3), null, 2);
-        body.appendChild(pre);
-    }
-</script>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Affichage</title>
+</head>
+<body>
+    <h1>Si vous voyez ce titre, le fichier est bien lu.</h1>
+    <script>
+        document.body.innerHTML += "<p>Le script JavaScript est en train de s'exécuter...</p>";
+        const data = localStorage.getItem('graphData');
+        if (data) {
+            document.body.innerHTML += "<p style='color:green'>Données trouvées dans localStorage !</p>";
+        } else {
+            document.body.innerHTML += "<p style='color:red'>Aucune donnée trouvée dans localStorage.</p>";
+        }
+    </script>
+</body>
+</html>
