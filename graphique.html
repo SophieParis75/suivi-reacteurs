@@ -68,24 +68,26 @@
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
+                scales: {
+                    x: { 
+                        type: 'category' // On force en catégorie pour supprimer l'erreur de date
+                    }
+                },
                 plugins: {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                // Calcul de la date à la position de la souris
-                                const instant = context.chart.scales.x.getValueForPixel(context.element.x);
-                                const dateSurvole = new Date(instant);
-                                
-                                let totalGlobal = 0;
-                                rawData.forEach(item => {
-                                    if (dateSurvole >= new Date(item.dateDebut) && dateSurvole <= new Date(item.dateFin)) {
-                                        totalGlobal += item.unavailable;
-                                    }
+                                return `Indispo: ${context.raw.valeur} MW`;
+                            }
+                        }
+                    }
+                }
+            }
                                 });
+
                                 return [
-                                    `Date: ${dateSurvole.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})}`,
-                                    `Réacteur: ${context.raw.valeur} MW`,
-                                    `Total parc: ${totalGlobal} MW`
+                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
+                                    `Total parc indisponible: ${totalGlobal} MW`
                                 ];
                             }
                         }
