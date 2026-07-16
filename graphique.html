@@ -2,91 +2,30 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Graphique des Indisponibilités</title>
-    <!-- Chargement des bibliothèques nécessaires -->
+    <title>Test Graphique</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
 </head>
 <body>
-    <h2>Indisponibilités nucléaires cumulées par jour</h2>
-    <div style="width: 80%; margin: auto;">
+    <h2>Test de visibilité du graphique</h2>
+    <div style="width: 80%; margin: auto; height: 400px; border: 2px solid red;">
         <canvas id="myChart"></canvas>
     </div>
 
     <script>
-        // Récupération des données depuis la mémoire du navigateur
-        const dataJson = localStorage.getItem('graphData');
-        
-        if (dataJson) {
-            const rawData = JSON.parse(dataJson);
-
-            // Configuration des couleurs et textures par réacteur
-            const configReacteurs = {
-                "Belleville 1": { pattern: 'diagonal', color: '#FF306B' },
-                "Belleville 2": { pattern: 'diagonal', color: '#FFACC4' },
-                "Blayais 1": { pattern: 'solid', color: '#636D01' },
-                "Blayais 2": { pattern: 'solid', color: '#8B9434' },
-                "Blayais 3": { pattern: 'solid', color: '#C5C999' },
-                "Blayais 4": { pattern: 'solid', color: '#E3EDA3' },
-                "Bugey 2": { pattern: 'solid', color: '#E62B60' },
-                "Bugey 3": { pattern: 'solid', color: '#FF83A6' },
-                "Bugey 4": { pattern: 'solid', color: '#E6AAAF' },
-                "Bugey 5": { pattern: 'solid', color: '#FFD6E1' },
-                "Cattenom 1": { pattern: 'disc', color: '#636D01' },
-                "Cattenom 2": { pattern: 'disc', color: '#8B9434' },
-                "Cattenom 3": { pattern: 'disc', color: '#C5C999' },
-                "Cattenom 4": { pattern: 'disc', color: '#E2E4CC' },
-                "Chooz 1": { pattern: 'diagonal', color: '#2097E6' },
-                "Chooz 2": { pattern: 'diagonal', color: '#7CCBFF' },
-                "Cruas 1": { pattern: 'disc', color: '#2E2900' },
-                "Cruas 2": { pattern: 'disc', color: '#5C5833' },
-                "Cruas 3": { pattern: 'disc', color: '#ADAB99' },
-                "Cruas 4": { pattern: 'disc', color: '#D6D5CC' },
-                "Golfech 1": { pattern: 'solid', color: '#2097E6' },
-                "Golfech 2": { pattern: 'solid', color: '#7CCBFF' },
-                "Nogent 1": { pattern: 'disc', color: '#5C5833' },
-                "Nogent 2": { pattern: 'disc', color: '#ADAB99' },
-                "St Alban 1": { pattern: 'solid', color: '#332E00' },
-                "St Alban 2": { pattern: 'solid', color: '#858266' },
-                "Tricastin 1": { pattern: 'disc', color: '#E62B60' },
-                "Tricastin 2": { pattern: 'disc', color: '#FF5989' },
-                "Tricastin 3": { pattern: 'disc', color: '#FFACC4' },
-                "Tricastin 4": { pattern: 'disc', color: '#E6AAAF' }
-            };
-
-            const dates = [...new Set(rawData.map(i => new Date(i.dateDebut).toLocaleDateString()))].sort();
-            const reacteurs = [...new Set(rawData.map(i => i.asset))];
-            
-            const datasets = reacteurs.map(r => {
-                const cfg = configReacteurs[r] || { pattern: 'solid', color: '#ccc' };
-                
-                // Application de la texture si disponible
-                let fill = cfg.color;
-                if (typeof pattern !== 'undefined' && pattern.draw) {
-                    fill = pattern.draw(cfg.pattern, cfg.color);
-                }
-                
-                return {
-                    label: r,
-                    data: dates.map(d => rawData.filter(i => i.asset === r && new Date(i.dateDebut).toLocaleDateString() === d).reduce((s, i) => s + i.unavailable, 0)),
-                    backgroundColor: fill
-                };
-            });
-
-            new Chart(document.getElementById('myChart'), {
-                type: 'bar',
-                data: { labels: dates, datasets: datasets },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, beginAtZero: true }
-                    }
-                }
-            });
-        } else {
-            document.body.innerHTML = "<h2>Aucune donnée disponible.</h2><p>Veuillez d'abord lancer l'analyse sur la page principale.</p>";
-        }
+        const ctx = document.getElementById('myChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Jour A', 'Jour B'],
+                datasets: [{
+                    label: 'Test',
+                    data: [1000, 2000],
+                    backgroundColor: 'blue'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+        console.log("Le graphique de test a été dessiné.");
     </script>
 </body>
 </html>
