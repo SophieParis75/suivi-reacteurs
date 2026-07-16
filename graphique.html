@@ -2,30 +2,38 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Test Graphique</title>
+    <title>Diagnostic Données</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h2>Test de visibilité du graphique</h2>
-    <div style="width: 80%; margin: auto; height: 400px; border: 2px solid red;">
-        <canvas id="myChart"></canvas>
-    </div>
+    <h2>Diagnostic des données</h2>
+    <div id="debug" style="padding: 20px; background: #eee;">Chargement en cours...</div>
+    <div style="width: 80%; margin: auto; height: 400px;"><canvas id="myChart"></canvas></div>
 
     <script>
-        const ctx = document.getElementById('myChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['Jour A', 'Jour B'],
-                datasets: [{
-                    label: 'Test',
-                    data: [1000, 2000],
-                    backgroundColor: 'blue'
-                }]
-            },
-            options: { responsive: true, maintainAspectRatio: false }
-        });
-        console.log("Le graphique de test a été dessiné.");
+        const debugDiv = document.getElementById('debug');
+        const dataJson = localStorage.getItem('graphData');
+
+        if (!dataJson) {
+            debugDiv.innerHTML = "ERREUR : Aucune donnée trouvée dans le LocalStorage !";
+        } else {
+            try {
+                const rawData = JSON.parse(dataJson);
+                debugDiv.innerHTML = "Données reçues : " + rawData.length + " éléments trouvés.";
+                
+                // Dessin simple pour valider
+                const ctx = document.getElementById('myChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: rawData.map(i => i.asset.substring(0,5)),
+                        datasets: [{ label: 'MW', data: rawData.map(i => i.unavailable), backgroundColor: 'green' }]
+                    }
+                });
+            } catch(e) {
+                debugDiv.innerHTML = "ERREUR de lecture des données : " + e.message;
+            }
+        }
     </script>
 </body>
 </html>
