@@ -3,16 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <title>Graphique des Indisponibilités</title>
+    <!-- Chargement des bibliothèques nécessaires -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
 </head>
 <body>
-    <h2>Indisponibilités nucléaires</h2>
-    <div style="width: 80%; margin: auto;"><canvas id="myChart"></canvas></div>
+    <h2>Indisponibilités nucléaires cumulées par jour</h2>
+    <div style="width: 80%; margin: auto;">
+        <canvas id="myChart"></canvas>
+    </div>
+
     <script>
+        // Récupération des données depuis la mémoire du navigateur
         const dataJson = localStorage.getItem('graphData');
+        
         if (dataJson) {
             const rawData = JSON.parse(dataJson);
+
+            // Configuration des couleurs et textures par réacteur
             const configReacteurs = {
                 "Belleville 1": { pattern: 'diagonal', color: '#FF306B' },
                 "Belleville 2": { pattern: 'diagonal', color: '#FFACC4' },
@@ -45,21 +53,39 @@
                 "Tricastin 3": { pattern: 'disc', color: '#FFACC4' },
                 "Tricastin 4": { pattern: 'disc', color: '#E6AAAF' }
             };
+
             const dates = [...new Set(rawData.map(i => new Date(i.dateDebut).toLocaleDateString()))].sort();
             const reacteurs = [...new Set(rawData.map(i => i.asset))];
+            
             const datasets = reacteurs.map(r => {
                 const cfg = configReacteurs[r] || { pattern: 'solid', color: '#ccc' };
+                
+                // Application de la texture si disponible
+                let fill = cfg.color;
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    fill = pattern.draw(cfg.pattern, cfg.color);
+                }
+                
                 return {
                     label: r,
                     data: dates.map(d => rawData.filter(i => i.asset === r && new Date(i.dateDebut).toLocaleDateString() === d).reduce((s, i) => s + i.unavailable, 0)),
-                    backgroundColor: typeof pattern !== 'undefined' ? pattern.draw(cfg.pattern, cfg.color) : cfg.color
+                    backgroundColor: fill
                 };
             });
+
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
-                options: { scales: { x: { stacked: true }, y: { stacked: true } } }
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
             });
+        } else {
+            document.body.innerHTML = "<h2>Aucune donnée disponible.</h2><p>Veuillez d'abord lancer l'analyse sur la page principale.</p>";
         }
     </script>
 </body>
