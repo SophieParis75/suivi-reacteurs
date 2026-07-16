@@ -54,9 +54,10 @@
                 datasets: [{
                     label: 'Indisponibilité (MW)',
                     data: rawData.map(i => ({
-                        x: [new Date(i.dateDebut), new Date(i.dateFin)],
+                        // Sécurité : conversion forcée en date propre
+                        x: [new Date(i.dateDebut).getTime(), new Date(i.dateFin).getTime()],
                         y: i.asset,
-                        valeur: i.unavailable // On garde cette donnée pour le tooltip
+                        valeur: i.unavailable
                     })),
                     backgroundColor: rawData.map(item => {
                         const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
@@ -68,7 +69,6 @@
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                // --- AJOUTEZ CE BLOC ICI ---
                 plugins: {
                     tooltip: {
                         callbacks: {
@@ -78,10 +78,32 @@
                                 let totalGlobal = 0;
                                 
                                 rawData.forEach(item => {
-                                    if (instantSurvole >= new Date(item.dateDebut) && instantSurvole <= new Date(item.dateFin)) {
+                                    const dD = new Date(item.dateDebut).getTime();
+                                    const dF = new Date(item.dateFin).getTime();
+                                    if (instantSurvole.getTime() >= dD && instantSurvole.getTime() <= dF) {
                                         totalGlobal += item.unavailable;
                                     }
                                 });
+
+                                return [
+                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
+                                    `Total parc indisponible: ${totalGlobal} MW`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { 
+                        type: 'time', 
+                        time: { unit: 'day' },
+                        // On utilise .getTime() pour être sûr que l'axe comprend des chiffres
+                        min: new Date().getTime(),
+                        max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).getTime()
+                    }
+                }
+            }
+        });
 
                                 return [
                                     `Indisponibilité réacteur: ${valeurReacteur} MW`,
