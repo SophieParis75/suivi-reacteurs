@@ -47,28 +47,35 @@
             "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
         };
 
-        new Chart(document.getElementById('myChart'), {
-            type: 'bar',
-            data: {
-                datasets: [{
-                    label: 'Indisponibilité (MW)',
-                    data: rawData.map(i => ({
-                        x: [i.dateDebut, i.dateFin],
-                        y: i.asset,
-                        valeur: i.unavailable
-                    })),
-                    backgroundColor: rawData.map(item => {
-                        const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
-                        return typeof patternomaly !== 'undefined' ? patternomaly.draw(cfg.pattern, cfg.color) : cfg.color;
-                    })
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false
+       new Chart(document.getElementById('myChart'), {
+    type: 'bar',
+    data: {
+        datasets: [{
+            label: 'Indisponibilité (MW)',
+            data: rawData.map(i => ({
+                x: [new Date(i.dateDebut), new Date(i.dateFin)], // Intervalle de temps
+                y: i.asset
+            })),
+            backgroundColor: rawData.map(item => {
+                const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
+                return typeof patternomaly !== 'undefined' ? patternomaly.draw(cfg.pattern, cfg.color) : cfg.color;
+            })
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: { 
+                type: 'time', // Important : on précise que c'est du temps
+                time: { unit: 'day' },
+                min: new Date().toISOString(), // Commence à aujourd'hui
+                max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // Sur 30 jours
             }
-        });
+        }
+    }
+});
     </script>
 </body>
 </html>
