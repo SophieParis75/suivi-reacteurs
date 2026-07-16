@@ -68,36 +68,22 @@
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
+                scales: {
+                    x: { 
+                        type: 'category' // On force en catégorie pour supprimer l'erreur de date
+                    }
+                },
                 plugins: {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const valeurReacteur = context.raw.valeur;
-                                const instantSurvole = new Date(context.raw.x[0]);
-                                let totalGlobal = 0;
-                                
-                                rawData.forEach(item => {
-                                    if (instantSurvole >= new Date(item.dateDebut) && instantSurvole <= new Date(item.dateFin)) {
-                                        totalGlobal += item.unavailable;
-                                    }
-                                });
-
-                                return [
-                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
-                                    `Total parc indisponible: ${totalGlobal} MW`
-                                ];
+                                return `Indispo: ${context.raw.valeur} MW`;
                             }
                         }
                     }
-                },
-                scales: {
-                    x: { 
-                        type: 'time', 
-                        time: { unit: 'day' }
-                        // On supprime 'min' et 'max' pour laisser Chart.js s'adapter aux données
-                    }
                 }
             }
+                                });
 
                                 return [
                                     `Indisponibilité réacteur: ${valeurReacteur} MW`,
