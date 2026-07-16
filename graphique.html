@@ -28,11 +28,23 @@
             },
             options: {
                 indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
                 scales: {
-                    x: { type: 'time' }
+                    x: { 
+                        type: 'category' // On force en catégorie pour supprimer l'erreur de date
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `Indispo: ${context.raw.valeur} MW`;
+                            }
+                        }
+                    }
                 }
             }
-        });
     </script>
 </body>
 </html>
