@@ -2,61 +2,34 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Planning Indisponibilités</title>
+    <title>Test Graphique</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 </head>
 <body>
-    <h2>Planning des Indisponibilités</h2>
-    <div style="width: 95%; margin: auto; height: 600px;">
+    <div style="width: 800px; height: 400px;">
         <canvas id="myChart"></canvas>
     </div>
 
     <script>
         const rawData = JSON.parse(localStorage.getItem('graphData'));
-        
-        // Configuration simple
-        const config = { "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' } /* ... autres ... */ };
+        console.log("Données chargées :", rawData);
 
         new Chart(document.getElementById('myChart'), {
             type: 'bar',
             data: {
                 datasets: [{
-                    label: 'Indisponibilité (MW)',
+                    label: 'Test',
                     data: rawData.map(i => ({
                         x: [new Date(i.dateDebut), new Date(i.dateFin)],
-                        y: i.asset,
-                        valeur: i.unavailable
-                    })),
-                    backgroundColor: 'rgba(0, 86, 179, 0.6)'
+                        y: i.asset
+                    }))
                 }]
             },
             options: {
                 indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const start = new Date(context.raw.x[0]);
-                                let total = 0;
-                                rawData.forEach(item => {
-                                    if (start >= new Date(item.dateDebut) && start <= new Date(item.dateFin)) {
-                                        total += item.unavailable;
-                                    }
-                                });
-                                return [
-                                    'Indispo réacteur: ' + context.raw.valeur + ' MW',
-                                    'Total parc: ' + total + ' MW'
-                                ];
-                            }
-                        }
-                    }
-                },
                 scales: {
-                    x: { type: 'time', time: { unit: 'day' } }
+                    x: { type: 'time' }
                 }
             }
         });
