@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Graphique cumulé</title>
+    <title>Graphique des Indisponibilités</title>
+    <!-- Chargement de Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -12,36 +13,56 @@
     </div>
 
     <script>
+        // Récupération des données depuis la mémoire
         const dataJson = localStorage.getItem('graphData');
+        
         if (dataJson) {
             const rawData = JSON.parse(dataJson);
 
-            // 1. Fonction pour extraire la date (format YYYY-MM-DD)
-            const getJour = (dateStr) => new Date(dateStr).toISOString().split('T')[0];
-
-            // 2. Agrégation des données par jour et par réacteur
-            let dates = [...new Set(rawData.map(item => getJour(item.dateDebut)))].sort();
-            let reacteurs = [...new Set(rawData.map(item => item.asset))];
+            // 1. Préparation des axes (Jours) et des catégories (Réacteurs)
+            const getJour = (dateStr) => new Date(dateStr).toLocaleDateString('fr-FR');
+            const dates = [...new Set(rawData.map(item => getJour(item.dateDebut)))].sort();
+            const reacteurs = [...new Set(rawData.map(item => item.asset))];
             
-            let datasets = reacteurs.map(r => ({
+            // 2. Construction des jeux de données (Datasets)
+            // Chaque réacteur devient une "couche" de couleur différente
+            const datasets = reacteurs.map((r, index) => ({
                 label: r,
                 data: dates.map(d => {
-                    // Somme des indisponibilités pour ce réacteur ce jour-là
                     return rawData.filter(item => item.asset === r && getJour(item.dateDebut) === d)
                                   .reduce((sum, item) => sum + item.unavailable, 0);
-                })
+                }),
+                // Couleur automatique basée sur l'index
+                backgroundColor: `hsl(${(index * 360) / reacteurs.length}, 70%, 50%)`
             }));
 
-            // 3. Affichage du graphique empilé
+            // 3. Création du graphique empilé
             const ctx = document.getElementById('myChart').getContext('2d');
             new Chart(ctx, {
                 type: 'bar',
-                data: { labels: dates, datasets: datasets },
+                data: {
+                    labels: dates,
+                    datasets: datasets
+                },
                 options: {
                     responsive: true,
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+                    scales: {
+                        x: { 
+                            stacked: true // Force l'empilement sur l'axe X
+                        },
+                        y: { 
+                            stacked: true, // Force l'empilement sur l'axe Y
+                            beginAtZero: true,
+                            title: { display: true, text: 'Puissance indisponible (MW)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
                 }
             });
+        } else {
+            document.body.innerHTML = "<h2>Aucune donnée disponible.</h2><p>Veuillez lancer l'analyse sur la page principale d'abord.</p>";
         }
     </script>
 </body>
