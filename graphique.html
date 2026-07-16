@@ -1,95 +1,21 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Planning Indisponibilités</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
-</head>
-<body>
-    <h2>Planning des Indisponibilités (Prochain mois)</h2>
-    <div style="width: 95%; margin: auto; height: 800px;">
-        <canvas id="myChart"></canvas>
-    </div>
-
-    <script>
+<script>
+    try {
         const dataJson = localStorage.getItem('graphData');
-        if (dataJson) {
-            const rawData = JSON.parse(dataJson);
-            
-            const config = {
-                "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-                "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-                "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-                "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
-                "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-                "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-                "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-                "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-                "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-                "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-                "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-                "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-                "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-                "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-                "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-                "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-                "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-                "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-                "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-                "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-                "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-                "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-                "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-                "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-                "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-                "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-                "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-                "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-                "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-                "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-            };
+        if (!dataJson) throw new Error("Aucune donnée trouvée dans le localStorage");
+        
+        const rawData = JSON.parse(dataJson);
+        console.log("Données chargées :", rawData);
 
-            // Calcul fenêtre 30 jours basée sur le premier événement
-            const minDate = new Date(rawData[0].dateDebut);
-            const maxDate = new Date(minDate);
-            maxDate.setDate(maxDate.getDate() + 30);
+        // Test de sécurité : si le premier élément n'a pas de date valide, on arrête
+        if (!rawData[0] || !rawData[0].dateDebut) throw new Error("Format de données incorrect");
 
-            const datasets = [{
-                data: rawData.map(item => ({
-                    x: [item.dateDebut, item.dateFin],
-                    y: item.asset,
-                    valeur: item.unavailable
-                })),
-                backgroundColor: rawData.map(item => {
-                    const cfg = config[item.asset.toUpperCase()] || { pattern: 'solid', color: '#808080' };
-                    return (typeof pattern !== 'undefined') ? pattern.draw(cfg.pattern, cfg.color) : cfg.color;
-                })
-            }];
+        // ... [Insérez ici tout votre code (dictionnaire, config, chart) normalement] ...
+        
+        // J'ai mis un test simple ici pour voir si le graphique s'affiche au moins
+        alert("Données chargées ! Nombre d'événements : " + rawData.length);
 
-            new Chart(document.getElementById('myChart'), {
-                type: 'bar',
-                data: { datasets: datasets },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        tooltip: { callbacks: { label: (ctx) => ` Indisponibilité : ${ctx.raw.valeur} MW` } }
-                    },
-                    scales: {
-                        x: { 
-                            type: 'time', 
-                            time: { unit: 'day' },
-                            min: minDate.toISOString(),
-                            max: maxDate.toISOString()
-                        }
-                    }
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+    } catch (e) {
+        document.body.innerHTML = "<h2 style='color:red'>ERREUR DÉTECTÉE :</h2><p>" + e.message + "</p>";
+        console.error(e);
+    }
+</script>
