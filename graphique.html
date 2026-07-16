@@ -72,31 +72,28 @@
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const valeurReacteur = context.raw.valeur;
-                                const instantSurvole = new Date(context.raw.x[0]);
-                                let totalGlobal = 0;
+                                // On utilise la position précise du survol sur l'axe X
+                                const instant = context.chart.scales.x.getValueForPixel(context.element.x);
+                                const dateSurvole = new Date(instant);
                                 
+                                let totalGlobal = 0;
                                 rawData.forEach(item => {
-                                    if (instantSurvole >= new Date(item.dateDebut) && instantSurvole <= new Date(item.dateFin)) {
+                                    if (dateSurvole >= new Date(item.dateDebut) && dateSurvole <= new Date(item.dateFin)) {
                                         totalGlobal += item.unavailable;
                                     }
                                 });
 
                                 return [
-                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
-                                    `Total parc indisponible: ${totalGlobal} MW`
+                                    `Date: ${dateSurvole.toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})}`,
+                                    `Réacteur: ${context.raw.valeur} MW`,
+                                    `Total parc: ${totalGlobal} MW`
                                 ];
                             }
                         }
                     }
                 },
                 scales: {
-                    x: { 
-                        type: 'time', 
-                        time: { unit: 'day' },
-                        min: new Date().toISOString(),
-                        max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-                    }
+                    x: { type: 'time', time: { unit: 'day' } }
                 }
             }
         });
