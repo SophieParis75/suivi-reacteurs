@@ -48,14 +48,13 @@
             "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
         };
 
-       new Chart(document.getElementById('myChart'), {
+        new Chart(document.getElementById('myChart'), {
             type: 'bar',
             data: {
                 datasets: [{
                     label: 'Indisponibilité (MW)',
                     data: rawData.map(i => ({
-                        // Sécurité : conversion forcée en date propre
-                        x: [new Date(i.dateDebut).getTime(), new Date(i.dateFin).getTime()],
+                        x: [new Date(i.dateDebut), new Date(i.dateFin)],
                         y: i.asset,
                         valeur: i.unavailable
                     })),
@@ -78,9 +77,7 @@
                                 let totalGlobal = 0;
                                 
                                 rawData.forEach(item => {
-                                    const dD = new Date(item.dateDebut).getTime();
-                                    const dF = new Date(item.dateFin).getTime();
-                                    if (instantSurvole.getTime() >= dD && instantSurvole.getTime() <= dF) {
+                                    if (instantSurvole >= new Date(item.dateDebut) && instantSurvole <= new Date(item.dateFin)) {
                                         totalGlobal += item.unavailable;
                                     }
                                 });
@@ -93,27 +90,6 @@
                         }
                     }
                 },
-                scales: {
-                    x: { 
-                        type: 'time', 
-                        time: { unit: 'day' },
-                        // On utilise .getTime() pour être sûr que l'axe comprend des chiffres
-                        min: new Date().getTime(),
-                        max: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).getTime()
-                    }
-                }
-            }
-        });
-
-                                return [
-                                    `Indisponibilité réacteur: ${valeurReacteur} MW`,
-                                    `Total parc indisponible: ${totalGlobal} MW`
-                                ];
-                            }
-                        }
-                    }
-                },
-                // --- FIN DU BLOC ---
                 scales: {
                     x: { 
                         type: 'time', 
