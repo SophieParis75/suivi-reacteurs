@@ -92,21 +92,24 @@
                     backgroundColor: bg
                 };
             });
-
-            new Chart(document.getElementById('myChart'), {
-                type: 'bar',
-                data: { labels: dates, datasets: datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
+new Chart(document.getElementById('myChart'), {
+    type: 'bar',
+    data: { labels: dates, datasets: datasets },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
             legend: {
                 position: 'bottom'
-            }
-        },
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
-                }
-            });
+            } // <-- Cette accolade ferme 'legend'
+        }, // <-- Il manquait cette accolade pour fermer 'plugins'
+        scales: { 
+            x: { stacked: true }, 
+            y: { stacked: true, beginAtZero: true } 
+        }
+    }
+});
+           
         }
     </script>
 </body>
