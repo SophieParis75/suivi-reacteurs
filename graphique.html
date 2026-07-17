@@ -13,40 +13,78 @@
     </div>
 
     <script>
-    console.log("Le script a démarré.");
-
-    // Test de chargement des bibliothèques
-    if (typeof Chart === 'undefined') {
-        console.error("ERREUR : Chart.js n'est pas chargé !");
-    } else {
-        console.log("Chart.js est bien chargé.");
-    }
-
-    const dataJson = localStorage.getItem('graphData');
-    console.log("Contenu de localStorage 'graphData' :", dataJson);
-
-    if (dataJson) {
-        try {
+        const dataJson = localStorage.getItem('graphData');
+        
+        if (dataJson) {
             const rawData = JSON.parse(dataJson);
-            console.log("JSON bien parsé. Nombre d'éléments :", rawData.length);
             
-            // ... (le reste de votre code de calcul des datasets) ...
+            // Dictionnaire en MAJUSCULES pour correspondre au XML
+            const configReacteurs = {
+                "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
+                "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
+                "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
+                "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
+                "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
+                "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
+                "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
+                "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
+                "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
+                "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
+                "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
+                "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
+                "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
+                "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
+                "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
+                "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
+                "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
+                "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
+                "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
+                "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
+                "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
+                "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
+                "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
+                "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
+                "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
+                "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
+                "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
+                "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
+                "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
+                "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
+            };
+
+            const getJour = (d) => new Date(d).toISOString().split('T')[0];
+            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
+            const reacteurs = [...new Set(rawData.map(i => i.asset))];
             
-            console.log("Tout semble prêt. Tentative de création du graphique...");
-            
+            const datasets = reacteurs.map(r => {
+                // On met le nom trouvé dans le XML en majuscules pour comparer
+                const nomRecherche = r.toUpperCase().trim();
+                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+                
+                let bg = cfg.color;
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
+                }
+                
+                return {
+                    label: r,
+                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
+                    backgroundColor: bg
+                };
+            });
+
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
-                data: { labels: [], datasets: [] }, // Vide pour tester l'affichage
-                options: { responsive: true }
+                data: { labels: dates, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+                }
             });
-            console.log("Code d'initialisation du graphique exécuté.");
-            
-        } catch (e) {
-            console.error("ERREUR lors du traitement des données :", e);
+        } else {
+            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
         }
-    } else {
-        console.error("ERREUR : Aucune donnée trouvée dans localStorage.");
-    }
-</script>
+    </script>
 </body>
 </html>
