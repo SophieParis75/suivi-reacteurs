@@ -53,9 +53,26 @@
             };
 
             const getJour = (d) => new Date(d).toISOString().split('T')[0];
-            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
-            const reacteurs = [...new Set(rawData.map(i => i.asset))];
+         const getJour = (d) => new Date(d).toISOString().split('T')[0];
+         const t2Stockee = localStorage.getItem('dateT2');
+        const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
+
+const veilleT2 = new Date(dateRef);
+veilleT2.setDate(dateRef.getDate() - 1);
+veilleT2.setHours(0, 0, 0, 0);
+
+const finPeriode = new Date(veilleT2);
+finPeriode.setDate(veilleT2.getDate() + 21);
+
+const toutesLesDates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
+const dates = toutesLesDates.filter(d => {
+    const dateCourante = new Date(d);
+    return dateCourante >= veilleT2 && dateCourante < finPeriode;
+});
+
+const reacteurs = [...new Set(rawData.map(i => i.asset))];  
             
+                     
             const datasets = reacteurs.map(r => {
                 // On met le nom trouvé dans le XML en majuscules pour comparer
                 const nomRecherche = r.toUpperCase().trim();
