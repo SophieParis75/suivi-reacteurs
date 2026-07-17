@@ -25,186 +25,99 @@
     </div>
 
 
+<script>
+    const dataJson = localStorage.getItem('graphData');
 
-    <script>
+    if (dataJson) {
+        const rawData = JSON.parse(dataJson);
 
-        const dataJson = localStorage.getItem('graphData');
+        const configReacteurs = {
+            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
+            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
+            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
+            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
+            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
+            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
+            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
+            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
+            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
+            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
+            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
+            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
+            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
+            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
+            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
+            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
+            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
+            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
+            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
+            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
+            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
+            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
+            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
+            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
+            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
+            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
+            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
+            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
+            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
+            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
+        };
 
+        const getJour = (d) => new Date(d).toISOString().split('T')[0];
+        const toutesLesDates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
         
-
-        if (dataJson) {
-
-            const rawData = JSON.parse(dataJson);
-
-            
-
-            // Dictionnaire en MAJUSCULES pour correspondre au XML
-
-            const configReacteurs = {
-
-                "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-
-                "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-
-                "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-
-                "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
-
-                "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-
-                "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-
-                "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-
-                "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-
-                "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-
-                "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-
-                "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-
-                "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-
-                "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-
-                "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-
-                "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-
-                "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-
-                "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-
-                "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-
-                "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-
-                "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-
-                "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-
-                "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-
-                "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-
-                "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-
-                "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-
-                "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-
-                "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-
-                "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-
-                "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-
-                "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-
-            };
-
-
-
-            const getJour = (d) => new Date(d).toISOString().split('T')[0];
-
-              const t2Stockee = localStorage.getItem('dateT2');
-
+        const t2Stockee = localStorage.getItem('dateT2');
         const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
+        const veilleT2 = new Date(dateRef);
+        veilleT2.setDate(dateRef.getDate() - 1);
+        const finPeriode = new Date(veilleT2);
+        finPeriode.setDate(veilleT2.getDate() + 21);
 
+        // Filtrage
+        let dates = toutesLesDates.filter(d => {
+            const dateCourante = new Date(d);
+            return dateCourante >= veilleT2 && dateCourante < finPeriode;
+        });
 
-
-const veilleT2 = new Date(dateRef);
-
-veilleT2.setDate(dateRef.getDate() - 1);
-
-veilleT2.setHours(0, 0, 0, 0);
-
-
-
-const finPeriode = new Date(veilleT2);
-
-finPeriode.setDate(veilleT2.getDate() + 21);
-
-
-
-const toutesLesDates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
-
-const dates = toutesLesDates.filter(d => {
-
-    const dateCourante = new Date(d);
-
-    return dateCourante >= veilleT2 && dateCourante < finPeriode;
-
-});
-
-
-
-const reacteurs = [...new Set(rawData.map(i => i.asset))];  
-
-            
-
-                     
-
-            const datasets = reacteurs.map(r => {
-
-                // On met le nom trouvé dans le XML en majuscules pour comparer
-
-                const nomRecherche = r.toUpperCase().trim();
-
-                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
-
-                
-
-                let bg = cfg.color;
-
-                if (typeof pattern !== 'undefined' && pattern.draw) {
-
-                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
-
-                }
-
-                
-
-                return {
-
-                    label: r,
-
-                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
-
-                    backgroundColor: bg
-
-                };
-
-            });
-
-
-
-            new Chart(document.getElementById('myChart'), {
-
-                type: 'bar',
-
-                data: { labels: dates, datasets: datasets },
-
-                options: {
-
-                    responsive: true,
-
-                    maintainAspectRatio: false,
-
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
-
-                }
-
-            });
-
-        } else {
-
-            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
-
+        // SÉCURITÉ : Si le filtre est vide, on prend toutes les dates disponibles
+        if (dates.length === 0) {
+            dates = toutesLesDates;
         }
 
-    </script>
+        const reacteurs = [...new Set(rawData.map(i => i.asset))];  
+
+        const datasets = reacteurs.map(r => {
+            const nomRecherche = r.toUpperCase().trim();
+            const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+            
+            let bg = cfg.color;
+            // Utilisation sécurisée de patternomaly
+            if (typeof pattern !== 'undefined') {
+                bg = pattern.draw(cfg.pattern, cfg.color);
+            }
+            
+            return {
+                label: r,
+                data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + (Number(i.unavailable) || 0), 0)),
+                backgroundColor: bg
+            };
+        });
+
+        new Chart(document.getElementById('myChart'), {
+            type: 'bar',
+            data: { labels: dates, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+            }
+        });
+    } else {
+        document.body.innerHTML = "<h2>Aucune donnée.</h2>";
+    }
+</script>
+    
 
 </body>
 
