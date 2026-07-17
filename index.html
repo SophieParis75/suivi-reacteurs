@@ -426,7 +426,7 @@ localStorage.setItem('dateT2', document.getElementById('dateComparaison').value)
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
 	// --- AJOUTS POUR LE GRAPHIQUE ---
-            localStorage.setItem('graphData', JSON.stringify(listReacteursT2));
+           localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
             document.getElementById('resultats').innerHTML += 
                 '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
 
