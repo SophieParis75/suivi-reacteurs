@@ -89,17 +89,28 @@
                 };
             });
 
-            new Chart(document.getElementById('myChart'), {
-                type: 'bar',
-                data: { labels: dates, datasets: datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { 
-                        x: { stacked: true }, 
-                        y: { stacked: true, beginAtZero: true } 
+           // Debug : Affiche dans la console si les données sont bien là
+            console.log("Nombre de datasets :", datasets.length);
+            console.log("Premier dataset :", datasets[0]);
+
+            try {
+                const ctx = document.getElementById('myChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: dates, datasets: datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { 
+                            x: { stacked: true }, 
+                            y: { stacked: true, beginAtZero: true } 
+                        }
                     }
-                }
+                });
+                console.log("Graphique créé avec succès.");
+            } catch (err) {
+                console.error("Erreur critique lors de la création du graphique :", err);
+            }
             });
         }
     </script>
