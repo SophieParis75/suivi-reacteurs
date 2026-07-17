@@ -18,6 +18,7 @@
         if (dataJson) {
             const rawData = JSON.parse(dataJson);
             
+            // VOTRE DICTIONNAIRE EST ICI
             const configReacteurs = {
                 "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
                 "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
@@ -52,29 +53,20 @@
             };
 
             const getJour = (d) => new Date(d).toISOString().split('T')[0];
-            let dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
-            
-            // --- NOUVEAU : LOGIQUE DE FILTRAGE ---
             const t2Stockee = localStorage.getItem('dateT2');
-            if (t2Stockee) {
-                const dateRef = new Date(t2Stockee);
-                const veilleT2 = new Date(dateRef);
-                veilleT2.setDate(dateRef.getDate() - 1);
-                
-                const finPeriode = new Date(veilleT2);
-                finPeriode.setDate(veilleT2.getDate() + 21);
+            const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
 
-                const datesFiltrees = dates.filter(d => {
-                    const dateCourante = new Date(d);
-                    return dateCourante >= veilleT2 && dateCourante < finPeriode;
-                });
+            const veilleT2 = new Date(dateRef);
+            veilleT2.setDate(dateRef.getDate() - 1);
+            veilleT2.setHours(0, 0, 0, 0);
 
-                // Si on a trouvé des dates, on utilise la version filtrée
-                if (datesFiltrees.length > 0) {
-                    dates = datesFiltrees;
-                }
+            // Génération des 21 jours
+            let dates = [];
+            for (let i = 0; i < 21; i++) {
+                let d = new Date(veilleT2);
+                d.setDate(d.getDate() + i);
+                dates.push(getJour(d));
             }
-            // ------------------------------------
 
             const reacteurs = [...new Set(rawData.map(i => i.asset))];
             
@@ -83,13 +75,18 @@
                 const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
                 
                 let bg = cfg.color;
-                if (typeof pattern !== 'undefined' && pattern.draw) {
+                if (typeof pattern !== 'undefined') {
                     try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
                 }
                 
                 return {
                     label: r,
-                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
+                    data: dates.map(d => {
+                        let dateCourante = new Date(d);
+                        return rawData
+                            .filter(i => i.asset === r && dateCourante >= new Date(i.dateDebut) && dateCourante <= new Date(i.dateFin))
+                            .reduce((s, i) => s + i.unavailable, 0);
+                    }),
                     backgroundColor: bg
                 };
             });
@@ -103,8 +100,6 @@
                     scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
                 }
             });
-        } else {
-            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
         }
     </script>
 </body>
