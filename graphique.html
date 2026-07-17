@@ -65,28 +65,23 @@
         };
 
         const getJour = (d) => new Date(d).toISOString().split('T')[0];
-        const toutesLesDates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
-        
-        const t2Stockee = localStorage.getItem('dateT2');
-        const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
-        const veilleT2 = new Date(dateRef);
-        veilleT2.setDate(dateRef.getDate() - 1);
-        const finPeriode = new Date(veilleT2);
-        finPeriode.setDate(veilleT2.getDate() + 21);
+    const t2Stockee = localStorage.getItem('dateT2');
+    const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
 
-        // Filtrage
-        let dates = toutesLesDates.filter(d => {
-            const dateCourante = new Date(d);
-            return dateCourante >= veilleT2 && dateCourante < finPeriode;
-        });
+    const veilleT2 = new Date(dateRef);
+    veilleT2.setDate(dateRef.getDate() - 1);
+    
+    const finPeriode = new Date(veilleT2);
+    finPeriode.setDate(veilleT2.getDate() + 21);
 
-        // SÉCURITÉ : Si le filtre est vide, on prend toutes les dates disponibles
-        if (dates.length === 0) {
-            dates = toutesLesDates;
-        }
+    const toutesLesDates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
+    let dates = toutesLesDates.filter(d => {
+        const dateCourante = new Date(d);
+        return dateCourante >= veilleT2 && dateCourante < finPeriode;
+    });
 
-        const reacteurs = [...new Set(rawData.map(i => i.asset))];  
-
+    if (dates.length === 0) dates = toutesLesDates;
+    const reacteurs = [...new Set(rawData.map(i => i.asset))];
         const datasets = reacteurs.map(r => {
             const nomRecherche = r.toUpperCase().trim();
             const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
