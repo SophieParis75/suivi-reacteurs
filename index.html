@@ -264,7 +264,29 @@
                     }
                 }
             }
+// --- GESTION DES CHEVAUCHEMENTS (Garder le plus long) ---
+            let conflits = [];
+            let evenementsOptimises = [];
+            let groupeParReacteur = {};
 
+            evenementsFiltres.forEach(ev => {
+                if (!groupeParReacteur[ev.asset]) groupeParReacteur[ev.asset] = [];
+                groupeParReacteur[ev.asset].push(ev);
+            });
+
+            Object.keys(groupeParReacteur).forEach(asset => {
+                let evs = groupeParReacteur[asset];
+                if (evs.length > 1) {
+                    evs.forEach(e => e.duree = e.dateFin - e.dateDebut);
+                    evs.sort((a, b) => b.duree - a.duree); 
+                    evenementsOptimises.push(evs[0]);
+                    conflits.push({ asset: asset, retenu: evs[0], tous: evs });
+                } else {
+                    evenementsOptimises.push(evs[0]);
+                }
+            });
+            evenementsFiltres = evenementsOptimises;
+			
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
