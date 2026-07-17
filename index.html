@@ -232,37 +232,46 @@
             let evenementsFiltres = [];
             let tousLesReacteursUniques = new Set();
 
-            for (let i = 0; i < items.length; i++) {
-                const descNode = items[i].getElementsByTagName("description")[0];
-                if (!descNode) continue;
-                
-                const texteHTML = descNode.textContent || descNode.innerHTML;
+for (let i = 0; i < items.length; i++) {
+    const descNode = items[i].getElementsByTagName("description")[0];
+    if (!descNode) continue;
+    
+    // On utilise innerHTML pour s'assurer de récupérer tout le contenu
+    const texteHTML = descNode.innerHTML;
 
-                const eventStatus = extraireChampStrict(texteHTML, "Event status");
-                const remarks = extraireChampStrict(texteHTML, "Remarks");
-                const fuelType = extraireChampStrict(texteHTML, "Fuel type");
+    const eventStatus = extraireChampStrict(texteHTML, "Event status");
+    const remarks = extraireChampStrict(texteHTML, "Remarks");
+    const fuelType = extraireChampStrict(texteHTML, "Fuel type");
 
-                if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
-                    const remLower = remarks.toLowerCase();
-                    if (remLower.includes("causes externes liées à l'environnement") || remLower.includes("environmental issues")) {
-                        
-                        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                        const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                        const unavailable = parseInt(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
-                        const available = installed - unavailable;
-                        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
-                        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+    // 1. Condition élargie pour le filtrage
+    const remLower = remarks.toLowerCase();
+    const estEnvironnement = remLower.includes("causes externes") || remLower.includes("environmental issues");
+    const estActif = eventStatus.toLowerCase() === "actif";
+    const estNucleaire = fuelType.toLowerCase() === "nuclear";
 
-                        if(eventStartStr && eventStopStr) {
-                            evenementsFiltres.push({
-                                asset, installed, unavailable, available, 
-                                dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr)
-                            });
-                            tousLesReacteursUniques.add(asset);
-                        }
-                    }
-                }
+    // 2. Debug : Si ça ne s'affiche pas, regardez votre console (F12)
+    if (estActif && estNucleaire && !estEnvironnement) {
+        console.log("Message ignoré (Remarks non match) :", remarks);
+    }
+
+    if (estActif && estNucleaire && estEnvironnement) {
+        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
+        const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+        const unavailable = parseInt(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+        const available = installed - unavailable;
+        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
+        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+
+        if(eventStartStr && eventStopStr) {
+            evenementsFiltres.push({
+                asset, installed, unavailable, available, 
+                dateDebut: new Date(eventStartStr), 
+                dateFin: new Date(eventStopStr)
+            });
+            tousLesReacteursUniques.add(asset);
+        }
+    }
+}
             }
 // --- GESTION DES CHEVAUCHEMENTS (Garder le plus long) ---
             let conflits = [];
