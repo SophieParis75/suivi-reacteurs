@@ -444,7 +444,16 @@
                     phrases.push(phrase);
                 }
             });
-            document.getElementById('changesBody').innerHTML = phrases.length > 0 
+            // --- Signalement des conflits dans la synthèse ---
+            if (conflits.length > 0) {
+                let htmlConflits = "<h3>⚠️ Conflits d'indisponibilités (Chevauchements détectés)</h3><ul>" + 
+                conflits.map(c => `<li><strong>${c.asset}</strong> : Plusieurs arrêts détectés. 
+                Retenu : ${formaterFull(c.retenu.dateDebut)} au ${formaterFull(c.retenu.dateFin)} (${c.retenu.unavailable} MW). 
+                <em>(${c.tous.length} périodes analysées)</em></li>`).join('') + "</ul>";
+                
+                document.getElementById('changesBody').innerHTML = htmlConflits;
+            }
+            document.getElementById('changesBody').innerHTML += phrases.length > 0 
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
 	// --- AJOUTS POUR LE GRAPHIQUE ---
