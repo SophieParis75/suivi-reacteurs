@@ -77,18 +77,23 @@ for (let i = 0; i < 22; i++) {
             // C. Définition fixe des réacteurs (ceux que vous avez configurés)
             const reacteurs = Object.keys(configReacteurs);
             
-            const datasets = reacteurs.map(r => {
+const datasets = reacteurs.map(r => {
     const nomRecherche = r.toUpperCase().trim();
     const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
     
+    // Récupération correcte du pattern et de la couleur
     let bg = cfg.color;
-    // Vérification sécurisée du pattern
     if (typeof patternomaly !== 'undefined') {
-        try { bg = patternomaly.draw(cfg.pattern, cfg.color); } catch(e) { console.error(e); }
+        try { 
+            bg = patternomaly.draw(cfg.pattern, cfg.color); 
+        } catch(e) { 
+            console.error("Erreur patternomaly :", e); 
+        }
     }
 
     return {
         label: r,
+        backgroundColor: bg, // Vos couleurs et motifs sont bien ici
         data: dates.map(d => {
             let debutJour = new Date(d);
             debutJour.setHours(0, 0, 0, 0);
@@ -124,8 +129,7 @@ for (let i = 0; i < 22; i++) {
             });
 
             return picMax;
-        }),
-        backgroundColor: bg
+        })
     };
 });
 
