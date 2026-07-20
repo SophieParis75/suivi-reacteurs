@@ -52,9 +52,26 @@
                 "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
             };
 
+            // A. Préparation de la fonction de formatage pour les filtres plus bas
             const getJour = (d) => new Date(d).toISOString().split('T')[0];
-            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
-            const reacteurs = [...new Set(rawData.map(i => i.asset))];
+
+            // B. Calcul de la période forcée (22 jours : de T2-1 à T2+20)
+            const t2Stockee = localStorage.getItem('dateT2');
+            const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
+            dateRef.setHours(0, 0, 0, 0); 
+
+            let dates = [];
+            let dateDepart = new Date(dateRef);
+            dateDepart.setDate(dateDepart.getDate() - 1); // On décale le début à T2-1
+    
+            for (let i = 0; i < 22; i++) { 
+            let d = new Date(dateDepart);
+            d.setDate(dateDepart.getDate() + i);
+            dates.push(d.toISOString().split('T')[0]);
+            }
+
+            // C. Définition fixe des réacteurs (ceux que vous avez configurés)
+            const reacteurs = Object.keys(configReacteurs);
             
             const datasets = reacteurs.map(r => {
                 // On met le nom trouvé dans le XML en majuscules pour comparer
