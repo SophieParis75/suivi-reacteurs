@@ -111,10 +111,16 @@ for (let i = 0; i < 22; i++) {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
-                }
+    scales: {
+        y: {
+            beginAtZero: true,
+            max: 15000, // C'est ici que vous verrouillez le plafond
+            ticks: {
+                stepSize: 1000 // Optionnel : ajuste la graduation (tous les 1000)
+            }
+        }
+    }
+}
             });
         } else {
             document.body.innerHTML = "<h2>Aucune donnée.</h2>";
