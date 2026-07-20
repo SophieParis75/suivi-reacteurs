@@ -296,7 +296,21 @@ for (let i = 0; i < 22; i++) {
 
 }
 
+    },
+                   plugins: {
+        tooltip: {
+            callbacks: {
+                footer: (tooltipItems) => {
+                    const dataIndex = tooltipItems[0].dataIndex;
+                    const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
+                        return somme + (Number(ds.data[dataIndex]) || 0);
+                    }, 0);
+                    return `Indisponibilité totale : ${totalJour} MW`;
+                }
+            }
+        }
     }
+}
 
 }
 
