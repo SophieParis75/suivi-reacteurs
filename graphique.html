@@ -82,12 +82,25 @@
                 if (typeof pattern !== 'undefined' && pattern.draw) {
                     try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
                 }
+          return {
+            label: r,
+            data: dates.map(d => {
+            let jourEnCours = new Date(d);
+            // On filtre en vérifiant si le jour 'd' est inclus dans l'intervalle [dateDebut, dateFin]
+          return rawData
+            .filter(i => {
+                let debut = new Date(i.dateDebut);
+                let fin = new Date(i.dateFin);
+                // On vérifie le nom et si le jour est dans l'intervalle
+                return i.asset.toUpperCase().trim() === r.toUpperCase().trim() && 
+                       jourEnCours >= debut && 
+                       jourEnCours <= fin;
+            })
+            .reduce((s, i) => s + i.unavailable, 0);
+    }),
+    backgroundColor: bg
+};      
                 
-                return {
-                    label: r,
-                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
-                    backgroundColor: bg
-                };
             });
 
             new Chart(document.getElementById('myChart'), {
