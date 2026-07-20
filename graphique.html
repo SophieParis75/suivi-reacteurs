@@ -78,58 +78,57 @@ for (let i = 0; i < 22; i++) {
             const reacteurs = Object.keys(configReacteurs);
             
 const datasets = reacteurs.map(r => {
-    // 1. Définition du style AVANT de construire le dataset
     const nomRecherche = r.toUpperCase().trim();
-    const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
     
+    // 1. Calcul des données (c'est ici que votre structure fonctionnait)
+    const dataCalculated = dates.map(d => {
+        let debutJour = new Date(d);
+        debutJour.setHours(0, 0, 0, 0);
+        let finJour = new Date(debutJour.getTime() + 86400000); 
+
+        const evenementsDuJour = rawData.filter(i => {
+            let debutEvt = new Date(i.dateDebut);
+            let finEvt = new Date(i.dateFin);
+            return i.asset.toUpperCase().trim() === nomRecherche && 
+                   debutEvt < finJour && 
+                   finEvt > debutJour;
+        });
+
+        if (evenementsDuJour.length === 0) return 0;
+
+        let timeline = [];
+        evenementsDuJour.forEach(e => {
+            let debutEvt = new Date(e.dateDebut);
+            let finEvt = new Date(e.dateFin);
+            let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
+            let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
+            timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
+            timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
+        });
+
+        timeline.sort((a, b) => a.m - b.m || a.type - b.type);
+
+        let picMax = 0;
+        let courant = 0;
+        timeline.forEach(step => {
+            courant += (step.type * step.val);
+            if (courant > picMax) picMax = courant;
+        });
+
+        return picMax;
+    });
+
+    // 2. Définition du style et retour de l'objet, en suivant VOTRE logique
+    const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
     let bg = cfg.color;
-    if (typeof patternomaly !== 'undefined') {
-        try {
-            bg = cfg.pattern === 'solid' ? cfg.color : patternomaly.draw(cfg.pattern, cfg.color);
-        } catch(e) { console.error(e); }
+    if (typeof patternomaly !== 'undefined' && cfg.pattern !== 'solid') {
+        bg = patternomaly.draw(cfg.pattern, cfg.color);
     }
 
-    // 2. Construction du dataset en respectant VOTRE structure
     return {
         label: r,
-        // La propriété est bien ici, à côté de data
-        backgroundColor: bg,
-        data: dates.map(d => {
-            let debutJour = new Date(d);
-            debutJour.setHours(0, 0, 0, 0);
-            let finJour = new Date(debutJour.getTime() + 86400000); 
-
-            const evenementsDuJour = rawData.filter(i => {
-                let debutEvt = new Date(i.dateDebut);
-                let finEvt = new Date(i.dateFin);
-                return i.asset.toUpperCase().trim() === nomRecherche && 
-                       debutEvt < finJour && 
-                       finEvt > debutJour;
-            });
-
-            if (evenementsDuJour.length === 0) return 0;
-
-            let timeline = [];
-            evenementsDuJour.forEach(e => {
-                let debutEvt = new Date(e.dateDebut);
-                let finEvt = new Date(e.dateFin);
-                let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
-                let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
-                timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
-                timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
-            });
-
-            timeline.sort((a, b) => a.m - b.m || a.type - b.type);
-
-            let picMax = 0;
-            let courant = 0;
-            timeline.forEach(step => {
-                courant += (step.type * step.val);
-                if (courant > picMax) picMax = courant;
-            });
-
-            return picMax;
-        })
+        data: dataCalculated,
+        backgroundColor: bg
     };
 });
             new Chart(document.getElementById('myChart'), {
