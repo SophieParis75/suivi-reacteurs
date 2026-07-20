@@ -244,7 +244,7 @@
 
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
-                    if (remLower.includes("causes externes liées à l'environnement") || remLower.includes("environmental issues")) {
+                   if (remLower.includes("environ")) {
                         
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
                         const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
