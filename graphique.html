@@ -110,13 +110,17 @@ for (let i = 0; i < 22; i++) {
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
-                options: {
+               options: {
     scales: {
+        x: {
+            stacked: true // Obligatoire pour empiler les barres
+        },
         y: {
+            stacked: true, // Obligatoire pour empiler les barres
             beginAtZero: true,
-            max: 11000, // C'est ici que vous verrouillez le plafond
+            max: 15000,    // Votre limite à 15000
             ticks: {
-                stepSize: 1000 // Optionnel : ajuste la graduation (tous les 1000)
+                stepSize: 1000
             }
         }
     }
