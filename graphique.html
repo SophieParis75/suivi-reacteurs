@@ -55,25 +55,24 @@
             // A. Préparation de la fonction de formatage pour les filtres plus bas
             const getJour = (d) => new Date(d).toISOString().split('T')[0];
 
-            // B. Calcul de la période forcée (22 jours : de T2-1 à T2+20)
-           const t2Stockee = localStorage.getItem('dateT2');
-            const dateRef = new Date(t2Stockee);
+           // 1. On récupère la date brute et on isole uniquement le YYYY-MM-DD
+const t2Stockee = localStorage.getItem('dateT2'); 
+const datePart = t2Stockee.split('T')[0]; 
 
-            // 1. On force la date à minuit pile pour éviter les décalages horaires
-            dateRef.setHours(0, 0, 0, 0);
+// 2. On crée l'objet date à partir de cette chaîne (interprété comme minuit UTC)
+let dateRef = new Date(datePart);
 
-            // 2. On définit le jour de départ (T2 - 1 jour)
-            let dateDepart = new Date(dateRef);
-            dateDepart.setDate(dateDepart.getDate() ); 
+// 3. On définit le point de départ : T2 - 1 jour
+let dateDepart = new Date(dateRef);
+dateDepart.setDate(dateRef.getDate() - 1); 
 
-            // 3. Génération des 22 jours
-            let dates = [];
-            for (let i = 0; i < 22; i++) {
-            let d = new Date(dateDepart);
-            d.setDate(dateDepart.getDate() + i);
-            // On force le format YYYY-MM-DD proprement
-            dates.push(d.toISOString().split('T')[0]);
-            }
+// 4. Génération des 22 jours à partir de ce point
+let dates = [];
+for (let i = 0; i < 22; i++) {
+    let d = new Date(dateDepart);
+    d.setDate(dateDepart.getDate() + i);
+    dates.push(d.toISOString().split('T')[0]);
+}
         
             // C. Définition fixe des réacteurs (ceux que vous avez configurés)
             const reacteurs = Object.keys(configReacteurs);
