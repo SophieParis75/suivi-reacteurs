@@ -78,60 +78,56 @@ for (let i = 0; i < 22; i++) {
             const reacteurs = Object.keys(configReacteurs);
             
             const datasets = reacteurs.map(r => {
-                // On met le nom trouvé dans le XML en majuscules pour comparer
-                const nomRecherche = r.toUpperCase().trim();
-                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
-                
-                let bg = cfg.color;
-                if (typeof pattern !== 'undefined' && pattern.draw) {
-                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
-                }
-          return {
-    label: r,
-    data: dates.map(d => {
-        let debutJour = new Date(d);
-        debutJour.setHours(0, 0, 0, 0);
-        let finJour = new Date(debutJour.getTime() + 86400000); 
+    const nomRecherche = r.toUpperCase().trim();
+    const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+    
+    let bg = cfg.color;
+    // Vérification sécurisée du pattern
+    if (typeof patternomaly !== 'undefined') {
+        try { bg = patternomaly.draw(cfg.pattern, cfg.color); } catch(e) { console.error(e); }
+    }
 
-        const evenementsDuJour = rawData.filter(i => {
-            let debutEvt = new Date(i.dateDebut);
-            let finEvt = new Date(i.dateFin);
-            return i.asset.toUpperCase().trim() === r.toUpperCase().trim() && 
-                   debutEvt < finJour && 
-                   finEvt > debutJour;
-        });
+    return {
+        label: r,
+        data: dates.map(d => {
+            let debutJour = new Date(d);
+            debutJour.setHours(0, 0, 0, 0);
+            let finJour = new Date(debutJour.getTime() + 86400000); 
 
-        if (evenementsDuJour.length === 0) return 0;
-
-        let timeline = [];
-        evenementsDuJour.forEach(e => {
-            let debutEvt = new Date(e.dateDebut);
-            let finEvt = new Date(e.dateFin);
-
-            let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
-            let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
-
-            timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
-            timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
-        });
-
-        timeline.sort((a, b) => a.m - b.m || a.type - b.type);
-
-        let picMax = 0;
-        let courant = 0;
-        timeline.forEach(step => {
-            courant += (step.type * step.val);
-            if (courant > picMax) picMax = courant;
-        });
-
-        return picMax; // On retourne le nombre ici, fini.
-    }), 
-    backgroundColor: bg
-};
-    backgroundColor: bg
-};      
-                
+            const evenementsDuJour = rawData.filter(i => {
+                let debutEvt = new Date(i.dateDebut);
+                let finEvt = new Date(i.dateFin);
+                return i.asset.toUpperCase().trim() === r.toUpperCase().trim() && 
+                       debutEvt < finJour && 
+                       finEvt > debutJour;
             });
+
+            if (evenementsDuJour.length === 0) return 0;
+
+            let timeline = [];
+            evenementsDuJour.forEach(e => {
+                let debutEvt = new Date(e.dateDebut);
+                let finEvt = new Date(e.dateFin);
+                let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
+                let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
+                timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
+                timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
+            });
+
+            timeline.sort((a, b) => a.m - b.m || a.type - b.type);
+
+            let picMax = 0;
+            let courant = 0;
+            timeline.forEach(step => {
+                courant += (step.type * step.val);
+                if (courant > picMax) picMax = courant;
+            });
+
+            return picMax;
+        }),
+        backgroundColor: bg
+    };
+});
 
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
@@ -144,7 +140,7 @@ for (let i = 0; i < 22; i++) {
         y: {
     stacked: true,
     beginAtZero: true,
-    suggestedMax: 15000,    // Plafond 15000 MW
+    suggestedMax: 10000,    // Plafond 10000 MW
     ticks: {
         stepSize: 1000
     }
