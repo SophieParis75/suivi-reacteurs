@@ -292,7 +292,7 @@ for (let i = 0; i < 22; i++) {
                         const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
                             return somme + (Number(ds.data[dataIndex]) || 0);
                         }, 0);
-                        return `Indisponibilité totale : ${totalJour} MW`;
+                        return `Pic de coupe simultanée : ${totalJour} MW`;
                     }
                 }
             }
