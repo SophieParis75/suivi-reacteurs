@@ -89,17 +89,49 @@ for (let i = 0; i < 22; i++) {
           return {
             label: r,
             data: dates.map(d => {
-            let jourEnCours = new Date(d);
-            // On filtre en vérifiant si le jour 'd' est inclus dans l'intervalle [dateDebut, dateFin]
-          return rawData
-            .filter(i => {
-                let debut = new Date(i.dateDebut);
-                let fin = new Date(i.dateFin);
-                // On vérifie le nom et si le jour est dans l'intervalle
-                return i.asset.toUpperCase().trim() === r.toUpperCase().trim() && 
-                       jourEnCours >= debut && 
-                       jourEnCours <= fin;
-            })
+    let debutJour = new Date(d);
+    debutJour.setHours(0, 0, 0, 0);
+    let finJour = new Date(debutJour.getTime() + 86400000); 
+
+    // 1. Filtrer les événements qui concernent ce réacteur ET ce jour précis
+    const evenementsDuJour = rawData.filter(i => {
+        let debutEvt = new Date(i.dateDebut);
+        let finEvt = new Date(i.dateFin);
+        // On vérifie le nom et le chevauchement avec la journée
+        return i.asset.toUpperCase().trim() === r.toUpperCase().trim() && 
+               debutEvt < finJour && 
+               finEvt > debutJour;
+    });
+
+    if (evenementsDuJour.length === 0) return 0;
+
+    // 2. Calculer le pic simultané à la minute près
+    let timeline = [];
+    evenementsDuJour.forEach(e => {
+        let debutEvt = new Date(e.dateDebut);
+        let finEvt = new Date(e.dateFin);
+
+        // Convertir en minutes depuis le début de la journée (0 à 1440)
+        let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
+        let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
+
+        timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
+        timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
+    });
+
+    // 3. Trier par minute. Si égalité, on traite les fins (-1) avant les débuts (1)
+    timeline.sort((a, b) => a.m - b.m || a.type - b.type);
+
+    // 4. Balayage (Sweep-line) pour trouver le pic maximum
+    let picMax = 0;
+    let courant = 0;
+    timeline.forEach(step => {
+        courant += (step.type * step.val);
+        if (courant > picMax) picMax = courant;
+    });
+
+    return picMax;
+}),
             .reduce((s, i) => s + i.unavailable, 0);
     }),
     backgroundColor: bg
