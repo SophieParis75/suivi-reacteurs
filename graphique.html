@@ -78,66 +78,69 @@ for (let i = 0; i < 22; i++) {
             const reacteurs = Object.keys(configReacteurs);
             
 const datasets = reacteurs.map(r => {
-    // 1. Recherche de la config du réacteur dans VOTRE dictionnaire
     const nomRecherche = r.toUpperCase().trim();
+    // 1. On récupère la config
     const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
     
-    // 2. Application du motif et de la couleur via patternomaly
+    // 2. On génère le style, avec un fallback strict
     let bg = cfg.color;
     if (typeof patternomaly !== 'undefined') {
-        try { 
-            bg = patternomaly.draw(cfg.pattern, cfg.color); 
-        } catch(e) { 
-            console.warn("Motif non appliqué, utilisation de la couleur simple :", e);
+        try {
+            // Si le pattern est 'solid', on utilise la couleur pure
+            if (cfg.pattern === 'solid') {
+                bg = cfg.color;
+            } else {
+                bg = patternomaly.draw(cfg.pattern, cfg.color);
+            }
+        } catch (e) {
+            bg = cfg.color;
         }
     }
 
-    // 3. Construction du dataset
+    // 3. Calcul des données
+    const dataPoints = dates.map(d => {
+        let debutJour = new Date(d);
+        debutJour.setHours(0, 0, 0, 0);
+        let finJour = new Date(debutJour.getTime() + 86400000); 
+
+        const evenementsDuJour = rawData.filter(i => {
+            let debutEvt = new Date(i.dateDebut);
+            let finEvt = new Date(i.dateFin);
+            return i.asset.toUpperCase().trim() === nomRecherche && 
+                   debutEvt < finJour && 
+                   finEvt > debutJour;
+        });
+
+        if (evenementsDuJour.length === 0) return 0;
+
+        let timeline = [];
+        evenementsDuJour.forEach(e => {
+            let debutEvt = new Date(e.dateDebut);
+            let finEvt = new Date(e.dateFin);
+            let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
+            let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
+            timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
+            timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
+        });
+
+        timeline.sort((a, b) => a.m - b.m || a.type - b.type);
+
+        let picMax = 0;
+        let courant = 0;
+        timeline.forEach(step => {
+            courant += (step.type * step.val);
+            if (courant > picMax) picMax = courant;
+        });
+        return picMax;
+    });
+
+    // 4. On retourne l'objet COMPLET ici
     return {
         label: r,
-        backgroundColor: bg, // Vos couleurs et motifs sont bien appliqués ici
-        data: dates.map(d => {
-            let debutJour = new Date(d);
-            debutJour.setHours(0, 0, 0, 0);
-            let finJour = new Date(debutJour.getTime() + 86400000); 
-
-            // Filtrage des événements pour ce réacteur et ce jour
-            const evenementsDuJour = rawData.filter(i => {
-                let debutEvt = new Date(i.dateDebut);
-                let finEvt = new Date(i.dateFin);
-                return i.asset.toUpperCase().trim() === nomRecherche && 
-                       debutEvt < finJour && 
-                       finEvt > debutJour;
-            });
-
-            if (evenementsDuJour.length === 0) return 0;
-
-            // Calcul du pic simultané (Sweep-line)
-            let timeline = [];
-            evenementsDuJour.forEach(e => {
-                let debutEvt = new Date(e.dateDebut);
-                let finEvt = new Date(e.dateFin);
-                let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
-                let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
-
-                timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
-                timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
-            });
-
-            timeline.sort((a, b) => a.m - b.m || a.type - b.type);
-
-            let picMax = 0;
-            let courant = 0;
-            timeline.forEach(step => {
-                courant += (step.type * step.val);
-                if (courant > picMax) picMax = courant;
-            });
-
-            return picMax;
-        })
+        backgroundColor: bg,
+        data: dataPoints
     };
 });
-
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
