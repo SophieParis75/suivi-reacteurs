@@ -102,7 +102,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
-
+			<div id="zoneLienGraphique"></div>
             <h2>🔄 Changements constatés entre les dates T1 et T2</h2>
             <div class="delta-box">
                 <div class="delta-card" style="border-top: 4px solid #dc3545;">
@@ -426,11 +426,9 @@ localStorage.setItem('dateT2', document.getElementById('dateComparaison').value)
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
 	// --- AJOUTS POUR LE GRAPHIQUE ---
-           localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
-            document.getElementById('resultats').innerHTML += 
-                '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
-
-            document.getElementById('resultats').style.display = 'block';
+          localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
+document.getElementById('zoneLienGraphique').innerHTML = 
+    '<a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
 
 
         }
