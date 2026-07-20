@@ -244,7 +244,7 @@
 
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
-                    if (remLower.includes("causes externes liées à l'environnement") || remLower.includes("environmental issues")) {
+                   if (remLower.includes("environ")) {
                         
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
                         const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
@@ -264,7 +264,7 @@
                     }
                 }
             }
-
+localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
@@ -426,7 +426,7 @@
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
 	// --- AJOUTS POUR LE GRAPHIQUE ---
-            localStorage.setItem('graphData', JSON.stringify(listReacteursT2));
+           localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
             document.getElementById('resultats').innerHTML += 
                 '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
 
