@@ -247,8 +247,8 @@
                    if (remLower.includes("environ")) {
                         
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                        const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                        const unavailable = parseInt(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+						const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+						const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
                         const available = installed - unavailable;
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
