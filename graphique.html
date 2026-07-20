@@ -270,51 +270,35 @@ for (let i = 0; i < 22; i++) {
 
                 data: { labels: dates, datasets: datasets },
 
-               options: {
-
-    scales: {
-
-        x: {
-
-            stacked: true // Obligatoire pour empiler les barres
-
+             options: {
+        scales: {
+            x: {
+                stacked: true
+            },
+            y: {
+                stacked: true,
+                beginAtZero: true,
+                suggestedMax: 11000,
+                ticks: {
+                    stepSize: 1000
+                }
+            }
         },
-
-        y: {
-
-    stacked: true,
-
-    beginAtZero: true,
-
-    suggestedMax: 11000,    // Plafond 11000 MW
-
-    ticks: {
-
-        stepSize: 1000
-
-    }
-
-}
-
-    },
-                   plugins: {
-        tooltip: {
-            callbacks: {
-                footer: (tooltipItems) => {
-                    const dataIndex = tooltipItems[0].dataIndex;
-                    const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
-                        return somme + (Number(ds.data[dataIndex]) || 0);
-                    }, 0);
-                    return `Indisponibilité totale : ${totalJour} MW`;
+        plugins: {
+            tooltip: {
+                callbacks: {
+                    footer: (tooltipItems) => {
+                        const dataIndex = tooltipItems[0].dataIndex;
+                        const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
+                            return somme + (Number(ds.data[dataIndex]) || 0);
+                        }, 0);
+                        return `Indisponibilité totale : ${totalJour} MW`;
+                    }
                 }
             }
         }
-    }
-}
-
-}
-
-            });
+    } 
+});
 
         } else {
 
