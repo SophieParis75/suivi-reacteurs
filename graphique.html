@@ -16,13 +16,9 @@
         const dataJson = localStorage.getItem('graphData');
         
         if (dataJson) {
-            // 1. Conversion des dates JSON en objets Date réels dès le chargement
-            const rawData = JSON.parse(dataJson).map(i => ({
-                ...i,
-                dateDebut: new Date(i.dateDebut),
-                dateFin: new Date(i.dateFin)
-            }));
+            const rawData = JSON.parse(dataJson);
             
+            // Dictionnaire en MAJUSCULES pour correspondre au XML
             const configReacteurs = {
                 "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
                 "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
@@ -56,39 +52,23 @@
                 "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
             };
 
-            const t2Stockee = localStorage.getItem('dateT2');
-            const dateRef = t2Stockee ? new Date(t2Stockee) : new Date();
-            const veilleT2 = new Date(dateRef);
-            veilleT2.setDate(dateRef.getDate() - 1);
-            veilleT2.setHours(0, 0, 0, 0);
-
-            // 2. Génération stricte des 21 jours
-            let dates = [];
-            for (let i = 0; i < 21; i++) {
-                let d = new Date(veilleT2);
-                d.setDate(d.getDate() + i);
-                dates.push(d.toISOString().split('T')[0]);
-            }
-
-            // 3. Forcer la liste des réacteurs via le dictionnaire
-            const reacteurs = Object.keys(configReacteurs);
+            const getJour = (d) => new Date(d).toISOString().split('T')[0];
+            const dates = [...new Set(rawData.map(i => getJour(i.dateDebut)))].sort();
+            const reacteurs = [...new Set(rawData.map(i => i.asset))];
             
             const datasets = reacteurs.map(r => {
-                const cfg = configReacteurs[r];
+                // On met le nom trouvé dans le XML en majuscules pour comparer
+                const nomRecherche = r.toUpperCase().trim();
+                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+                
                 let bg = cfg.color;
-                if (typeof pattern !== 'undefined') {
-                    bg = pattern.draw(cfg.pattern, cfg.color);
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
                 }
                 
                 return {
                     label: r,
-                    data: dates.map(d => {
-                        let jour = new Date(d);
-                        // Filtre précis sur le nom de l'asset
-                        return rawData
-                            .filter(i => i.asset.toUpperCase().trim() === r.toUpperCase().trim() && jour >= i.dateDebut && jour <= i.dateFin)
-                            .reduce((s, i) => s + i.unavailable, 0);
-                    }),
+                    data: dates.map(d => rawData.filter(i => i.asset === r && getJour(i.dateDebut) === d).reduce((s, i) => s + i.unavailable, 0)),
                     backgroundColor: bg
                 };
             });
@@ -102,6 +82,8 @@
                     scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
                 }
             });
+        } else {
+            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
         }
     </script>
 </body>
