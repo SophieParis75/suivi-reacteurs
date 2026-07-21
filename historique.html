@@ -151,8 +151,7 @@
                     statusEl.textContent = "Succès : Graphique généré avec succès.";
                 } catch (err) {
                     statusEl.style.color = "#d9534f";
-                    statusEl.textContent = "Erreur détectée :
-" + err.message;
+                    statusEl.textContent = "Erreur détectée :\n" + err.message;
                     console.error(err);
                 }
             };
@@ -160,10 +159,8 @@
         }
 
         function analyserEtTracerCumul(csvText) {
-            const textePropre = csvText.replace(/^﻿/, '');
-            const lignes = textePropre.split(/
-|
-/).filter(l => l.trim() !== '');
+            const textePropre = csvText.replace(/^\uFEFF/, '');
+            const lignes = textePropre.split(/\r\n|\n/).filter(l => l.trim() !== '');
             
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
@@ -226,7 +223,7 @@
 
             let labelsJours = [];
             let displayLabels = [];
-            // Axe X fixé du 1er mai au 1er décembre (similaire au graphique de référence nucleaire.climint.com)
+            // Fixe la période du 1er mai (mois 4) au 1er décembre (mois 11)
             let refDate = new Date(2024, 4, 1); 
             let endDate = new Date(2024, 11, 1); 
 
@@ -277,7 +274,7 @@
                 let estAnneeEnCours = (annee === anneeEnCours);
 
                 datasets.push({
-                    label: estAnneeEnCours ? 'Année en cours' : '2015 - 2025',
+                    label: estAnneeEnCours ? 'Année en cours' : annee,
                     data: dataCumulee,
                     borderColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
                     backgroundColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
@@ -308,10 +305,14 @@
                             title: { display: true, text: 'Date', font: { style: 'italic' } },
                             grid: { color: '#f0f0f0' },
                             ticks: {
-                                maxTicksLimit: 8,
-                                callback: function(val) {
-                                    let lbl = this.getLabelForValue(val);
-                                    if (lbl.startsWith('1/')) return lbl;
+                                autoSkip: false,
+                                maxRotation: 0,
+                                callback: function(val, index) {
+                                    // Affiche uniquement le libellé si c'est le 1er du mois (ex: "1/5", "1/6", etc.)
+                                    let lbl = displayLabels[val];
+                                    if (lbl && (lbl.startsWith('1/') || lbl === '1/12')) {
+                                        return lbl;
+                                    }
                                     return '';
                                 }
                             }
@@ -326,7 +327,26 @@
                     plugins: {
                         tooltip: {
                             mode: 'index',
-                            intersect: false
+                            intersect: false,
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    if (tooltipItems.length > 0) {
+                                        let dataIndex = tooltipItems[0].dataIndex;
+                                        return 'Date : ' + displayLabels[dataIndex];
+                                    }
+                                    return '';
+                                },
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ' : ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y + ' GWh';
+                                    }
+                                    return label;
+                                }
+                            }
                         },
                         legend: {
                             position: 'top',
