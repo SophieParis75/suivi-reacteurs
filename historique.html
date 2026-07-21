@@ -144,7 +144,6 @@
             const file = fileInput.files[0];
             const reader = new FileReader();
 
-            // Utilisation de ISO-8859-1 (latin1) pour s'adapter parfaitement aux exports EDF avec accents
             reader.onload = function(e) {
                 try {
                     analyserEtTracerCumul(e.target.result);
@@ -157,12 +156,6 @@
                 }
             };
             reader.readAsText(file, 'ISO-8859-1');
-        }
-
-        // Fonction pour supprimer les accents et normaliser les textes
-        function normaliserTexte(texte) {
-            if (!texte) return '';
-            return texte.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
 
         function analyserEtTracerCumul(csvText) {
@@ -186,11 +179,11 @@
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
                 
-                // Normalisation globale de toute la ligne (supprime les accents, met en minuscules)
-                const ligneNorm = normaliserTexte(cols.join(' '));
+                const ligneComplete = cols.join(' ').toLowerCase();
 
-                const estNucleaire = ligneNorm.includes('nucleaire');
-                const estEnvironnement = ligneNorm.includes('environ') || ligneNorm.includes('climat') || ligneNorm.includes('temperature') || ligneNorm.includes('chaleur') || ligneNorm.includes('externes');
+                // Recherche simplifiée par fragment insensible aux accents
+                const estNucleaire = ligneComplete.includes('nucl');
+                const estEnvironnement = ligneComplete.includes('environ') || ligneComplete.includes('climat') || ligneComplete.includes('temperature') || ligneComplete.includes('chaleur') || ligneComplete.includes('externes');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let parseDateEDF = (str) => {
@@ -226,7 +219,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'Nucléaire' lié à l'environnement n'a été isolé. Vérifiez que le fichier contient bien des lignes correspondantes.");
+                throw new Error("Aucun événement 'nucl' lié à l'environnement n'a été isolé. Vérifiez le contenu du fichier.");
             }
 
             let labelsJours = [];
