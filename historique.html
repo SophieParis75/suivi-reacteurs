@@ -164,48 +164,51 @@
 
             const separateur = lignes[0].includes(';') ? ';' : ',';
 
-            // Recherche automatique de la ligne d'en-têtes (celle qui contient les mots clés start/debut/unavailable)
             let indexLigneEntetes = -1;
             let idxStart = -1, idxStop = -1, idxUnavail = -1, idxRemarks = -1, idxFuel = -1;
             let enTetesBruts = [];
 
-            for (let i = 0; i < Math.min(lignes.length, 10); i++) {
+            // On cherche la ligne d'en-tête parmi les 20 premières lignes
+            for (let i = 0; i < Math.min(lignes.length, 20); i++) {
                 let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
                 
                 let s = cols.findIndex(h => h.includes('start') || h.includes('debut') || h.includes('début'));
                 let st = cols.findIndex(h => h.includes('stop') || h.includes('end') || h.includes('fin'));
-                let u = cols.findIndex(h => h.includes('unavailable') || h.includes('indisponible') || h.includes('capacity'));
+                let u = cols.findIndex(h => h.includes('unavailable') || h.includes('indisponible') || h.includes('capacity') || h.includes('mw'));
 
-                if (s !== -1 && st !== -1 && u !== -1) {
+                if (s !== -1 && st !== -1) {
                     indexLigneEntetes = i;
                     enTetesBruts = lignes[i].split(separateur);
                     idxStart = s;
                     idxStop = st;
-                    idxUnavail = u;
+                    idxUnavail = u !== -1 ? u : cols.findIndex(h => h.includes('perte') || h.includes('puissance'));
                     idxRemarks = cols.findIndex(h => h.includes('remark') || h.includes('remarque') || h.includes('commentaire') || h.includes('reason'));
-                    idxFuel = cols.findIndex(h => h.includes('fuel') || h.includes('combustible') || h.includes('type'));
+                    idxFuel = cols.findIndex(h => h.includes('fuel') || h.includes('combustible') || h.includes('type') || h.includes('filiere'));
                     break;
                 }
             }
 
-            if (indexLigneEntetes === -1) {
-                throw new Error("Impossible de trouver la ligne d'en-têtes contenant les colonnes 'Start', 'Stop' et 'Unavailable' dans les 10 premières lignes du CSV.");
+            if (indexLigneEntetes === -1 || idxStart === -1 || idxStop === -1) {
+                throw new Error("Impossible de localiser les colonnes de date de début et de fin dans le fichier CSV.");
             }
 
             let evenementsEnv = [];
 
-            // Lecture des données à partir de la ligne située juste après les en-têtes
             for (let i = indexLigneEntetes + 1; i < lignes.length; i++) {
                 const cols = lignes[i].split(separateur).map(c => c.replace(/^"|"$/g, '').trim());
-                if (cols.length <= Math.max(idxStart, idxStop, idxUnavail)) continue;
+                if (cols.length <= Math.max(idxStart, idxStop)) continue;
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const unavailMW = parseFloat(cols[idxUnavail].replace(/\s/g, '').replace(',', '.')) || 0;
+                const unavailMW = idxUnavail !== -1 ? (parseFloat(cols[idxUnavail].replace(/\s/g, '').replace(',', '.')) || 0) : 0;
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
 
-                if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
+                // Filtrage souple sur le nucléaire et l'environnement
+                const estNucleaire = fuel.includes('nuclear') || fuel.includes('nucleaire') || fuel === '';
+                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('temperature') || remarks.includes('chaleur');
+
+                if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let dDebut = new Date(startStr);
                     let dFin = new Date(stopStr);
                     if (!isNaN(dDebut) && !isNaN(dFin)) {
@@ -219,7 +222,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'environnemental' nucléaire n'a été trouvé (vérifiez que le CSV contient bien des lignes avec 'environ' dans les remarques).");
+                throw new Error("Aucun événement environnemental nucléaire trouvé après filtrage. Vérifiez les critères.");
             }
 
             let labelsJours = [];
