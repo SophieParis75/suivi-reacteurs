@@ -231,9 +231,10 @@
             const xmlDoc = parser.parseFromString(strXML, "text/xml");
             const items = xmlDoc.getElementsByTagName("item");
 
-            let mapEvenementsUniques = new Map();
+            let tousLesEvenementsBruts = [];
             let tousLesReacteursUniques = new Set();
 
+            // 1. On extrait TOUTES les versions de messages valides
             for (let i = 0; i < items.length; i++) {
                 const descNode = items[i].getElementsByTagName("description")[0];
                 const linkNode = items[i].getElementsByTagName("link")[0];
@@ -242,7 +243,6 @@
                 const texteHTML = descNode.textContent || descNode.innerHTML;
                 const linkText = linkNode ? (linkNode.textContent || linkNode.innerHTML) : '';
 
-                // Extraction de l'identifiant unique (mrid)
                 let mridMatch = linkText.match(/mrid=([^&]+)/);
                 let mrid = mridMatch ? mridMatch[1] : `item_${i}`;
 
@@ -262,26 +262,69 @@
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
 
-                        if(eventStartStr && eventStopStr) {
-                            const pubDate = pubDateStr ? new Date(pubDateStr) : new Date(0);
-                            
-                            const eventObj = {
+                        if(eventStartStr && eventStopStr && pubDateStr) {
+                            tousLesEvenementsBruts.push({
                                 mrid, asset, installed, unavailable, available, 
                                 dateDebut: new Date(eventStartStr), 
                                 dateFin: new Date(eventStopStr),
-                                pubDate
-                            };
-
-                            // Conserve uniquement la version la plus récente du même mrid
-                            if (!mapEvenementsUniques.has(mrid) || mapEvenementsUniques.get(mrid).pubDate < pubDate) {
-                                mapEvenementsUniques.set(mrid, eventObj);
-                            }
+                                pubDate: new Date(pubDateStr)
+                            });
                             tousLesReacteursUniques.add(asset);
                         }
                     }
                 }
             }
 
+            // Fonction pour obtenir le dernier message publié d'un mrid avant une date limite (T1 ou T2)
+            function getEvenementActifAuJalon(mrid, jalon) {
+                const versions = tousLesEvenementsBruts.filter(e => e.mrid === mrid && e.pubDate <= jalon);
+                if (versions.length === 0) return null;
+                // On trie par date de publication croissante et on prend le plus récent
+                versions.sort((a, b) => a.pubDate - b.pubDate);
+                return versions[versions.length - 1];
+            }
+
+            // Récupérer tous les mrid uniques présents dans le flux
+            const tousLesMridUniques = [...new Set(tousLesEvenementsBruts.map(e => e.mrid))];
+
+            // Listes des événements valides exactement à T1 et T2 selon leur dernière publication respective
+            let evenementsActifsT1 = [];
+            let evenementsActifsT2 = [];
+
+            tousLesMridUniques.forEach(mrid => {
+                const evT1 = getEvenementActifAuJalon(mrid, datePivot);
+                if (evT1 && datePivot >= evT1.dateDebut && datePivot <= evT1.dateFin) {
+                    // Pour éviter les doublons par réacteur si plusieurs mrid touchent le même réacteur en même temps
+                    evenementsActifsT1.push(evT1);
+                }
+
+                const evT2 = getEvenementActifAuJalon(mrid, dateT2);
+                if (evT2 && dateT2 >= evT2.dateDebut && dateT2 <= evT2.dateFin) {
+                    evenementsActifsT2.push(evT2);
+                }
+            });
+
+            // Pour la suite du script, on utilise evenementsActifsT2 comme référence principale "evenementsFiltres" pour l'affichage à T2
+            let evenementsFiltres = evenementsActifsT2;
+
+            localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
+            let pannesA_T1 = {};
+            let pannesA_T2 = {};
+            tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
+
+            let sommeMaintenant = 0;
+            let totalT2 = 0;
+            let listReacteursT2 = evenementsActifsT2;
+
+            evenementsActifsT1.forEach(ev => {
+                pannesA_T1[ev.asset] += ev.unavailable;
+                sommeMaintenant += ev.unavailable;
+            });
+
+            evenementsActifsT2.forEach(ev => {
+                pannesA_T2[ev.asset] += ev.unavailable;
+                totalT2 += ev.unavailable;
+            });
             // Transformation de la Map en tableau unique de travail
             let evenementsFiltres = Array.from(mapEvenementsUniques.values());
 
