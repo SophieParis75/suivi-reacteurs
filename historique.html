@@ -92,9 +92,13 @@
         }
         .status {
             margin-top: 15px;
-            font-style: italic;
-            color: #666;
-            white-space: pre-line;
+            font-family: monospace;
+            background: #f1f3f5;
+            padding: 10px;
+            border-radius: 4px;
+            color: #d9534f;
+            white-space: pre-wrap;
+            font-size: 13px;
         }
     </style>
 </head>
@@ -114,7 +118,7 @@
                 <input type="file" id="fichierCsv" accept=".csv">
                 <button onclick="chargerCsvHistorique()">Générer le graphique comparatif</button>
             </div>
-            <div id="status" class="status">Veuillez charger le fichier CSV pour afficher l'historique cumulé.</div>
+            <div id="status" class="status">En attente du chargement du fichier CSV...</div>
         </div>
 
         <div class="chart-container">
@@ -134,16 +138,20 @@
                 return;
             }
 
-            statusEl.textContent = "Traitement et cumul des pertes environnementales...";
+            statusEl.style.color = "#333";
+            statusEl.textContent = "Lecture et analyse du fichier en cours...";
+            
             const file = fileInput.files[0];
             const reader = new FileReader();
 
             reader.onload = function(e) {
                 try {
                     analyserEtTracerCumul(e.target.result);
-                    statusEl.textContent = "Graphique généré avec succès.";
+                    statusEl.style.color = "#28a745";
+                    statusEl.textContent = "Succès : Graphique généré avec succès.";
                 } catch (err) {
-                    statusEl.textContent = "⚠️ Erreur : " + err.message;
+                    statusEl.style.color = "#d9534f";
+                    statusEl.textContent = "Erreur détectée :\n" + err.message;
                     console.error(err);
                 }
             };
@@ -152,7 +160,7 @@
 
         function analyserEtTracerCumul(csvText) {
             const lignes = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
-            if (lignes.length < 2) throw new Error("Le fichier CSV est vide ou invalide.");
+            if (lignes.length < 2) throw new Error("Le fichier CSV est vide ou ne contient qu'une seule ligne.");
 
             const separateur = lignes[0].includes(';') ? ';' : ',';
             const enTetesBruts = lignes[0].split(separateur);
@@ -173,12 +181,13 @@
             const idxFuel = trouverIndex(['fuel', 'combustible', 'type']);
 
             if (idxStart === -1 || idxStop === -1 || idxUnavail === -1) {
-                throw new Error(`Colonnes introuvables.\nEn-têtes détectés dans votre fichier :\n[ ${enTetesBruts.join(' | ')} ]`);
+                throw new Error(`Colonnes introuvables.\nEn-têtes détectés :\n-> ${enTetesBruts.join(' | ')}`);
             }
 
             let evenementsEnv = [];
 
             for (let i = 1; i < lignes.length; i++) {
+                // Découpage robuste gérant les guillemets du CSV
                 const cols = lignes[i].split(separateur).map(c => c.replace(/^"|"$/g, '').trim());
                 if (cols.length <= Math.max(idxStart, idxStop, idxUnavail)) continue;
 
@@ -188,6 +197,7 @@
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
 
+                // Filtrage environnemental & nucléaire
                 if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
                     let dDebut = new Date(startStr);
                     let dFin = new Date(stopStr);
@@ -202,7 +212,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'environnemental' nucléaire n'a été trouvé (vérifiez que le CSV contient bien des lignes avec 'environ' dans les remarques).");
+                throw new Error(`Aucun événement environnemental nucléaire trouvé.\nVérifiez que le fichier contient bien des lignes avec "environ" dans la colonne des remarques (colonne détectée idxRemarks: ${idxRemarks}).`);
             }
 
             let labelsJours = [];
