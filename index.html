@@ -235,7 +235,7 @@
             reader.readAsText(file);
         }
 
-        function analyserDonneesBrutes(strXML) {
+function analyserDonneesBrutes(strXML) {
             const datePivot = new Date(document.getElementById('datePivot').value);
             const dateT2 = new Date(document.getElementById('dateComparaison').value);
             
@@ -256,48 +256,70 @@
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
 
+                // Récupération de la pubDate native du flux RSS (<pubDate>)
+                const pubDateNode = items[i].getElementsByTagName("pubDate")[0];
+                const pubDateStr = pubDateNode ? pubDateNode.textContent : '';
+
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
-                   if (remLower.includes("environ")) {
-                        
+                    if (remLower.includes("environ")) {
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-						const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-						const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+                        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+                        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
                         const available = installed - unavailable;
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
 
-                        if(eventStartStr && eventStopStr) {
+                        if(eventStartStr && eventStopStr && pubDateStr) {
                             evenementsFiltres.push({
                                 asset, installed, unavailable, available, 
                                 dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr)
+                                dateFin: new Date(eventStopStr),
+                                pubDate: new Date(pubDateStr)
                             });
                             tousLesReacteursUniques.add(asset);
                         }
                     }
                 }
             }
-localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
+
+            localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
 
-let sommeMaintenant = 0;
+            let sommeMaintenant = 0;
             let totalT2 = 0;
             let listReacteursT1 = [];
             let listReacteursT2 = [];
 
-            evenementsFiltres.forEach(ev => {
-                if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
-                    pannesA_T1[ev.asset] += ev.unavailable;
-                    sommeMaintenant += ev.unavailable;
-                    listReacteursT1.push(ev);
+            // --- FILTRAGE HISTORIQUE T1 (Dernier message publié avant T1) ---
+            tousLesReacteursUniques.forEach(reacteur => {
+                const versionsT1 = evenementsFiltres.filter(e => e.asset === reacteur && e.pubDate <= datePivot);
+                if (versionsT1.length > 0) {
+                    versionsT1.sort((a, b) => a.pubDate - b.pubDate);
+                    const dernierEvT1 = versionsT1[versionsT1.length - 1];
+
+                    if (datePivot >= dernierEvT1.dateDebut && datePivot <= dernierEvT1.dateFin) {
+                        pannesA_T1[reacteur] += dernierEvT1.unavailable;
+                        sommeMaintenant += dernierEvT1.unavailable;
+                        listReacteursT1.push(dernierEvT1);
+                    }
                 }
-                if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
-                    pannesA_T2[ev.asset] += ev.unavailable;
-                    totalT2 += ev.unavailable;
-                    listReacteursT2.push(ev);
+            });
+
+            // --- FILTRAGE HISTORIQUE T2 (Dernier message publié avant T2) ---
+            tousLesReacteursUniques.forEach(reacteur => {
+                const versionsT2 = evenementsFiltres.filter(e => e.asset === reacteur && e.pubDate <= dateT2);
+                if (versionsT2.length > 0) {
+                    versionsT2.sort((a, b) => a.pubDate - b.pubDate);
+                    const dernierEvT2 = versionsT2[versionsT2.length - 1];
+
+                    if (dateT2 >= dernierEvT2.dateDebut && dateT2 <= dernierEvT2.dateFin) {
+                        pannesA_T2[reacteur] += dernierEvT2.unavailable;
+                        totalT2 += dernierEvT2.unavailable;
+                        listReacteursT2.push(dernierEvT2);
+                    }
                 }
             });
 
@@ -314,7 +336,144 @@ let sommeMaintenant = 0;
                 htmlIndisponiblesT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
             });
             document.getElementById('tableIndisponiblesT2').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT2 || '<tr><td colspan="4">Aucun réacteur indisponible à T2.</td></tr>';
-			
+
+            let htmlChangements = '';
+            let countPlus = 0;
+            let countMoins = 0;
+
+            tousLesReacteursUniques.forEach(reacteur => {
+                const capT1 = pannesA_T1[reacteur];
+                const capT2 = pannesA_T2[reacteur];
+                const diff = capT2 - capT1;
+
+                if (diff > 0) {
+                    countPlus++;
+                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Restriction accrue / Nouvel arrêt</td></tr>`;
+                } else if (diff < 0) {
+                    countMoins++;
+                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
+                }
+            });
+
+            document.getElementById('countPlus').innerText = countPlus;
+            document.getElementById('countMoins').innerText = countMoins;
+            document.getElementById('tableChangements').getElementsByTagName('tbody')[0].innerHTML = htmlChangements || `<tr><td colspan="5" class="stable">Aucun changement constaté sur le parc entre ces deux jalons. Indisponibilité stable.</td></tr>`;
+
+            const deAuj = new Date(dateT2); deAuj.setHours(0,0,0,0);
+            const aAuj = new Date(dateT2); aAuj.setHours(23,59,59,999);
+            const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
+            const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
+
+            function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
+                let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
+                evenementsFiltres.forEach(ev => {
+                    if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
+                    if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
+                });
+
+                let chronologie = Array.from(pointsDeTemps).sort((a, b) => a - b);
+                let segments = [];
+                let maxPuissance = 0;
+                let topInstantMilli = null;
+
+                for (let i = 0; i < chronologie.length - 1; i++) {
+                    let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
+                    let puissanceSegment = 0;
+
+                    evenementsFiltres.forEach(ev => {
+                        if (instantMilieu >= ev.dateDebut && instantMilieu <= ev.dateFin) puissanceSegment += ev.unavailable;
+                    });
+
+                    if (puissanceSegment > maxPuissance) {
+                        maxPuissance = puissanceSegment;
+                        topInstantMilli = instantMilieu.getTime();
+                    }
+                    segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
+                }
+
+                let creneauxPic = [];
+                if (maxPuissance > 0) {
+                    segments.forEach(seg => {
+                        if (seg.h === maxPuissance) creneauxPic.push(`${formaterHeure(seg.start)}-${formaterHeure(seg.end)}`);
+                    });
+                }
+
+                let reacteursDuPic = [];
+                if (topInstantMilli) {
+                    let cible = new Date(topInstantMilli);
+                    evenementsFiltres.forEach(ev => {
+                        if (cible >= ev.dateDebut && cible <= ev.dateFin) reacteursDuPic.push(ev);
+                    });
+                }
+
+                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', list: reacteursDuPic };
+            }
+
+            const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
+            const resultatDemain = analyserPicJourEtExtraireReacteurs(deDemain, aDemain);
+
+            document.getElementById('tableResume').getElementsByTagName('tbody')[0].innerHTML = `
+                <tr>
+                    <td class="highlight">${sommeMaintenant} MW</td>
+                    <td class="highlight">${totalT2} MW</td>
+                    <td class="highlight">${resultatAuj.max} MW</td>
+                    <td>${resultatAuj.intervals}</td>
+                    <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
+                    <td class="highlight">${resultatDemain.max} MW</td>
+                    <td>${resultatDemain.intervals}</td>
+                    <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
+                </tr>
+            `;
+
+            let htmlAuditAuj = '';
+            resultatAuj.list.forEach(ev => {
+                htmlAuditAuj += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            });
+            document.getElementById('tableAuditAuj').getElementsByTagName('tbody')[0].innerHTML = htmlAuditAuj || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
+
+            let htmlAuditDemain = '';
+            resultatDemain.list.forEach(ev => {
+                htmlAuditDemain += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            });
+            document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
+
+            // --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
+            let phrases = [];
+            tousLesReacteursUniques.forEach(reacteur => {
+                const capT1 = pannesA_T1[reacteur];
+                const capT2 = pannesA_T2[reacteur];
+                const diff = capT2 - capT1;
+
+                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
+                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
+
+                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
+                    let phrase = `<strong>${reacteur}</strong> : `;
+                    
+                    if (capT1 === 0 && capT2 > 0) phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
+                    else if (capT1 > 0 && capT2 === 0) phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
+                    else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
+
+                    if (evT1 && evT2) {
+                        const deltaMs = evT2.dateFin - evT1.dateFin;
+                        if (Math.abs(deltaMs) >= 3600000) {
+                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
+                            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
+                        }
+                    }
+                    phrases.push(phrase);
+                }
+            });
+            document.getElementById('changesBody').innerHTML = phrases.length > 0 
+                ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
+                : 'Aucun changement significatif de capacité ou de durée constaté.';
+
+            localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
+            document.getElementById('resultats').innerHTML += 
+                '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
+
+            document.getElementById('resultats').style.display = 'block';
+        }
             let htmlChangements = '';
             let countPlus = 0;
             let countMoins = 0;
