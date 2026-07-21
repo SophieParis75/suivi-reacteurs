@@ -134,18 +134,6 @@
 	    <div id="changesBody"></div>
 	</div>
 
-            <h2>📌 Liste des réacteurs indisponibles à T1</h2>
-            <table id="tableIndisponiblesT1">
-                <thead>
-                    <tr>
-                        <th>Réacteur (Unit)</th>
-                        <th>Indisponibilité (MW)</th>
-                        <th>From (Date / Heure)</th>
-                        <th>To (Date / Heure)</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
 
             <h2>📌 Liste des réacteurs indisponibles à T2</h2>
             <table id="tableIndisponiblesT2">
@@ -278,21 +266,19 @@
                     }
                 }
             }
-            localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
+localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
 
             let sommeMaintenant = 0;
             let totalT2 = 0;
-            let listReacteursT1 = [];
             let listReacteursT2 = [];
 
             evenementsFiltres.forEach(ev => {
                 if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
                     pannesA_T1[ev.asset] += ev.unavailable;
                     sommeMaintenant += ev.unavailable;
-                    listReacteursT1.push(ev);
                 }
                 if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
                     pannesA_T2[ev.asset] += ev.unavailable;
@@ -301,14 +287,7 @@
                 }
             });
 
-            // Remplissage de la table des indisponibilités à T1
-            let htmlIndisponiblesT1 = '';
-            listReacteursT1.forEach(ev => {
-                htmlIndisponiblesT1 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
-            });
-            document.getElementById('tableIndisponiblesT1').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT1 || '<tr><td colspan="4">Aucun réacteur indisponible à T1.</td></tr>';
-
-            // Remplissage de la table des indisponibilités à T2
+            // Remplissage de la nouvelle table des indisponibilités à T2
             let htmlIndisponiblesT2 = '';
             listReacteursT2.forEach(ev => {
                 htmlIndisponiblesT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
@@ -415,7 +394,7 @@
             });
             document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
 
-            // --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
+// --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
             let phrases = [];
             tousLesReacteursUniques.forEach(reacteur => {
                 const capT1 = pannesA_T1[reacteur];
@@ -448,13 +427,14 @@
             document.getElementById('changesBody').innerHTML = phrases.length > 0 
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
-
-            // --- AJOUTS POUR LE GRAPHIQUE ---
-            localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
+	// --- AJOUTS POUR LE GRAPHIQUE ---
+           localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
             document.getElementById('resultats').innerHTML += 
                 '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
 
             document.getElementById('resultats').style.display = 'block';
+
+
         }
     </script>
 </body>
