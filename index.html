@@ -129,12 +129,12 @@
                 </thead>
                 <tbody></tbody>
             </table>
-    <h2>📝 Synthèse des changements</h2>
+	    <h2>📝 Synthèse des changements</h2>
 	<div class="news-box" style="border-top: 4px solid #0056b3;">
 	    <div id="changesBody"></div>
 	</div>
 
-<h2>📌 Liste des réacteurs indisponibles à T1</h2>
+            <h2>📌 Liste des réacteurs indisponibles à T1</h2>
             <table id="tableIndisponiblesT1">
                 <thead>
                     <tr>
@@ -146,7 +146,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
-	
+
             <h2>📌 Liste des réacteurs indisponibles à T2</h2>
             <table id="tableIndisponiblesT2">
                 <thead>
@@ -243,76 +243,41 @@
             const xmlDoc = parser.parseFromString(strXML, "text/xml");
             const items = xmlDoc.getElementsByTagName("item");
 
-            let tousLesEvenementsBruts = [];
+            let evenementsFiltres = [];
             let tousLesReacteursUniques = new Set();
 
             for (let i = 0; i < items.length; i++) {
                 const descNode = items[i].getElementsByTagName("description")[0];
-                const linkNode = items[i].getElementsByTagName("link")[0];
                 if (!descNode) continue;
                 
                 const texteHTML = descNode.textContent || descNode.innerHTML;
-                const linkText = linkNode ? (linkNode.textContent || linkNode.innerHTML) : '';
-
-                let mridMatch = linkText.match(/mrid=([^&]+)/);
-                let mrid = mridMatch ? mridMatch[1] : `item_${i}`;
 
                 const eventStatus = extraireChampStrict(texteHTML, "Event status");
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
-                const pubDateStr = extraireChampStrict(texteHTML, "Publication date / time");
 
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
-                    if (remLower.includes("environ")) {
+                   if (remLower.includes("environ")) {
                         
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+						const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+						const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
                         const available = installed - unavailable;
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
 
-                        if(eventStartStr && eventStopStr && pubDateStr) {
-                            tousLesEvenementsBruts.push({
-                                mrid, asset, installed, unavailable, available, 
+                        if(eventStartStr && eventStopStr) {
+                            evenementsFiltres.push({
+                                asset, installed, unavailable, available, 
                                 dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr),
-                                pubDate: new Date(pubDateStr)
+                                dateFin: new Date(eventStopStr)
                             });
                             tousLesReacteursUniques.add(asset);
                         }
                     }
                 }
             }
-
-            // Fonction pour récupérer le dernier message publié avant un jalon temporel (T1 ou T2)
-            function getEvenementActifAuJalon(mrid, jalon) {
-                const versions = tousLesEvenementsBruts.filter(e => e.mrid === mrid && e.pubDate <= jalon);
-                if (versions.length === 0) return null;
-                versions.sort((a, b) => a.pubDate - b.pubDate);
-                return versions[versions.length - 1];
-            }
-
-            const tousLesMridUniques = [...new Set(tousLesEvenementsBruts.map(e => e.mrid))];
-
-            let evenementsActifsT1 = [];
-            let evenementsActifsT2 = [];
-
-            tousLesMridUniques.forEach(mrid => {
-                const evT1 = getEvenementActifAuJalon(mrid, datePivot);
-                if (evT1 && datePivot >= evT1.dateDebut && datePivot <= evT1.dateFin) {
-                    evenementsActifsT1.push(evT1);
-                }
-
-                const evT2 = getEvenementActifAuJalon(mrid, dateT2);
-                if (evT2 && dateT2 >= evT2.dateDebut && dateT2 <= evT2.dateFin) {
-                    evenementsActifsT2.push(evT2);
-                }
-            });
-
-            let evenementsFiltres = evenementsActifsT2;
-
             localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
             let pannesA_T1 = {};
             let pannesA_T2 = {};
@@ -320,33 +285,36 @@
 
             let sommeMaintenant = 0;
             let totalT2 = 0;
-            let listReacteursT2 = evenementsActifsT2;
+            let listReacteursT1 = [];
+            let listReacteursT2 = [];
 
-            evenementsActifsT1.forEach(ev => {
-                pannesA_T1[ev.asset] += ev.unavailable;
-                sommeMaintenant += ev.unavailable;
+            evenementsFiltres.forEach(ev => {
+                if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
+                    pannesA_T1[ev.asset] += ev.unavailable;
+                    sommeMaintenant += ev.unavailable;
+                    listReacteursT1.push(ev);
+                }
+                if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
+                    pannesA_T2[ev.asset] += ev.unavailable;
+                    totalT2 += ev.unavailable;
+                    listReacteursT2.push(ev);
+                }
             });
 
-            evenementsActifsT2.forEach(ev => {
-                pannesA_T2[ev.asset] += ev.unavailable;
-                totalT2 += ev.unavailable;
+            // Remplissage de la table des indisponibilités à T1
+            let htmlIndisponiblesT1 = '';
+            listReacteursT1.forEach(ev => {
+                htmlIndisponiblesT1 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
             });
+            document.getElementById('tableIndisponiblesT1').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT1 || '<tr><td colspan="4">Aucun réacteur indisponible à T1.</td></tr>';
 
-            // Remplissage de la nouvelle table des indisponibilités à T2
+            // Remplissage de la table des indisponibilités à T2
             let htmlIndisponiblesT2 = '';
             listReacteursT2.forEach(ev => {
                 htmlIndisponiblesT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
             });
             document.getElementById('tableIndisponiblesT2').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT2 || '<tr><td colspan="4">Aucun réacteur indisponible à T2.</td></tr>';
-			
-		    // Remplissage de la nouvelle table des indisponibilités à T1
-            let htmlIndisponiblesT1 = '';
-            evenementsActifsT1.forEach(ev => {
-                htmlIndisponiblesT1 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
-            });
-            document.getElementById('tableIndisponiblesT1').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT1 || '<tr><td colspan="4">Aucun réacteur indisponible à T1.</td></tr>';
-            // Fin du remplsisage de la nouvelle table des indisponibilités à T1
-			
+
             let htmlChangements = '';
             let countPlus = 0;
             let countMoins = 0;
@@ -450,25 +418,15 @@
             // --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
             let phrases = [];
             tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur] || 0;
-                const capT2 = pannesA_T2[reacteur] || 0;
+                const capT1 = pannesA_T1[reacteur];
+                const capT2 = pannesA_T2[reacteur];
                 const diff = capT2 - capT1;
 
-                // Comparaison des versions actives exactes à T1 et T2
-                const evT1 = evenementsActifsT1.find(e => e.asset === reacteur);
-                const evT2 = evenementsActifsT2.find(e => e.asset === reacteur);
+                // Chercher les événements pour comparer les dates de fin
+                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
+                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
 
-                let changementDuree = false;
-                let deltaMs = 0;
-
-                if (evT1 && evT2) {
-                    deltaMs = evT2.dateFin.getTime() - evT1.dateFin.getTime();
-                    if (Math.abs(deltaMs) >= 3600000) {
-                        changementDuree = true;
-                    }
-                }
-
-                if (diff !== 0 || changementDuree || (capT1 === 0 && capT2 > 0) || (capT1 > 0 && capT2 === 0)) {
+                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
                     let phrase = `<strong>${reacteur}</strong> : `;
                     
                     // Analyse capacité
@@ -477,15 +435,16 @@
                     else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
 
                     // Analyse durée
-                    if (changementDuree) {
-                        const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
-                        phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
+                    if (evT1 && evT2) {
+                        const deltaMs = evT2.dateFin - evT1.dateFin;
+                        if (Math.abs(deltaMs) >= 3600000) {
+                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
+                            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
+                        }
                     }
-                    
                     phrases.push(phrase);
                 }
             });
-
             document.getElementById('changesBody').innerHTML = phrases.length > 0 
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
