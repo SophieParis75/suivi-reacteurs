@@ -16,9 +16,10 @@
             margin: 20px auto;
         }
         h2 {
-            color: #0056b3;
-            border-bottom: 2px solid #0056b3;
-            padding-bottom: 5px;
+            color: #222;
+            font-size: 1.2rem;
+            text-align: center;
+            margin-bottom: 20px;
         }
         .config-box {
             background: white;
@@ -26,7 +27,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             margin-bottom: 25px;
-            border-left: 5px solid #0056b3;
+            border-left: 5px solid #666;
         }
         .step {
             margin-bottom: 15px;
@@ -65,7 +66,7 @@
         }
         button {
             padding: 10px 20px;
-            background: #0056b3;
+            background: #444;
             color: white;
             border: none;
             border-radius: 4px;
@@ -75,7 +76,7 @@
             margin-top: 10px;
         }
         button:hover {
-            background: #003d7a;
+            background: #222;
         }
         .container {
             background: #fff;
@@ -85,7 +86,7 @@
         }
         .chart-container {
             position: relative;
-            height: 550px;
+            height: 600px;
             width: 100%;
             margin-top: 20px;
         }
@@ -99,9 +100,9 @@
 <body>
 
     <div class="container">
-        <h2>Indisponibilités climatiques : historique des pertes cumulées (GWh)</h2>
+        <h2>Indisponibilités climatiques : historique des pertes cumulées</h2>
 
-        <!-- Section de chargement du fichier CSV complet d'EDF -->
+        <!-- Section de chargement du fichier CSV d'EDF -->
         <div class="config-box">
             <div class="step">
                 <label>1. Télécharger le fichier CSV complet d'EDF :</label>
@@ -174,7 +175,7 @@
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
 
-                // Filtrage strict demandé : environnemental (climatique) et nucléaire
+                // Filtrage strict : nucléaire + environnemental (climatique)
                 if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
                     evenementsEnv.push({
                         dateDebut: new Date(startStr),
@@ -184,76 +185,99 @@
                 }
             }
 
-            // Définition de la période de référence de l'axe X (ex: du 1er mai au 15 novembre, format MM-DD)
-            // On génère la liste des jours de référence (ex: 1er mai de l'année type jusqu'au 15 nov)
+            // Grille de l'axe X : du 1er mai (1/5) au 30 novembre (30/11) alignée sur le format de référence
             let labelsJours = [];
-            let refDate = new Date(2024, 4, 1); // 1er mai (mois 4 = mai)
-            let endDate = new Date(2024, 10, 15); // 15 novembre
-
-            let mapJourIndex = {}; // "MM-DD" -> index dans le tableau
+            let mapJourIndex = {}; 
             let idxCounter = 0;
+
+            // On utilise une année bissextile de référence fictive (ex: 2024) pour couvrir tous les jours du 01/05 au 30/11
+            let refDate = new Date(2024, 4, 1);   // 1er mai
+            let endDate = new Date(2024, 10, 30); // 30 novembre
+
             while (refDate <= endDate) {
-                let m = String(refDate.getMonth() + 1).padStart(2, '0');
-                let d = String(refDate.getDate()).padStart(2, '0');
-                let mmdd = `${m}-${d}`;
-                labelsJours.push(mmdd);
-                mapJourIndex[mmdd] = idxCounter++;
+                let m = refDate.getMonth() + 1;
+                let d = refDate.getDate();
+                let key = `${d}/${m}`; // Format "1/5", "2/5"... identique au modèle
+                labelsJours.push(key);
+                mapJourIndex[`${refDate.getMonth()}-${refDate.getDate()}`] = idxCounter++;
                 refDate.setDate(refDate.getDate() + 1);
             }
 
-            // Regrouper les événements par année civile
-            let dataParAnnee = {}; // Année -> Tableau journalier de pertes en GWh
-
-            // Identifier l'année en cours
+            let dataParAnnee = {};
             const anneeEnCours = new Date().getFullYear().toString();
 
-            // Remplir les pertes journalières (converties en GWh : MW * heures / 1000)
+            // Calcul journalier des pertes en GWh (MW * 24h / 1000)
             evenementsEnv.forEach(ev => {
                 let curr = new Date(ev.dateDebut);
                 while (curr <= ev.dateFin) {
                     let y = curr.getFullYear().toString();
-                    let m = String(curr.getMonth() + 1).padStart(2, '0');
-                    let d = String(curr.getDate()).padStart(2, '0');
-                    let mmdd = `${m}-${d}`;
+                    let mKey = curr.getMonth();
+                    let dKey = curr.getDate();
+                    let mapKey = `${mKey}-${dKey}`;
 
-                    if (mapJourIndex[mmdd] !== undefined) {
+                    if (mapJourIndex[mapKey] !== undefined) {
                         if (!dataParAnnee[y]) {
                             dataParAnnee[y] = new Array(labelsJours.length).fill(0);
                         }
-                        // Estimation de l'énergie perdue sur la journée en GWh (MW * 24h / 1000) ou proportionnelle
-                        let energieJourGWh = (ev.unavailableMW * 24) / 1000; 
-                        dataParAnnee[y][mapJourIndex[mmdd]] += energieJourGWh;
+                        let energieJourGWh = (ev.unavailableMW * 24) / 1000;
+                        dataParAnnee[y][mapJourIndex[mapKey]] += energieJourGWh;
                     }
                     curr.setDate(curr.getDate() + 1);
                 }
             });
 
-            // Transformer en courbes cumulées (somme croissante au fil des jours)
             let datasets = [];
             let anneesDisponibles = Object.keys(dataParAnnee).sort();
+
+            // Trouver l'intervalle des années passées (ex: "2015 - 2024") pour la légende grise
+            let anneesPassees = anneesDisponibles.filter(a => a !== anneeEnCours);
+            let labelAnneePasseeTexte = anneesPassees.length > 0 ? `${anneesPassees[0]} - ${anneesPassees[anneesPassees.length - 1]}` : "Années précédentes";
+
+            let premiereAnneePasseeAjoutee = false;
 
             anneesDisponibles.forEach(annee => {
                 let cumul = 0;
                 let dataCumulee = dataParAnnee[annee].map(val => {
                     cumul += val;
-                    return Number(cumul.toFixed(2));
+                    return Number(cumul.toFixed(1));
                 });
 
                 let estAnneeEnCours = (annee === anneeEnCours);
 
-                datasets.push({
-                    label: estAnneeEnCours ? 'Année en cours (' + annee + ')' : annee,
-                    data: dataCumulee,
-                    borderColor: estAnneeEnCours ? '#dc3545' : '#cccccc',
-                    backgroundColor: estAnneeEnCours ? '#dc3545' : '#cccccc',
-                    borderWidth: estAnneeEnCours ? 3 : 1.5,
-                    pointRadius: 0,
-                    tension: 0.1,
-                    order: estAnneeEnCours ? 1 : 2 // Année en cours au premier plan (rouge)
-                });
+                if (estAnneeEnCours) {
+                    // Ligne rouge prononcée pour l'année en cours
+                    datasets.push({
+                        label: 'Année en cours',
+                        data: dataCumulee,
+                        borderColor: '#ff0000',
+                        backgroundColor: '#ff0000',
+                        borderWidth: 3,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        order: 1
+                    });
+                } else {
+                    // Lignes grises pour les années passées
+                    let showInLegend = !premiereAnneePasseeAjoutee;
+                    if (showInLegend) premiereAnneePasseeAjoutee = true;
+
+                    datasets.push({
+                        label: labelAnneePasseeTexte,
+                        data: dataCumulee,
+                        borderColor: '#cccccc',
+                        backgroundColor: '#cccccc',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.1,
+                        order: 2,
+                        hidden: false,
+                        // N'affiche qu'une seule entrée globale "2015-2025" dans la légende Chart.js
+                        legendGroup: 'passees',
+                        legendHandler: showInLegend ? function(legendItem, data) { return true; } : function() { return false; }
+                    });
+                }
             });
 
-            // Affichage du graphique Chart.js
             const ctx = document.getElementById('envChart').getContext('2d');
             if (myChartInstance) {
                 myChartInstance.destroy();
@@ -270,22 +294,47 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            title: { display: true, text: 'Date (Mois-Jour)' },
-                            grid: { color: '#eee' }
+                            title: { display: true, text: 'Date', font: { style: 'italic' } },
+                            grid: { color: '#e5e5e5' },
+                            ticks: {
+                                // N'affiche les libellés que tous les mois pour garder un aspect épuré
+                                callback: function(val, index) {
+                                    let labelText = this.getLabelForValue(val);
+                                    // Affiche le tick si c'est le 1er du mois (ex: "1/5", "1/6", etc.)
+                                    return labelText.startsWith('1/') ? labelText : '';
+                                },
+                                maxRotation: 0
+                            }
                         },
                         y: {
-                            title: { display: true, text: 'Pertes totales (GWh)' },
+                            title: { display: true, text: 'Pertes totales (GWh)', font: { style: 'italic' } },
                             beginAtZero: true,
-                            grid: { color: '#eee' }
+                            grid: { color: '#e5e5e5' },
+                            ticks: { stepSize: 500 }
                         }
                     },
                     plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'start',
+                            labels: {
+                                boxWidth: 20,
+                                boxHeight: 10,
+                                // Permet de fusionner les items gris en une seule ligne de légende épurée
+                                filter: function(item, chartData) {
+                                    if (item.text.includes('-') && item.datasetIndex > 0) {
+                                        // Ne garde que le premier dataset gris pour la légende globale
+                                        for(let i=0; i<item.datasetIndex; i++) {
+                                            if(chartData.datasets[i].label === item.text) return false;
+                                        }
+                                    }
+                                    return true;
+                                }
+                            }
+                        },
                         tooltip: {
                             mode: 'index',
                             intersect: false
-                        },
-                        legend: {
-                            position: 'top'
                         }
                     }
                 }
