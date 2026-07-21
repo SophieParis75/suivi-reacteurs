@@ -166,36 +166,29 @@
 
             const separateur = '\t';
 
-            // D'après la structure officielle, les en-têtes se trouvent sur la 2ème ligne (index 1)
-            let indexLigneEntetes = 1;
-            let colsEntetes = lignes[indexLigneEntetes].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+            let indexLigneEntetes = -1;
+            let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
 
-            let idxStart = colsEntetes.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
-            let idxStop = colsEntetes.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
-            let idxFuel = colsEntetes.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
-            let idxRemarks = colsEntetes.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information'));
+            // Parcours des premières lignes pour trouver les colonnes clés (support multilingue FR/EN)
+            for (let i = 0; i < Math.min(lignes.length, 5); i++) {
+                let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+                
+                let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
+                let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
+                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
 
-            if (idxStart === -1 || idxStop === -1 || idxFuel === -1) {
-                // Fallback de sécurité si l'index diffère légèrement
-                indexLigneEntetes = 0;
-                for (let i = 0; i < Math.min(lignes.length, 5); i++) {
-                    let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
-                    let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
-                    let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
-                    let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
-                    if (s !== -1 && st !== -1 && f !== -1) {
-                        indexLigneEntetes = i;
-                        idxStart = s;
-                        idxStop = st;
-                        idxFuel = f;
-                        idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information'));
-                        break;
-                    }
+                if (s !== -1 && st !== -1 && f !== -1) {
+                    indexLigneEntetes = i;
+                    idxStart = s;
+                    idxStop = st;
+                    idxFuel = f;
+                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information'));
+                    break;
                 }
             }
 
-            if (idxStart === -1 || idxStop === -1) {
-                throw new Error("Impossible de localiser les colonnes de dates dans le fichier.");
+            if (indexLigneEntetes === -1) {
+                throw new Error("Impossible de trouver la ligne d'en-têtes (colonnes 'Date de début' / 'Start', 'Filière' / 'Fuel').");
             }
 
             let evenementsEnv = [];
@@ -206,7 +199,7 @@
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
+                const remarks = idxRemarks !== -1 ? cols.slice(idxRemarks).join(' ').toLowerCase() : ''; // Regroupe toutes les colonnes de remarques si elles éclatent
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
 
                 const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || fuel.includes('nuclear');
@@ -235,7 +228,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Structure lue avec succès, mais aucun événement 'Nucléaire' lié à l'environnement n'a été trouvé avec ces critères.");
+                throw new Error("Structure lue, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé. Vérifiez le contenu du fichier.");
             }
 
             let labelsJours = [];
