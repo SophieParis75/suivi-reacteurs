@@ -2,37 +2,96 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Historique</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historique - Pertes Climatiques Cumulées</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f9f9f9;
+            background-color: #f8f9fa;
             color: #333;
+            max-width: 1200px;
+            margin: 20px auto;
         }
         h2 {
-            text-align: center;
-            color: #1a365d;
+            color: #2c3e50;
+            font-size: 1.25rem;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .config-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            border-left: 5px solid #0056b3;
+        }
+        .step {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed #eee;
+        }
+        .step:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn-link {
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 5px;
+        }
+        .btn-link:hover {
+            background: #5a6268;
+        }
+        button {
+            padding: 10px 20px;
+            background: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #003d7a;
         }
         .container {
-            width: 90%;
-            margin: auto;
             background: #fff;
-            padding: 20px;
+            padding: 25px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             border-radius: 8px;
         }
         .chart-container {
             position: relative;
-            height: 500px;
+            height: 550px;
             width: 100%;
+            margin-top: 20px;
         }
         .status {
-            text-align: center;
-            margin-bottom: 15px;
+            margin-top: 15px;
             font-style: italic;
             color: #666;
         }
@@ -41,130 +100,240 @@
 <body>
 
     <div class="container">
-        <h2>Historique</h2>
-        <div id="status" class="status">Chargement des données historiques et du flux RSS...</div>
+        <h2>Indisponibilités climatiques : historique des pertes cumulées</h2>
+
+        <!-- Section de chargement du fichier CSV complet d'EDF -->
+        <div class="config-box">
+            <div class="step">
+                <label>1. Télécharger le fichier CSV complet d'EDF :</label>
+                <a href="https://doaat.edf.fr/en/doaat/export/full/csv?t=1784616949" target="_blank" class="btn-link">⬇️ Télécharger le CSV (Clic droit ; Enregistrer le lien sous...)</a>
+            </div>
+            
+            <div class="step">
+                <label for="fichierCsv">2. Charger le fichier CSV téléchargé :</label>
+                <input type="file" id="fichierCsv" accept=".csv">
+                <button onclick="chargerCsvHistorique()">Générer le graphique comparatif</button>
+            </div>
+            <div id="status" class="status">Veuillez charger le fichier CSV pour afficher l'historique cumulé.</div>
+        </div>
+
         <div class="chart-container">
             <canvas id="envChart"></canvas>
         </div>
     </div>
 
     <script>
-        const configReacteurs = {
-            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
-            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-        };
+        let myChartInstance = null;
 
-        async function initDashboard() {
+        function chargerCsvHistorique() {
+            const fileInput = document.getElementById('fichierCsv');
             const statusEl = document.getElementById('status');
-            
-            try {
-                statusEl.textContent = "Traitement des données historiques...";
 
-                let dates = [];
-                let aujourdhui = new Date();
-                for (let i = 21; i >= 0; i--) {
-                    let d = new Date(aujourdhui);
-                    d.setDate(aujourdhui.getDate() - i);
-                    dates.push(d.toISOString().split('T')[0]);
+            if (fileInput.files.length === 0) {
+                alert("Veuillez sélectionner le fichier CSV d'EDF.");
+                return;
+            }
+
+            statusEl.textContent = "Traitement et cumul des pertes environnementales...";
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    analyserEtTracerCumul(e.target.result);
+                    statusEl.textContent = "Graphique généré avec succès.";
+                } catch (err) {
+                    statusEl.textContent = "Erreur lors du traitement du CSV.";
+                    console.error(err);
                 }
+            };
+            reader.readAsText(file);
+        }
 
-                const reacteurs = Object.keys(configReacteurs);
+        function analyserEtTracerCumul(csvText) {
+            const lignes = csvText.split(/\r\n|\n/);
+            if (lignes.length < 2) return;
 
-                const datasets = reacteurs.map(r => {
-                    const nomRecherche = r.toUpperCase().trim();
-                    const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
-                    
-                    let bg = cfg.color;
-                    if (typeof patternomaly !== 'undefined') {
-                        try { 
-                            bg = patternomaly.draw(cfg.pattern, cfg.color); 
-                        } catch(e) {}
+            const separateur = lignes[0].includes(';') ? ';' : ',';
+            const enTetes = lignes[0].split(separateur).map(h => h.replace(/"/g, '').trim());
+
+            const idxStart = enTetes.findIndex(h => h.toLowerCase().includes('start'));
+            const idxStop = enTetes.findIndex(h => h.toLowerCase().includes('stop') || h.toLowerCase().includes('end'));
+            const idxUnavail = enTetes.findIndex(h => h.toLowerCase().includes('unavailable'));
+            const idxRemarks = enTetes.findIndex(h => h.toLowerCase().includes('remark'));
+            const idxFuel = enTetes.findIndex(h => h.toLowerCase().includes('fuel'));
+
+            let evenementsEnv = [];
+
+            for (let i = 1; i < lignes.length; i++) {
+                if (!lignes[i].trim()) continue;
+                const cols = lignes[i].split(separateur).map(c => c.replace(/^"|"$/g, '').trim());
+                
+                const startStr = cols[idxStart] || '';
+                const stopStr = cols[idxStop] || '';
+                const unavailMW = parseFloat(cols[idxUnavail]) || 0;
+                const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
+                const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
+
+                if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
+                    evenementsEnv.push({
+                        dateDebut: new Date(startStr),
+                        dateFin: new Date(stopStr),
+                        unavailableMW: unavailMW
+                    });
+                }
+            }
+
+            // Axe X fixé du 1er mai au 15 novembre (format affiché MM/JJ adapté en JJ/MM ou M/D selon le style souhaité)
+            let labelsJours = [];
+            let displayLabels = [];
+            let refDate = new Date(2024, 4, 1); // 1er mai
+            let endDate = new Date(2024, 10, 15); // 15 novembre
+
+            let mapJourIndex = {};
+            let idxCounter = 0;
+            while (refDate <= endDate) {
+                let m = refDate.getMonth() + 1;
+                let d = refDate.getDate();
+                let mmdd = `${String(refDate.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                labelsJours.push(mmdd);
+                
+                // Format d'affichage type "1/5", "1/6", etc.
+                displayLabels.push(`${d}/${m}`);
+                mapJourIndex[mmdd] = idxCounter++;
+                refDate.setDate(refDate.getDate() + 1);
+            }
+
+            let dataParAnnee = {};
+            const anneeEnCours = new Date().getFullYear().toString();
+
+            evenementsEnv.previousYearsMaxYear = 0;
+
+            evenementsEnv.forEach(ev => {
+                let curr = new Date(ev.dateDebut);
+                while (curr <= ev.dateFin) {
+                    let y = curr.getFullYear().toString();
+                    let m = String(curr.getMonth() + 1).padStart(2, '0');
+                    let d = String(curr.getDate()).padStart(2, '0');
+                    let mmdd = `${m}-${d}`;
+
+                    if (mapJourIndex[mmdd] !== undefined) {
+                        if (!dataParAnnee[y]) {
+                            dataParAnnee[y] = new Array(labelsJours.length).fill(0);
+                        }
+                        let energieJourGWh = (ev.unavailableMW * 24) / 1000; 
+                        dataParAnnee[y][mapJourIndex[mmdd]] += energieJourGWh;
                     }
+                    curr.setDate(curr.getDate() + 1);
+                }
+            });
 
-                    let dataValues = dates.map(() => Math.floor(Math.random() * 300));
+            let datasets = [];
+            let anneesDisponibles = Object.keys(dataParAnnee).sort();
 
-                    return {
-                        label: r,
-                        data: dataValues,
-                        backgroundColor: bg
-                    };
+            anneesDisponibles.forEach(annee => {
+                let cumul = 0;
+                let dataCumulee = dataParAnnee[annee].map(val => {
+                    cumul += val;
+                    return Number(cumul.toFixed(0)); // Arrondi pour coller au style épuré
                 });
 
-                statusEl.style.display = 'none';
+                let estAnneeEnCours = (annee === anneeEnCours);
 
-                new Chart(document.getElementById('envChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: dates,
-                        datasets: datasets
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: {
-                                stacked: true
-                            },
-                            y: {
-                                stacked: true,
-                                beginAtZero: true,
-                                suggestedMax: 11000,
-                                ticks: {
-                                    stepSize: 1000
+                datasets.push({
+                    label: estAnneeEnCours ? 'Année en cours' : '2015 - 2025', // Groupe les années antérieures sous la même étiquette de légende si souhaité
+                    data: dataCumulee,
+                    borderColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
+                    backgroundColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
+                    borderWidth: estAnneeEnCours ? 3 : 2,
+                    pointRadius: 0,
+                    tension: 0.2,
+                    // Permet de fusionner les étiquettes "2015 - 2025" dans la légende de Chart.js
+                    legendGroup: estAnneeEnCours ? 'current' : 'history',
+                    order: estAnneeEnCours ? 1 : 2
+                });
+            });
+
+            const ctx = document.getElementById('envChart').getContext('2d');
+            if (myChartInstance) {
+                myChartInstance.destroy();
+            }
+
+            myChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: displayLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Date', font: { style: 'italic' } },
+                            grid: { color: '#f0f0f0' },
+                            ticks: {
+                                maxTicksLimit: 8,
+                                callback: function(val, index) {
+                                    // Afficher des jalons réguliers sur l'axe X (ex: 1/5, 1/6, 1/7...)
+                                    let lbl = this.getLabelForValue(val);
+                                    if (lbl.startsWith('1/')) return lbl;
+                                    return '';
                                 }
                             }
                         },
-                        plugins: {
-                            tooltip: {
-                                callbacks: {
-                                    footer: (tooltipItems) => {
-                                        const dataIndex = tooltipItems[0].dataIndex;
-                                        const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
-                                            return somme + (Number(ds.data[dataIndex]) || 0);
-                                        }, 0);
-                                        return `Indisponibilité totale : ${totalJour} MW`;
-                                    }
+                        y: {
+                            title: { display: true, text: 'Pertes totales (GWh)', font: { style: 'italic' } },
+                            beginAtZero: true,
+                            grid: { color: '#f0f0f0' },
+                            ticks: { stepSize: 500 }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        legend: {
+                            position: 'top',
+                            align: 'start',
+                            labels: {
+                                boxWidth: 25,
+                                boxHeight: 12,
+                                // Regroupement propre des légendes pour n'avoir que les deux catégories voulues
+                                filter: function(item, chartData) {
+                                    if (item.datasetIndex === 0) return true;
+                                    // N'affiche qu'un seul libellé pour les courbes grises et un pour le rouge
+                                    let currentGroup = chartData.datasets[item.datasetIndex].legendGroup;
+                                    let firstIndexOfGroup = chartData.datasets.findIndex(d => d.legendGroup === currentGroup);
+                                    return item.datasetIndex === firstIndexOfGroup;
+                                },
+                                generateLabels: function(chart) {
+                                    return [
+                                        {
+                                            text: '2015 - 2025',
+                                            fillStyle: 'rgba(180, 180, 180, 0.7)',
+                                            strokeStyle: 'rgba(180, 180, 180, 0.7)',
+                                            lineWidth: 3,
+                                            hidden: false,
+                                            datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'history')
+                                        },
+                                        {
+                                            text: 'Année en cours',
+                                            fillStyle: '#ff0000',
+                                            strokeStyle: '#ff0000',
+                                            lineWidth: 3,
+                                            hidden: false,
+                                            datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'current')
+                                        }
+                                    ];
                                 }
                             }
                         }
                     }
-                });
-
-            } catch (error) {
-                statusEl.textContent = "Erreur lors du chargement des données externes.";
-                console.error(error);
-            }
+                }
+            });
         }
-
-        initDashboard();
     </script>
 </body>
 </html>
