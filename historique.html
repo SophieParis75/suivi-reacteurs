@@ -164,14 +164,13 @@
             
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            // Structure exacte fournie :
-            // Ligne 0 = Métadonnées ("Export de toutes les versions...")
-            // Ligne 1 = En-têtes (A:Statut, B:Numéro version, C:Identifiant, D:Nom, E:Filière, F:Date de début, G:Date de fin, H:Type, I:Cause, J:Information complémentaire)
+            // Indices exacts basés sur votre structure :
+            // E (4) = Filière, F (5) = Date de début, G (6) = Date de fin, J (9) = Information complémentaire
             const indexLigneEntetes = 1;
-            const idxFuel = 4;      // Colonne E (Filière)
-            const idxStart = 5;     // Colonne F (Date de début)
-            const idxStop = 6;      // Colonne G (Date de fin)
-            const idxRemarks = 9;   // Colonne J (Information complémentaire)
+            const idxFuel = 4;      
+            const idxStart = 5;     
+            const idxStop = 6;      
+            const idxRemarks = 9;   
 
             let evenementsEnv = [];
 
@@ -221,7 +220,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Structure lue avec succès, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
+                throw new Error("Structure lue, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
             }
 
             let labelsJours = [];
