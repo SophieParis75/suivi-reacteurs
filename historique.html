@@ -102,7 +102,6 @@
     <div class="container">
         <h2>Indisponibilités climatiques : historique des pertes cumulées</h2>
 
-        <!-- Section de chargement du fichier CSV complet d'EDF -->
         <div class="config-box">
             <div class="step">
                 <label>1. Télécharger le fichier CSV complet d'EDF :</label>
@@ -143,7 +142,7 @@
                     analyserEtTracerCumul(e.target.result);
                     statusEl.textContent = "Graphique généré avec succès.";
                 } catch (err) {
-                    statusEl.textContent = "Erreur lors du traitement du CSV.";
+                    statusEl.textContent = "Erreur lors du traitement du CSV : " + err.message;
                     console.error(err);
                 }
             };
@@ -151,54 +150,74 @@
         }
 
         function analyserEtTracerCumul(csvText) {
-            const lignes = csvText.split(/\r\n|\n/);
-            if (lignes.length < 2) return;
+            const lignes = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
+            if (lignes.length < 2) throw new Error("Le fichier CSV est vide ou invalide.");
 
             const separateur = lignes[0].includes(';') ? ';' : ',';
-            const enTetes = lignes[0].split(separateur).map(h => h.replace(/"/g, '').trim());
+            const enTetes = lignes[0].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
 
-            const idxStart = enTetes.findIndex(h => h.toLowerCase().includes('start'));
-            const idxStop = enTetes.findIndex(h => h.toLowerCase().includes('stop') || h.toLowerCase().includes('end'));
-            const idxUnavail = enTetes.findIndex(h => h.toLowerCase().includes('unavailable'));
-            const idxRemarks = enTetes.findIndex(h => h.toLowerCase().includes('remark'));
-            const idxFuel = enTetes.findIndex(h => h.toLowerCase().includes('fuel'));
+            // Fonction de recherche souple d'index de colonne
+            function trouverIndex(motsCles) {
+                for (let mot of motsCles) {
+                    let index = enTetes.findIndex(h => h.includes(mot));
+                    if (index !== -1) return index;
+                }
+                return -1;
+            }
+
+            const idxStart = trouverIndex(['start', 'debut', 'début']);
+            const idxStop = trouverIndex(['stop', 'end', 'fin']);
+            const idxUnavail = trouverIndex(['unavailable', 'indisponible', 'indisponibilité', 'capacity']);
+            const idxRemarks = trouverIndex(['remark', 'remarque', 'commentaire', 'reason']);
+            const idxFuel = trouverIndex(['fuel', 'combustible', 'type']);
+
+            if (idxStart === -1 || idxStop === -1 || idxUnavail === -1) {
+                throw new Error("Impossible de trouver les colonnes de date ou de capacité dans le CSV.");
+            }
 
             let evenementsEnv = [];
 
             for (let i = 1; i < lignes.length; i++) {
-                if (!lignes[i].trim()) continue;
                 const cols = lignes[i].split(separateur).map(c => c.replace(/^"|"$/g, '').trim());
-                
+                if (cols.length <= Math.max(idxStart, idxStop, idxUnavail)) continue;
+
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const unavailMW = parseFloat(cols[idxUnavail]) || 0;
+                const unavailMW = parseFloat(cols[idxUnavail].replace(/\s/g, '').replace(',', '.')) || 0;
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
 
+                // Filtrage environnemental & nucléaire
                 if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
-                    evenementsEnv.push({
-                        dateDebut: new Date(startStr),
-                        dateFin: new Date(stopStr),
-                        unavailableMW: unavailMW
-                    });
+                    let dDebut = new Date(startStr);
+                    let dFin = new Date(stopStr);
+                    if (!isNaN(dDebut) && !isNaN(dFin)) {
+                        evenementsEnv.push({
+                            dateDebut: dDebut,
+                            dateFin: dFin,
+                            unavailableMW: unavailMW
+                        });
+                    }
                 }
             }
 
-            // Axe X fixé du 1er mai au 15 novembre (format affiché MM/JJ adapté en JJ/MM ou M/D selon le style souhaité)
+            if (evenementsEnv.length === 0) {
+                throw new Error("Aucun événement 'environnemental' nucléaire n'a été détecté dans ce CSV.");
+            }
+
+            // Génération de l'axe X (du 1er mai au 15 novembre)
             let labelsJours = [];
             let displayLabels = [];
-            let refDate = new Date(2024, 4, 1); // 1er mai
-            let endDate = new Date(2024, 10, 15); // 15 novembre
+            let refDate = new Date(2024, 4, 1); 
+            let endDate = new Date(2024, 10, 15); 
 
             let mapJourIndex = {};
             let idxCounter = 0;
             while (refDate <= endDate) {
                 let m = refDate.getMonth() + 1;
                 let d = refDate.getDate();
-                let mmdd = `${String(refDate.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                let mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 labelsJours.push(mmdd);
-                
-                // Format d'affichage type "1/5", "1/6", etc.
                 displayLabels.push(`${d}/${m}`);
                 mapJourIndex[mmdd] = idxCounter++;
                 refDate.setDate(refDate.getDate() + 1);
@@ -206,8 +225,6 @@
 
             let dataParAnnee = {};
             const anneeEnCours = new Date().getFullYear().toString();
-
-            evenementsEnv.previousYearsMaxYear = 0;
 
             evenementsEnv.forEach(ev => {
                 let curr = new Date(ev.dateDebut);
@@ -235,20 +252,19 @@
                 let cumul = 0;
                 let dataCumulee = dataParAnnee[annee].map(val => {
                     cumul += val;
-                    return Number(cumul.toFixed(0)); // Arrondi pour coller au style épuré
+                    return Number(cumul.toFixed(0));
                 });
 
                 let estAnneeEnCours = (annee === anneeEnCours);
 
                 datasets.push({
-                    label: estAnneeEnCours ? 'Année en cours' : '2015 - 2025', // Groupe les années antérieures sous la même étiquette de légende si souhaité
+                    label: estAnneeEnCours ? 'Année en cours' : '2015 - 2025',
                     data: dataCumulee,
                     borderColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
                     backgroundColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
                     borderWidth: estAnneeEnCours ? 3 : 2,
                     pointRadius: 0,
                     tension: 0.2,
-                    // Permet de fusionner les étiquettes "2015 - 2025" dans la légende de Chart.js
                     legendGroup: estAnneeEnCours ? 'current' : 'history',
                     order: estAnneeEnCours ? 1 : 2
                 });
@@ -274,8 +290,7 @@
                             grid: { color: '#f0f0f0' },
                             ticks: {
                                 maxTicksLimit: 8,
-                                callback: function(val, index) {
-                                    // Afficher des jalons réguliers sur l'axe X (ex: 1/5, 1/6, 1/7...)
+                                callback: function(val) {
                                     let lbl = this.getLabelForValue(val);
                                     if (lbl.startsWith('1/')) return lbl;
                                     return '';
@@ -300,10 +315,8 @@
                             labels: {
                                 boxWidth: 25,
                                 boxHeight: 12,
-                                // Regroupement propre des légendes pour n'avoir que les deux catégories voulues
                                 filter: function(item, chartData) {
                                     if (item.datasetIndex === 0) return true;
-                                    // N'affiche qu'un seul libellé pour les courbes grises et un pour le rouge
                                     let currentGroup = chartData.datasets[item.datasetIndex].legendGroup;
                                     let firstIndexOfGroup = chartData.datasets.findIndex(d => d.legendGroup === currentGroup);
                                     return item.datasetIndex === firstIndexOfGroup;
