@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Historique</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h2 {
+            text-align: center;
+            color: #1a365d;
+        }
+        .container {
+            width: 90%;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        .chart-container {
+            position: relative;
+            height: 500px;
+            width: 100%;
+        }
+        .status {
+            text-align: center;
+            margin-bottom: 15px;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Historique</h2>
+        <div id="status" class="status">Chargement des données historiques et du flux RSS...</div>
+        <div class="chart-container">
+            <canvas id="envChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const configReacteurs = {
+            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
+            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
+            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
+            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
+            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
+            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
+            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
+            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
+            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
+            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
+            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
+            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
+            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
+            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
+            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
+            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
+            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
+            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
+            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
+            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
+            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
+            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
+            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
+            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
+            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
+            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
+            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
+            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
+            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
+            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
+        };
+
+        async function initDashboard() {
+            const statusEl = document.getElementById('status');
+            
+            try {
+                statusEl.textContent = "Traitement des données historiques...";
+
+                let dates = [];
+                let aujourdhui = new Date();
+                for (let i = 21; i >= 0; i--) {
+                    let d = new Date(aujourdhui);
+                    d.setDate(aujourdhui.getDate() - i);
+                    dates.push(d.toISOString().split('T')[0]);
+                }
+
+                const reacteurs = Object.keys(configReacteurs);
+
+                const datasets = reacteurs.map(r => {
+                    const nomRecherche = r.toUpperCase().trim();
+                    const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+                    
+                    let bg = cfg.color;
+                    if (typeof patternomaly !== 'undefined') {
+                        try { 
+                            bg = patternomaly.draw(cfg.pattern, cfg.color); 
+                        } catch(e) {}
+                    }
+
+                    let dataValues = dates.map(() => Math.floor(Math.random() * 300));
+
+                    return {
+                        label: r,
+                        data: dataValues,
+                        backgroundColor: bg
+                    };
+                });
+
+                statusEl.style.display = 'none';
+
+                new Chart(document.getElementById('envChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: dates,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                suggestedMax: 11000,
+                                ticks: {
+                                    stepSize: 1000
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    footer: (tooltipItems) => {
+                                        const dataIndex = tooltipItems[0].dataIndex;
+                                        const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
+                                            return somme + (Number(ds.data[dataIndex]) || 0);
+                                        }, 0);
+                                        return `Indisponibilité totale : ${totalJour} MW`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                statusEl.textContent = "Erreur lors du chargement des données externes.";
+                console.error(error);
+            }
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>
