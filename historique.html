@@ -167,46 +167,58 @@
             let indexLigneEntetes = -1;
             let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
 
-            // Recherche de la ligne d'en-tête exacte basée sur votre structure d'export EDF
-            for (let i = 0; i < Math.min(lignes.length, 10); i++) {
+            // Recherche de la ligne d'en-tête (généralement la 2ème ligne, index 1, après l'export info)
+            for (let i = 0; i < Math.min(lignes.length, 5); i++) {
                 let cols = lignes[i].split(';').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
                 
-                let s = cols.findIndex(h => h === 'date de début' || h.includes('date de debut') || h === 'start');
-                let st = cols.findIndex(h => h === 'date de fin' || h === 'date de fin' || h === 'stop' || h === 'end');
-                let f = cols.findIndex(h => h === 'filière' || h === 'filiere' || h === 'fuel');
+                let s = cols.findIndex(h => h.includes('date de début') || h.includes('date de debut') || h === 'start');
+                let st = cols.findIndex(h => h.includes('date de fin') || h === 'stop' || h === 'end');
+                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h === 'fuel');
 
                 if (s !== -1 && st !== -1) {
                     indexLigneEntetes = i;
                     idxStart = s;
                     idxStop = st;
-                    idxFuel = f !== -1 ? f : cols.findIndex(h => h.includes('type') || h.includes('filiere'));
-                    idxRemarks = cols.findIndex(h => h.includes('information complémentaire') || h.includes('information complementaire') || h.includes('remarque') || h.includes('cause'));
+                    idxFuel = f !== -1 ? f : 2; // Colonne C par défaut si non trouvée
+                    idxRemarks = cols.findIndex(h => h.includes('information complémentaire') || h.includes('information complementaire') || h.includes('cause'));
                     break;
                 }
             }
 
-            if (indexLigneEntetes === -1) {
-                throw new Error("Impossible de localiser les colonnes 'Date de début' et 'Date de fin' dans le fichier.");
+            // Fallback forcé si la détection automatique échoue à cause de subtilités d'accents
+            if (indexLigneEntetes === -1 && lignes.length > 1) {
+                indexLigneEntetes = 1; // Ligne des en-têtes standard EDF
+                let cols = lignes[indexLigneEntetes].split(';').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+                idxStart = cols.findIndex(h => h.includes('début') || h.includes('debut'));
+                idxStop = cols.findIndex(h => h.includes('fin'));
+                idxFuel = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('type'));
+                idxRemarks = cols.findIndex(h => h.includes('information') || h.includes('cause'));
+            }
+
+            if (idxStart === -1 || idxStop === -1) {
+                // Forçage direct basé sur votre description (Colonnes F et G soit indices 4 et 5)
+                idxStart = 4;
+                idxStop = 5;
+                idxFuel = 2;
+                idxRemarks = 8;
+                indexLigneEntetes = 1;
             }
 
             let evenementsEnv = [];
 
             for (let i = indexLigneEntetes + 1; i < lignes.length; i++) {
-                // Gestion basique du découpage par point-virgule
                 const cols = lignes[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
                 if (cols.length <= Math.max(idxStart, idxStop)) continue;
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
-                const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
+                const remarks = idxRemarks !== -1 && cols[idxRemarks] ? cols[idxRemarks].toLowerCase() : cols.join(' ').toLowerCase();
+                const fuel = idxFuel !== -1 && cols[idxFuel] ? cols[idxFuel].toLowerCase() : '';
 
-                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
-                // Recherche des mots clés liés aux contraintes climatiques/environnementales dans les infos complémentaires
-                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature') || remarks.includes('externes liées à l\'environnement');
+                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || remarks.includes('nucléaire');
+                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature') || remarks.includes('externes');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
-                    // Conversion des dates au format JJ/MM/AAAA HH:MM (présent dans l'export EDF)
                     let parseDateEDF = (str) => {
                         let parts = str.split(' ');
                         if (parts.length < 2) return new Date(str);
@@ -227,7 +239,7 @@
                         if (matchMw) {
                             unavailMW = parseFloat(matchMw[1]);
                         } else {
-                            unavailMW = 900; // Valeur par défaut si non trouvé explicitement
+                            unavailMW = 900; 
                         }
 
                         evenementsEnv.push({
@@ -240,7 +252,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Structure lue, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
+                throw new Error("Structure lue (Colonnes F et G identifiées), mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
             }
 
             let labelsJours = [];
@@ -363,7 +375,7 @@
                                         {
                                             text: '2015 - 2025',
                                             fillStyle: 'rgba(180, 180, 180, 0.7)',
-                                          strokeStyle: 'rgba(180, 180, 180, 0.7)',
+                                            strokeStyle: 'rgba(180, 180, 180, 0.7)',
                                             lineWidth: 3,
                                             hidden: false,
                                             datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'history')
