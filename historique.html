@@ -155,7 +155,7 @@
             if (lignes.length < 2) throw new Error("Le fichier CSV est vide ou invalide.");
 
             const separateur = lignes[0].includes(';') ? ';' : ',';
-            const enTetes Bruts = lignes[0].split(separateur);
+            const enTetesBruts = lignes[0].split(separateur);
             const enTetes = enTetesBruts.map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
 
             function trouverIndex(motsCles) {
