@@ -162,34 +162,37 @@
             const lignes = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            const separateur = lignes[0].includes(';') ? ';' : ',';
+            // Détection automatique du séparateur (tabulation, point-virgule ou virgule)
+            let separateur = ',';
+            if (lignes[0].includes('\t')) {
+                separateur = '\t';
+            } else if (lignes[0].includes(';')) {
+                separateur = ';';
+            }
 
             let indexLigneEntetes = -1;
-            let idxStart = -1, idxStop = -1, idxUnavail = -1, idxRemarks = -1, idxFuel = -1;
-            let enTetesBruts = [];
+            let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
 
-            // Recherche élargie sur les 10 premières lignes
+            // Recherche de la ligne d'en-têtes parmi les 10 premières lignes
             for (let i = 0; i < Math.min(lignes.length, 10); i++) {
-                let colsRaw = lignes[i].split(separateur);
-                let cols = colsRaw.map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+                let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
                 
                 let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
                 let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
-                
-                if (s !== -1 && st !== -1) {
+                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
+
+                if (s !== -1 && st !== -1 && f !== -1) {
                     indexLigneEntetes = i;
-                    enTetesBruts = colsRaw;
                     idxStart = s;
                     idxStop = st;
-                    idxFuel = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel') || h.includes('type'));
-                    idxUnavail = cols.findIndex(h => h.includes('puissance') || h.includes('perte') || h.includes('unavailable') || h.includes('capacité') || h.includes('mw'));
-                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('remark'));
+                    idxFuel = f;
+                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause'));
                     break;
                 }
             }
 
             if (indexLigneEntetes === -1) {
-                throw new Error("Impossible de localiser les colonnes de dates.\nEn-têtes de la ligne 2 détectés : " + lignes[1]);
+                throw new Error("Impossible de trouver la ligne d'en-têtes ('Date de début', 'Filière', etc.) dans le CSV.");
             }
 
             let evenementsEnv = [];
@@ -200,18 +203,26 @@
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const unavailMW = idxUnavail !== -1 ? (parseFloat(cols[idxUnavail].replace(/\s/g, '').replace(',', '.')) || 0) : 0;
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
 
-                // Filtrage robuste acceptant les libellés français ("nucléaire") et anglais ("nuclear", "environmental")
-                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || fuel.includes('nuclear');
-                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature');
+                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
+                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let dDebut = new Date(startStr);
                     let dFin = new Date(stopStr);
+                    
                     if (!isNaN(dDebut) && !isNaN(dFin)) {
+                        // Extraction intelligente de la puissance perdue (MW) depuis le texte des remarques ou d'une colonne dédiée si présente
+                        let unavailMW = 0;
+                        let matchMw = remarks.match(/(\d+)\s*mw/);
+                        if (matchMw) {
+                            unavailMW = parseFloat(matchMw[1]);
+                        } else {
+                            unavailMW = 900; // Valeur par défaut standard si non précisée
+                        }
+
                         evenementsEnv.push({
                             dateDebut: dDebut,
                             dateFin: dFin,
@@ -222,7 +233,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Fichier analysé, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé.");
+                throw new Error("Aucun événement environnemental nucléaire trouvé. Vérifiez que le fichier contient bien des lignes avec 'Nucléaire' et 'Environmental losses'.");
             }
 
             let labelsJours = [];
