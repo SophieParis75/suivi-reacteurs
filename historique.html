@@ -94,6 +94,7 @@
             margin-top: 15px;
             font-style: italic;
             color: #666;
+            white-space: pre-line;
         }
     </style>
 </head>
@@ -142,7 +143,7 @@
                     analyserEtTracerCumul(e.target.result);
                     statusEl.textContent = "Graphique généré avec succès.";
                 } catch (err) {
-                    statusEl.textContent = "Erreur lors du traitement du CSV : " + err.message;
+                    statusEl.textContent = "⚠️ Erreur : " + err.message;
                     console.error(err);
                 }
             };
@@ -154,9 +155,9 @@
             if (lignes.length < 2) throw new Error("Le fichier CSV est vide ou invalide.");
 
             const separateur = lignes[0].includes(';') ? ';' : ',';
-            const enTetes = lignes[0].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+            const enTetes Bruts = lignes[0].split(separateur);
+            const enTetes = enTetesBruts.map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
 
-            // Fonction de recherche souple d'index de colonne
             function trouverIndex(motsCles) {
                 for (let mot of motsCles) {
                     let index = enTetes.findIndex(h => h.includes(mot));
@@ -167,12 +168,12 @@
 
             const idxStart = trouverIndex(['start', 'debut', 'début']);
             const idxStop = trouverIndex(['stop', 'end', 'fin']);
-            const idxUnavail = trouverIndex(['unavailable', 'indisponible', 'indisponibilité', 'capacity']);
+            const idxUnavail = trouverIndex(['unavailable', 'indisponible', 'capacity']);
             const idxRemarks = trouverIndex(['remark', 'remarque', 'commentaire', 'reason']);
             const idxFuel = trouverIndex(['fuel', 'combustible', 'type']);
 
             if (idxStart === -1 || idxStop === -1 || idxUnavail === -1) {
-                throw new Error("Impossible de trouver les colonnes de date ou de capacité dans le CSV.");
+                throw new Error(`Colonnes introuvables.\nEn-têtes détectés dans votre fichier :\n[ ${enTetesBruts.join(' | ')} ]`);
             }
 
             let evenementsEnv = [];
@@ -187,7 +188,6 @@
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
 
-                // Filtrage environnemental & nucléaire
                 if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
                     let dDebut = new Date(startStr);
                     let dFin = new Date(stopStr);
@@ -202,10 +202,9 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'environnemental' nucléaire n'a été détecté dans ce CSV.");
+                throw new Error("Aucun événement 'environnemental' nucléaire n'a été trouvé (vérifiez que le CSV contient bien des lignes avec 'environ' dans les remarques).");
             }
 
-            // Génération de l'axe X (du 1er mai au 15 novembre)
             let labelsJours = [];
             let displayLabels = [];
             let refDate = new Date(2024, 4, 1); 
