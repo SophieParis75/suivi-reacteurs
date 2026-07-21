@@ -168,28 +168,28 @@
             let idxStart = -1, idxStop = -1, idxUnavail = -1, idxRemarks = -1, idxFuel = -1;
             let enTetesBruts = [];
 
-            // On cherche la ligne d'en-tête parmi les 20 premières lignes
-            for (let i = 0; i < Math.min(lignes.length, 20); i++) {
+            // Recherche de la ligne d'en-têtes française (basée sur 'date de début' et 'filière')
+            for (let i = 0; i < Math.min(lignes.length, 10); i++) {
                 let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
                 
-                let s = cols.findIndex(h => h.includes('start') || h.includes('debut') || h.includes('début'));
-                let st = cols.findIndex(h => h.includes('stop') || h.includes('end') || h.includes('fin'));
-                let u = cols.findIndex(h => h.includes('unavailable') || h.includes('indisponible') || h.includes('capacity') || h.includes('mw'));
+                let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
+                let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
+                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
 
-                if (s !== -1 && st !== -1) {
+                if (s !== -1 && st !== -1 && f !== -1) {
                     indexLigneEntetes = i;
                     enTetesBruts = lignes[i].split(separateur);
                     idxStart = s;
                     idxStop = st;
-                    idxUnavail = u !== -1 ? u : cols.findIndex(h => h.includes('perte') || h.includes('puissance'));
-                    idxRemarks = cols.findIndex(h => h.includes('remark') || h.includes('remarque') || h.includes('commentaire') || h.includes('reason'));
-                    idxFuel = cols.findIndex(h => h.includes('fuel') || h.includes('combustible') || h.includes('type') || h.includes('filiere'));
+                    idxFuel = f;
+                    idxUnavail = cols.findIndex(h => h.includes('puissance') || h.includes('perte') || h.includes('unavailable') || h.includes('capacité'));
+                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause'));
                     break;
                 }
             }
 
-            if (indexLigneEntetes === -1 || idxStart === -1 || idxStop === -1) {
-                throw new Error("Impossible de localiser les colonnes de date de début et de fin dans le fichier CSV.");
+            if (indexLigneEntetes === -1) {
+                throw new Error("Impossible de trouver la ligne d'en-têtes française ('Date de début', 'Filière', etc.) dans le CSV.");
             }
 
             let evenementsEnv = [];
@@ -202,11 +202,11 @@
                 const stopStr = cols[idxStop] || '';
                 const unavailMW = idxUnavail !== -1 ? (parseFloat(cols[idxUnavail].replace(/\s/g, '').replace(',', '.')) || 0) : 0;
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
-                const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
+                const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
 
-                // Filtrage souple sur le nucléaire et l'environnement
-                const estNucleaire = fuel.includes('nuclear') || fuel.includes('nucleaire') || fuel === '';
-                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('temperature') || remarks.includes('chaleur');
+                // Filtrage sur la filière nucléaire et les remarques environnementales
+                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
+                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let dDebut = new Date(startStr);
@@ -222,7 +222,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement environnemental nucléaire trouvé après filtrage. Vérifiez les critères.");
+                throw new Error("Aucun événement environnemental nucléaire trouvé. Vérifiez que le fichier contient bien des lignes avec 'Nucléaire' et 'Environmental losses' / 'environ'.");
             }
 
             let labelsJours = [];
