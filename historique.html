@@ -144,6 +144,7 @@
             const file = fileInput.files[0];
             const reader = new FileReader();
 
+            // Utilisation de ISO-8859-1 (latin1) pour s'adapter parfaitement aux exports EDF avec accents
             reader.onload = function(e) {
                 try {
                     analyserEtTracerCumul(e.target.result);
@@ -155,7 +156,13 @@
                     console.error(err);
                 }
             };
-            reader.readAsText(file, 'UTF-8');
+            reader.readAsText(file, 'ISO-8859-1');
+        }
+
+        // Fonction pour supprimer les accents et normaliser les textes
+        function normaliserTexte(texte) {
+            if (!texte) return '';
+            return texte.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
         }
 
         function analyserEtTracerCumul(csvText) {
@@ -164,13 +171,11 @@
             
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            // Index des colonnes d'après votre structure :
-            // E (4) = Filière, F (5) = Date de début, G (6) = Date de fin
             const indexLigneEntetes = 1;
-            const idxStart = 5;     
-            const idxStop = 6;      
-            const idxPMax = 10;     // Puissance nominale
-            const idxPDispo = 11;   // Puissance disponible
+            const idxStart = 5;     // Colonne F (Date de début)
+            const idxStop = 6;      // Colonne G (Date de fin)
+            const idxPMax = 10;     // Colonne K (Puissance nominale)
+            const idxPDispo = 11;   // Colonne L (Puissance disponible)
 
             let evenementsEnv = [];
 
@@ -181,14 +186,13 @@
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
                 
-                // On fusionne toute la ligne en minuscules pour s'assurer de ne rater aucun mot-clé peu importe la colonne
-                const ligneComplete = cols.join(' ').toLowerCase();
+                // Normalisation globale de toute la ligne (supprime les accents, met en minuscules)
+                const ligneNorm = normaliserTexte(cols.join(' '));
 
-                const estNucleaire = ligneComplete.includes('nucléaire') || ligneComplete.includes('nucleaire');
-                const estEnvironnement = ligneComplete.includes('environ') || ligneComplete.includes('climat') || ligneComplete.includes('température') || ligneComplete.includes('chaleur') || ligneComplete.includes('temperature') || ligneComplete.includes('externes');
+                const estNucleaire = ligneNorm.includes('nucleaire');
+                const estEnvironnement = ligneNorm.includes('environ') || ligneNorm.includes('climat') || ligneNorm.includes('temperature') || ligneNorm.includes('chaleur') || ligneNorm.includes('externes');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
-                    
                     let parseDateEDF = (str) => {
                         let parts = str.split(' ');
                         if (parts.length < 2) return new Date(str);
@@ -222,7 +226,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'Nucléaire' lié à l'environnement n'a été isolé. Vérifiez que le fichier contient bien des lignes avec ces critères.");
+                throw new Error("Aucun événement 'Nucléaire' lié à l'environnement n'a été isolé. Vérifiez que le fichier contient bien des lignes correspondantes.");
             }
 
             let labelsJours = [];
