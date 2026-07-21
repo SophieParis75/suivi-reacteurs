@@ -295,14 +295,16 @@
             let listReacteursT1 = [];
             let listReacteursT2 = [];
 
-            // --- FILTRAGE HISTORIQUE T1 (Dernier message publié avant T1) ---
+          // --- FILTRAGE HISTORIQUE T1 (Dernier message publié avant T1) ---
             tousLesReacteursUniques.forEach(reacteur => {
                 const versionsT1 = evenementsFiltres.filter(e => e.asset === reacteur && e.pubDate <= datePivot);
                 if (versionsT1.length > 0) {
                     versionsT1.sort((a, b) => a.pubDate - b.pubDate);
                     const dernierEvT1 = versionsT1[versionsT1.length - 1];
 
-                    if (datePivot >= dernierEvT1.dateDebut && datePivot <= dernierEvT1.dateFin) {
+                    // CORRECTION : On s'assure que l'événement couvre bien la date T1 
+                    // (on tolère une micro-marge de seconde ou on vérifie strictement l'inclusion)
+                    if (dernierEvT1.dateDebut <= datePivot && dernierEvT1.dateFin >= datePivot) {
                         pannesA_T1[reacteur] += dernierEvT1.unavailable;
                         sommeMaintenant += dernierEvT1.unavailable;
                         listReacteursT1.push(dernierEvT1);
