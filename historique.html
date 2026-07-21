@@ -162,37 +162,32 @@
             const lignes = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            // Détection automatique du séparateur (tabulation, point-virgule ou virgule)
-            let separateur = ',';
-            if (lignes[0].includes('\t')) {
-                separateur = '\t';
-            } else if (lignes[0].includes(';')) {
-                separateur = ';';
-            }
+            // Le fichier utilise des tabulations
+            const separateur = '\t';
 
             let indexLigneEntetes = -1;
             let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
 
-            // Recherche de la ligne d'en-têtes parmi les 10 premières lignes
+            // Recherche ciblée de la ligne contenant 'statut' et des dates
             for (let i = 0; i < Math.min(lignes.length, 10); i++) {
                 let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
                 
+                let statut = cols.findIndex(h => h.includes('statut') || h.includes('status'));
                 let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
                 let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
-                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
 
-                if (s !== -1 && st !== -1 && f !== -1) {
+                if (statut !== -1 && s !== -1 && st !== -1) {
                     indexLigneEntetes = i;
                     idxStart = s;
                     idxStop = st;
-                    idxFuel = f;
+                    idxFuel = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
                     idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause'));
                     break;
                 }
             }
 
             if (indexLigneEntetes === -1) {
-                throw new Error("Impossible de trouver la ligne d'en-têtes ('Date de début', 'Filière', etc.) dans le CSV.");
+                throw new Error("Impossible de trouver la ligne d'en-têtes ('Statut', 'Date de début', etc.) dans le CSV.");
             }
 
             let evenementsEnv = [];
@@ -207,6 +202,7 @@
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
 
                 const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
+                // Détection élargie des critères environnementaux visibles dans vos exemples ("environnement", "Environmental issues")
                 const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
@@ -214,7 +210,6 @@
                     let dFin = new Date(stopStr);
                     
                     if (!isNaN(dDebut) && !isNaN(dFin)) {
-                        // Extraction intelligente de la puissance perdue (MW) depuis le texte des remarques ou d'une colonne dédiée si présente
                         let unavailMW = 0;
                         let matchMw = remarks.match(/(\d+)\s*mw/);
                         if (matchMw) {
@@ -233,7 +228,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement environnemental nucléaire trouvé. Vérifiez que le fichier contient bien des lignes avec 'Nucléaire' et 'Environmental losses'.");
+                throw new Error("Aucun événement environnemental nucléaire trouvé. Vérifiez que le fichier contient bien des lignes avec 'Nucléaire' et 'Environmental issues' / 'environ'.");
             }
 
             let labelsJours = [];
