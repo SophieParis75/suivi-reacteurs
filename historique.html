@@ -158,13 +158,28 @@
             reader.readAsText(file);
         }
 
+        function detecterSeparateur(ligne) {
+            const separateurs = [';', ',', '\t'];
+            let meilleurSep = ';';
+            let maxCols = 0;
+            separateurs.forEach(sep => {
+                const cols = ligne.split(sep);
+                if (cols.length > maxCols) {
+                    maxCols = cols.length;
+                    meilleurSep = sep;
+                }
+            });
+            return meilleurSep;
+        }
+
         function analyserEtTracerCumul(csvText) {
             const textePropre = csvText.replace(/^\uFEFF/, '');
             const lignes = textePropre.split(/\r\n|\n/).filter(l => l.trim() !== '');
             
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            const separateur = '\t';
+            // Détection automatique du séparateur (;, , ou \t)
+            const separateur = detecterSeparateur(lignes[0]);
 
             let indexLigneEntetes = -1;
             let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
@@ -175,20 +190,20 @@
                 
                 let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
                 let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
-                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
+                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel') || h.includes('production unit'));
 
-                if (s !== -1 && st !== -1 && f !== -1) {
+                if (s !== -1 && st !== -1) {
                     indexLigneEntetes = i;
                     idxStart = s;
                     idxStop = st;
-                    idxFuel = f;
-                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information'));
+                    idxFuel = f !== -1 ? f : cols.findIndex(h => h.includes('unit') || h.includes('facility'));
+                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information') || h.includes('message') || h.includes('description'));
                     break;
                 }
             }
 
             if (indexLigneEntetes === -1) {
-                throw new Error("Impossible de trouver la ligne d'en-têtes (colonnes 'Date de début' / 'Start', 'Filière' / 'Fuel').");
+                throw new Error("Impossible de localiser les colonnes de dates dans le fichier.");
             }
 
             let evenementsEnv = [];
@@ -199,11 +214,11 @@
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const remarks = idxRemarks !== -1 ? cols.slice(idxRemarks).join(' ').toLowerCase() : ''; // Regroupe toutes les colonnes de remarques si elles éclatent
+                const remarks = idxRemarks !== -1 ? cols.slice(idxRemarks).join(' ').toLowerCase() : cols.join(' ').toLowerCase();
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
 
-                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || fuel.includes('nuclear');
-                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature');
+                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || fuel.includes('nuclear') || remarks.includes('nuclear') || remarks.includes('nucléaire');
+                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature') || remarks.includes('weather') || remarks.includes('heat');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let dDebut = new Date(startStr);
