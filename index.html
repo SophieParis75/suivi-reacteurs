@@ -506,7 +506,6 @@ tousLesReacteursUniques.forEach(reacteur => {
 document.getElementById('changesBody').innerHTML = phrases.length > 0 
     ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
     : 'Aucun changement significatif de capacité ou de durée constaté.';
-
 			
 	// --- AJOUTS POUR LE GRAPHIQUE ---
            localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
