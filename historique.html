@@ -164,13 +164,13 @@
             
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            // Indices exacts basés sur votre structure :
-            // E (4) = Filière, F (5) = Date de début, G (6) = Date de fin, J (9) = Information complémentaire
+            // Index des colonnes d'après votre structure :
+            // E (4) = Filière, F (5) = Date de début, G (6) = Date de fin
             const indexLigneEntetes = 1;
-            const idxFuel = 4;      
             const idxStart = 5;     
             const idxStop = 6;      
-            const idxRemarks = 9;   
+            const idxPMax = 10;     // Puissance nominale
+            const idxPDispo = 11;   // Puissance disponible
 
             let evenementsEnv = [];
 
@@ -180,13 +180,15 @@
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const fuel = cols[idxFuel] ? cols[idxFuel].toLowerCase() : '';
-                const remarks = idxRemarks < cols.length && cols[idxRemarks] ? cols[idxRemarks].toLowerCase() : cols.join(' ').toLowerCase();
+                
+                // On fusionne toute la ligne en minuscules pour s'assurer de ne rater aucun mot-clé peu importe la colonne
+                const ligneComplete = cols.join(' ').toLowerCase();
 
-                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
-                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature') || remarks.includes('externes');
+                const estNucleaire = ligneComplete.includes('nucléaire') || ligneComplete.includes('nucleaire');
+                const estEnvironnement = ligneComplete.includes('environ') || ligneComplete.includes('climat') || ligneComplete.includes('température') || ligneComplete.includes('chaleur') || ligneComplete.includes('temperature') || ligneComplete.includes('externes');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
+                    
                     let parseDateEDF = (str) => {
                         let parts = str.split(' ');
                         if (parts.length < 2) return new Date(str);
@@ -202,11 +204,11 @@
                     let dFin = parseDateEDF(stopStr);
                     
                     if (!isNaN(dDebut) && !isNaN(dFin)) {
-                        let unavailMW = 0;
-                        let matchMw = remarks.match(/(\d+)\s*mw/);
-                        if (matchMw) {
-                            unavailMW = parseFloat(matchMw[1]);
-                        } else {
+                        let pMax = parseFloat(cols[idxPMax]) || 0;
+                        let pDispo = parseFloat(cols[idxPDispo]) || 0;
+                        let unavailMW = pMax - pDispo;
+
+                        if (unavailMW <= 0) {
                             unavailMW = 900; 
                         }
 
@@ -220,7 +222,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Structure lue, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
+                throw new Error("Aucun événement 'Nucléaire' lié à l'environnement n'a été isolé. Vérifiez que le fichier contient bien des lignes avec ces critères.");
             }
 
             let labelsJours = [];
@@ -341,7 +343,7 @@
                                 generateLabels: function(chart) {
                                     return [
                                         {
-                                            text: '2015 - 2025',
+                                            text: 'Historique',
                                             fillStyle: 'rgba(180, 180, 180, 0.7)',
                                             strokeStyle: 'rgba(180, 180, 180, 0.7)',
                                             lineWidth: 3,
