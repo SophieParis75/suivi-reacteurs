@@ -84,7 +84,7 @@
                 <button onclick="chargerFichierLocal()">Analyse</button>
             </div>
         </div>
-<div id="resultats" style="display:none;">
+        <div id="resultats" style="display:none;">
             <!-- Renvoi vers la page de l'historique des indisponibilités -->
             <div style="margin-bottom: 20px; text-align: left;">
                 <a href="historique.html" target="_blank" class="btn-link" style="background: #0056b3; font-size: 14px;">👉 Voir l'historique des indisponibilités</a>
@@ -129,12 +129,12 @@
                 </thead>
                 <tbody></tbody>
             </table>
-	    <h2>📝 Synthèse des changements</h2>
-	<div class="news-box" style="border-top: 4px solid #0056b3;">
-	    <div id="changesBody"></div>
-	</div>
+            <h2>📝 Synthèse des changements</h2>
+            <div class="news-box" style="border-top: 4px solid #0056b3;">
+                <div id="changesBody"></div>
+            </div>
 
-<h2>📌 Liste des réacteurs indisponibles à T1</h2>
+            <h2>📌 Liste des réacteurs indisponibles à T1</h2>
             <table id="tableIndisponiblesT1">
                 <thead>
                     <tr>
@@ -146,7 +146,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
-	
+
             <h2>📌 Liste des réacteurs indisponibles à T2</h2>
             <table id="tableIndisponiblesT2">
                 <thead>
@@ -235,7 +235,7 @@
             reader.readAsText(file);
         }
 
-function analyserDonneesBrutes(strXML) {
+        function analyserDonneesBrutes(strXML) {
             const datePivot = new Date(document.getElementById('datePivot').value);
             const dateT2 = new Date(document.getElementById('dateComparaison').value);
             
@@ -256,7 +256,6 @@ function analyserDonneesBrutes(strXML) {
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
 
-                // Extraction sécurisée de la date de publication (cherche dans le texte ou la balise)
                 const pubDateTag = items[i].getElementsByTagName("pubDate")[0];
                 let pubDateStr = pubDateTag ? pubDateTag.textContent : '';
                 if (!pubDateStr) {
@@ -476,148 +475,6 @@ function analyserDonneesBrutes(strXML) {
                 '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
 
             document.getElementById('resultats').style.display = 'block';
-        }
-            let htmlChangements = '';
-            let countPlus = 0;
-            let countMoins = 0;
-
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
-                const diff = capT2 - capT1;
-
-                if (diff > 0) {
-                    countPlus++;
-                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Restriction accrue / Nouvel arrêt</td></tr>`;
-                } else if (diff < 0) {
-                    countMoins++;
-                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
-                }
-            });
-
-            document.getElementById('countPlus').innerText = countPlus;
-            document.getElementById('countMoins').innerText = countMoins;
-            document.getElementById('tableChangements').getElementsByTagName('tbody')[0].innerHTML = htmlChangements || `<tr><td colspan="5" class="stable">Aucun changement constaté sur le parc entre ces deux jalons. Indisponibilité stable.</td></tr>`;
-
-            const deAuj = new Date(dateT2); deAuj.setHours(0,0,0,0);
-            const aAuj = new Date(dateT2); aAuj.setHours(23,59,59,999);
-            const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
-            const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
-
-            function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
-                let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
-                evenementsFiltres.forEach(ev => {
-                    if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
-                    if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
-                });
-
-                let chronologie = Array.from(pointsDeTemps).sort((a, b) => a - b);
-                let segments = [];
-                let maxPuissance = 0;
-                let topInstantMilli = null;
-
-                for (let i = 0; i < chronologie.length - 1; i++) {
-                    let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
-                    let puissanceSegment = 0;
-
-                    evenementsFiltres.forEach(ev => {
-                        if (instantMilieu >= ev.dateDebut && instantMilieu <= ev.dateFin) puissanceSegment += ev.unavailable;
-                    });
-
-                    if (puissanceSegment > maxPuissance) {
-                        maxPuissance = puissanceSegment;
-                        topInstantMilli = instantMilieu.getTime();
-                    }
-                    segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
-                }
-
-                let creneauxPic = [];
-                if (maxPuissance > 0) {
-                    segments.forEach(seg => {
-                        if (seg.h === maxPuissance) creneauxPic.push(`${formaterHeure(seg.start)}-${formaterHeure(seg.end)}`);
-                    });
-                }
-
-                let reacteursDuPic = [];
-                if (topInstantMilli) {
-                    let cible = new Date(topInstantMilli);
-                    evenementsFiltres.forEach(ev => {
-                        if (cible >= ev.dateDebut && cible <= ev.dateFin) reacteursDuPic.push(ev);
-                    });
-                }
-
-                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', list: reacteursDuPic };
-            }
-
-            const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
-            const resultatDemain = analyserPicJourEtExtraireReacteurs(deDemain, aDemain);
-
-            document.getElementById('tableResume').getElementsByTagName('tbody')[0].innerHTML = `
-                <tr>
-                    <td class="highlight">${sommeMaintenant} MW</td>
-                    <td class="highlight">${totalT2} MW</td>
-                    <td class="highlight">${resultatAuj.max} MW</td>
-                    <td>${resultatAuj.intervals}</td>
-                    <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
-                    <td class="highlight">${resultatDemain.max} MW</td>
-                    <td>${resultatDemain.intervals}</td>
-                    <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
-                </tr>
-            `;
-
-            let htmlAuditAuj = '';
-            resultatAuj.list.forEach(ev => {
-                htmlAuditAuj += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
-            });
-            document.getElementById('tableAuditAuj').getElementsByTagName('tbody')[0].innerHTML = htmlAuditAuj || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
-
-            let htmlAuditDemain = '';
-            resultatDemain.list.forEach(ev => {
-                htmlAuditDemain += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
-            });
-            document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
-
-// --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
-            let phrases = [];
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
-                const diff = capT2 - capT1;
-
-                // Chercher les événements pour comparer les dates de fin
-                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
-                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
-
-                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
-                    let phrase = `<strong>${reacteur}</strong> : `;
-                    
-                    // Analyse capacité
-                    if (capT1 === 0 && capT2 > 0) phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
-                    else if (capT1 > 0 && capT2 === 0) phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
-                    else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
-
-                    // Analyse durée
-                    if (evT1 && evT2) {
-                        const deltaMs = evT2.dateFin - evT1.dateFin;
-                        if (Math.abs(deltaMs) >= 3600000) {
-                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
-                            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
-                        }
-                    }
-                    phrases.push(phrase);
-                }
-            });
-            document.getElementById('changesBody').innerHTML = phrases.length > 0 
-                ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
-                : 'Aucun changement significatif de capacité ou de durée constaté.';
-	// --- AJOUTS POUR LE GRAPHIQUE ---
-           localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
-            document.getElementById('resultats').innerHTML += 
-                '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
-
-            document.getElementById('resultats').style.display = 'block';
-
-
         }
     </script>
 </body>
