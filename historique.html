@@ -164,58 +164,27 @@
             
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            let indexLigneEntetes = -1;
-            let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
-
-            // Recherche de la ligne d'en-tête (généralement la 2ème ligne, index 1, après l'export info)
-            for (let i = 0; i < Math.min(lignes.length, 5); i++) {
-                let cols = lignes[i].split(';').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
-                
-                let s = cols.findIndex(h => h.includes('date de début') || h.includes('date de debut') || h === 'start');
-                let st = cols.findIndex(h => h.includes('date de fin') || h === 'stop' || h === 'end');
-                let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h === 'fuel');
-
-                if (s !== -1 && st !== -1) {
-                    indexLigneEntetes = i;
-                    idxStart = s;
-                    idxStop = st;
-                    idxFuel = f !== -1 ? f : 2; // Colonne C par défaut si non trouvée
-                    idxRemarks = cols.findIndex(h => h.includes('information complémentaire') || h.includes('information complementaire') || h.includes('cause'));
-                    break;
-                }
-            }
-
-            // Fallback forcé si la détection automatique échoue à cause de subtilités d'accents
-            if (indexLigneEntetes === -1 && lignes.length > 1) {
-                indexLigneEntetes = 1; // Ligne des en-têtes standard EDF
-                let cols = lignes[indexLigneEntetes].split(';').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
-                idxStart = cols.findIndex(h => h.includes('début') || h.includes('debut'));
-                idxStop = cols.findIndex(h => h.includes('fin'));
-                idxFuel = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('type'));
-                idxRemarks = cols.findIndex(h => h.includes('information') || h.includes('cause'));
-            }
-
-            if (idxStart === -1 || idxStop === -1) {
-                // Forçage direct basé sur votre description (Colonnes F et G soit indices 4 et 5)
-                idxStart = 4;
-                idxStop = 5;
-                idxFuel = 2;
-                idxRemarks = 8;
-                indexLigneEntetes = 1;
-            }
+            // Structure exacte fournie :
+            // Ligne 0 = Métadonnées ("Export de toutes les versions...")
+            // Ligne 1 = En-têtes (A:Statut, B:Numéro version, C:Identifiant, D:Nom, E:Filière, F:Date de début, G:Date de fin, H:Type, I:Cause, J:Information complémentaire)
+            const indexLigneEntetes = 1;
+            const idxFuel = 4;      // Colonne E (Filière)
+            const idxStart = 5;     // Colonne F (Date de début)
+            const idxStop = 6;      // Colonne G (Date de fin)
+            const idxRemarks = 9;   // Colonne J (Information complémentaire)
 
             let evenementsEnv = [];
 
             for (let i = indexLigneEntetes + 1; i < lignes.length; i++) {
                 const cols = lignes[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
-                if (cols.length <= Math.max(idxStart, idxStop)) continue;
+                if (cols.length <= idxStop) continue;
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const remarks = idxRemarks !== -1 && cols[idxRemarks] ? cols[idxRemarks].toLowerCase() : cols.join(' ').toLowerCase();
-                const fuel = idxFuel !== -1 && cols[idxFuel] ? cols[idxFuel].toLowerCase() : '';
+                const fuel = cols[idxFuel] ? cols[idxFuel].toLowerCase() : '';
+                const remarks = idxRemarks < cols.length && cols[idxRemarks] ? cols[idxRemarks].toLowerCase() : cols.join(' ').toLowerCase();
 
-                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || remarks.includes('nucléaire');
+                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
                 const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature') || remarks.includes('externes');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
@@ -252,7 +221,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Structure lue (Colonnes F et G identifiées), mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
+                throw new Error("Structure lue avec succès, mais aucun événement 'Nucléaire' lié à l'environnement n'a été isolé avec ces critères.");
             }
 
             let labelsJours = [];
