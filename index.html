@@ -256,9 +256,12 @@ function analyserDonneesBrutes(strXML) {
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
 
-                // Récupération de la pubDate native du flux RSS (<pubDate>)
-                const pubDateNode = items[i].getElementsByTagName("pubDate")[0];
-                const pubDateStr = pubDateNode ? pubDateNode.textContent : '';
+                // Extraction sécurisée de la date de publication (cherche dans le texte ou la balise)
+                const pubDateTag = items[i].getElementsByTagName("pubDate")[0];
+                let pubDateStr = pubDateTag ? pubDateTag.textContent : '';
+                if (!pubDateStr) {
+                    pubDateStr = extraireChampStrict(texteHTML, "Publication date / time");
+                }
 
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
@@ -270,17 +273,18 @@ function analyserDonneesBrutes(strXML) {
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
 
-                        if(eventStartStr && eventStopStr && pubDateStr) {
+                        if(eventStartStr && eventStopStr) {
                             evenementsFiltres.push({
                                 asset, installed, unavailable, available, 
                                 dateDebut: new Date(eventStartStr), 
                                 dateFin: new Date(eventStopStr),
-                                pubDate: new Date(pubDateStr)
+                                pubDate: pubDateStr ? new Date(pubDateStr) : new Date(0)
                             });
                             tousLesReacteursUniques.add(asset);
                         }
                     }
                 }
+            }
             }
 
             localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
