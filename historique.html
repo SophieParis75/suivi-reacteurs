@@ -159,35 +159,43 @@
         }
 
         function analyserEtTracerCumul(csvText) {
-            const lignes = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
+            const textePropre = csvText.replace(/^\uFEFF/, '');
+            const lignes = textePropre.split(/\r\n|\n/).filter(l => l.trim() !== '');
+            
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
-            // Le fichier utilise des tabulations
             const separateur = '\t';
 
-            let indexLigneEntetes = -1;
-            let idxStart = -1, idxStop = -1, idxRemarks = -1, idxFuel = -1;
+            // D'après la structure officielle, les en-têtes se trouvent sur la 2ème ligne (index 1)
+            let indexLigneEntetes = 1;
+            let colsEntetes = lignes[indexLigneEntetes].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
 
-            // Recherche ciblée de la ligne contenant 'statut' et des dates
-            for (let i = 0; i < Math.min(lignes.length, 10); i++) {
-                let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
-                
-                let statut = cols.findIndex(h => h.includes('statut') || h.includes('status'));
-                let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
-                let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
+            let idxStart = colsEntetes.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
+            let idxStop = colsEntetes.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
+            let idxFuel = colsEntetes.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
+            let idxRemarks = colsEntetes.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information'));
 
-                if (statut !== -1 && s !== -1 && st !== -1) {
-                    indexLigneEntetes = i;
-                    idxStart = s;
-                    idxStop = st;
-                    idxFuel = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
-                    idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause'));
-                    break;
+            if (idxStart === -1 || idxStop === -1 || idxFuel === -1) {
+                // Fallback de sécurité si l'index diffère légèrement
+                indexLigneEntetes = 0;
+                for (let i = 0; i < Math.min(lignes.length, 5); i++) {
+                    let cols = lignes[i].split(separateur).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+                    let s = cols.findIndex(h => h.includes('début') || h.includes('debut') || h.includes('start'));
+                    let st = cols.findIndex(h => h.includes('fin') || h.includes('stop') || h.includes('end'));
+                    let f = cols.findIndex(h => h.includes('filière') || h.includes('filiere') || h.includes('fuel'));
+                    if (s !== -1 && st !== -1 && f !== -1) {
+                        indexLigneEntetes = i;
+                        idxStart = s;
+                        idxStop = st;
+                        idxFuel = f;
+                        idxRemarks = cols.findIndex(h => h.includes('complémentaire') || h.includes('complementaire') || h.includes('remarque') || h.includes('cause') || h.includes('information'));
+                        break;
+                    }
                 }
             }
 
-            if (indexLigneEntetes === -1) {
-                throw new Error("Impossible de trouver la ligne d'en-têtes ('Statut', 'Date de début', etc.) dans le CSV.");
+            if (idxStart === -1 || idxStop === -1) {
+                throw new Error("Impossible de localiser les colonnes de dates dans le fichier.");
             }
 
             let evenementsEnv = [];
@@ -201,9 +209,8 @@
                 const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
                 const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : '';
 
-                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire');
-                // Détection élargie des critères environnementaux visibles dans vos exemples ("environnement", "Environmental issues")
-                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur');
+                const estNucleaire = fuel.includes('nucléaire') || fuel.includes('nucleaire') || fuel.includes('nuclear');
+                const estEnvironnement = remarks.includes('environ') || remarks.includes('climat') || remarks.includes('température') || remarks.includes('chaleur') || remarks.includes('temperature');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let dDebut = new Date(startStr);
@@ -215,7 +222,7 @@
                         if (matchMw) {
                             unavailMW = parseFloat(matchMw[1]);
                         } else {
-                            unavailMW = 900; // Valeur par défaut standard si non précisée
+                            unavailMW = 900; 
                         }
 
                         evenementsEnv.push({
@@ -228,7 +235,7 @@
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement environnemental nucléaire trouvé. Vérifiez que le fichier contient bien des lignes avec 'Nucléaire' et 'Environmental issues' / 'environ'.");
+                throw new Error("Structure lue avec succès, mais aucun événement 'Nucléaire' lié à l'environnement n'a été trouvé avec ces critères.");
             }
 
             let labelsJours = [];
