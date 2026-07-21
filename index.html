@@ -223,7 +223,7 @@
             reader.readAsText(file);
         }
 
-        function analyserDonneesBrutes(strXML) {
+		function analyserDonneesBrutes(strXML) {
             const datePivot = new Date(document.getElementById('datePivot').value);
             const dateT2 = new Date(document.getElementById('dateComparaison').value);
             
@@ -231,42 +231,61 @@
             const xmlDoc = parser.parseFromString(strXML, "text/xml");
             const items = xmlDoc.getElementsByTagName("item");
 
-            let evenementsFiltres = [];
+            let mapEvenementsUniques = new Map();
             let tousLesReacteursUniques = new Set();
 
             for (let i = 0; i < items.length; i++) {
                 const descNode = items[i].getElementsByTagName("description")[0];
+                const linkNode = items[i].getElementsByTagName("link")[0];
                 if (!descNode) continue;
                 
                 const texteHTML = descNode.textContent || descNode.innerHTML;
+                const linkText = linkNode ? (linkNode.textContent || linkNode.innerHTML) : '';
+
+                // Extraction de l'identifiant unique (mrid)
+                let mridMatch = linkText.match(/mrid=([^&]+)/);
+                let mrid = mridMatch ? mridMatch[1] : `item_${i}`;
 
                 const eventStatus = extraireChampStrict(texteHTML, "Event status");
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
+                const pubDateStr = extraireChampStrict(texteHTML, "Publication date / time");
 
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
-                   if (remLower.includes("environ")) {
+                    if (remLower.includes("environ")) {
                         
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-						const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-						const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+                        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+                        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
                         const available = installed - unavailable;
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
 
                         if(eventStartStr && eventStopStr) {
-                            evenementsFiltres.push({
-                                asset, installed, unavailable, available, 
+                            const pubDate = pubDateStr ? new Date(pubDateStr) : new Date(0);
+                            
+                            const eventObj = {
+                                mrid, asset, installed, unavailable, available, 
                                 dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr)
-                            });
+                                dateFin: new Date(eventStopStr),
+                                pubDate
+                            };
+
+                            // Conserve uniquement la version la plus récente du même mrid
+                            if (!mapEvenementsUniques.has(mrid) || mapEvenementsUniques.get(mrid).pubDate < pubDate) {
+                                mapEvenementsUniques.set(mrid, eventObj);
+                            }
                             tousLesReacteursUniques.add(asset);
                         }
                     }
                 }
             }
-localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
+
+            // Transformation de la Map en tableau unique de travail
+            let evenementsFiltres = Array.from(mapEvenementsUniques.values());
+
+            localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
@@ -275,7 +294,7 @@ localStorage.setItem('dateT2', document.getElementById('dateComparaison').value)
             let totalT2 = 0;
             let listReacteursT2 = [];
 
-            evenementsFiltres.forEach(ev => {
+            evenementsFiltres.eventsFiltres = evenementsFiltres.forEach(ev => {
                 if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
                     pannesA_T1[ev.asset] += ev.unavailable;
                     sommeMaintenant += ev.unavailable;
