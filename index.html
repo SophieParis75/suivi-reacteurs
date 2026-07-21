@@ -296,19 +296,18 @@
             let listReacteursT2 = [];
 
           // --- FILTRAGE HISTORIQUE T1 (Dernier message publié avant T1) ---
-            tousLesReacteursUniques.forEach(reacteur => {
-                const versionsT1 = evenementsFiltres.filter(e => e.asset === reacteur && e.pubDate <= datePivot);
-                if (versionsT1.length > 0) {
-                    versionsT1.sort((a, b) => a.pubDate - b.pubDate);
-                    const dernierEvT1 = versionsT1[versionsT1.length - 1];
+tousLesReacteursUniques.forEach(reacteur => {
+                // On cherche toutes les versions de l'événement qui ont un impact à la date T1 (début <= T1 et fin >= T1)
+                const versionsConcerneesT1 = evenementsFiltres.filter(e => e.asset === reacteur && e.dateDebut <= datePivot && e.dateFin >= datePivot);
+                
+                if (versionsConcerneesT1.length > 0) {
+                    // Parmi ces versions, on prend la plus récente publiée (pubDate la plus grande)
+                    versionsConcerneesT1.sort((a, b) => a.pubDate - b.pubDate);
+                    const dernierEvT1 = versionsConcerneesT1[versionsConcerneesT1.length - 1];
 
-                    // CORRECTION : On s'assure que l'événement couvre bien la date T1 
-                    // (on tolère une micro-marge de seconde ou on vérifie strictement l'inclusion)
-                    if (dernierEvT1.dateDebut <= datePivot && dernierEvT1.dateFin >= datePivot) {
-                        pannesA_T1[reacteur] += dernierEvT1.unavailable;
-                        sommeMaintenant += dernierEvT1.unavailable;
-                        listReacteursT1.push(dernierEvT1);
-                    }
+                    pannesA_T1[reacteur] += dernierEvT1.unavailable;
+                    sommeMaintenant += dernierEvT1.unavailable;
+                    listReacteursT1.push(dernierEvT1);
                 }
             });
 
