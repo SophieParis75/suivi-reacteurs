@@ -457,38 +457,55 @@
             document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
 
 // --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
-            let phrases = [];
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
-                const diff = capT2 - capT1;
+let phrases = [];
+tousLesReacteursUniques.forEach(reacteur => {
+    const capT1 = pannesA_T1[reacteur] || 0;
+    const capT2 = pannesA_T2[reacteur] || 0;
+    const diff = capT2 - capT1;
 
-                // Chercher les événements pour comparer les dates de fin
-                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
-                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
+    // Récupérer l'événement actif exact pour ce réacteur à T1 et à T2
+    const evT1 = evenementsActifsT1.find(e => e.asset === reacteur);
+    const evT2 = evenementsActifsT2.find(e => e.asset === reacteur);
 
-                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
-                    let phrase = `<strong>${reacteur}</strong> : `;
-                    
-                    // Analyse capacité
-                    if (capT1 === 0 && capT2 > 0) phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
-                    else if (capT1 > 0 && capT2 === 0) phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
-                    else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
+    let changementDuree = false;
+    let deltaMs = 0;
 
-                    // Analyse durée
-                    if (evT1 && evT2) {
-                        const deltaMs = evT2.dateFin - evT1.dateFin;
-                        if (Math.abs(deltaMs) >= 3600000) {
-                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
-                            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
-                        }
-                    }
-                    phrases.push(phrase);
-                }
-            });
-            document.getElementById('changesBody').innerHTML = phrases.length > 0 
-                ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
-                : 'Aucun changement significatif de capacité ou de durée constaté.';
+    if (evT1 && evT2) {
+        deltaMs = evT2.dateFin.getTime() - evT1.dateFin.getTime();
+        // Si la différence de durée est d'au moins 1 heure (3600000 ms)
+        if (Math.abs(deltaMs) >= 3600000) {
+            changementDuree = true;
+        }
+    }
+
+    // On déclenche si la capacité change OU si la durée de fin change pour un même réacteur actif
+    if (diff !== 0 || changementDuree || (capT1 === 0 && capT2 > 0) || (capT1 > 0 && capT2 === 0)) {
+        let phrase = `<strong>${reacteur}</strong> : `;
+        
+        // Analyse capacité
+        if (capT1 === 0 && capT2 > 0) {
+            phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
+        } else if (capT1 > 0 && capT2 === 0) {
+            phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
+        } else if (diff !== 0) {
+            phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
+        } else {
+            phrase += `Indisponibilité maintenue à ${capT2} MW.`;
+        }
+
+        // Analyse durée (prolongation ou raccourcissement)
+        if (changementDuree) {
+            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
+            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures (Fin initiale : ${formaterFull(evT1.dateFin)} -> Nouvelle fin : ${formaterFull(evT2.dateFin)}).`;
+        }
+        
+        phrases.push(phrase);
+    }
+});
+
+document.getElementById('changesBody').innerHTML = phrases.length > 0 
+    ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
+    : 'Aucun changement significatif de capacité ou de durée constaté.';
 	// --- AJOUTS POUR LE GRAPHIQUE ---
            localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
             document.getElementById('resultats').innerHTML += 
