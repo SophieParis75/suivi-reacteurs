@@ -1,314 +1,296 @@
 <!DOCTYPE html>
-
 <html lang="fr">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <title>Graphique des Indisponibilités</title>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historique - Pertes Climatiques Cumulées</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
-
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            color: #333;
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+        h2 {
+            color: #0056b3;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 5px;
+        }
+        .config-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            border-left: 5px solid #0056b3;
+        }
+        .step {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed #eee;
+        }
+        .step:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn-link {
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 5px;
+        }
+        .btn-link:hover {
+            background: #5a6268;
+        }
+        button {
+            padding: 10px 20px;
+            background: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #003d7a;
+        }
+        .container {
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        .chart-container {
+            position: relative;
+            height: 550px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .status {
+            margin-top: 15px;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
 </head>
-
 <body>
 
-    <h2>Indisponibilités nucléaires cumulées par jour</h2>
+    <div class="container">
+        <h2>Indisponibilités climatiques : historique des pertes cumulées (GWh)</h2>
 
-    <div style="width: 90%; margin: auto; height: 500px;">
+        <!-- Section de chargement du fichier CSV complet d'EDF -->
+        <div class="config-box">
+            <div class="step">
+                <label>1. Télécharger le fichier CSV complet d'EDF :</label>
+                <a href="https://doaat.edf.fr/en/doaat/export/full/csv?t=1784616949" target="_blank" class="btn-link">⬇️ Télécharger le CSV (Clic droit ; Enregistrer le lien sous...)</a>
+            </div>
+            
+            <div class="step">
+                <label for="fichierCsv">2. Charger le fichier CSV téléchargé :</label>
+                <input type="file" id="fichierCsv" accept=".csv">
+                <button onclick="chargerCsvHistorique()">Générer le graphique comparatif</button>
+            </div>
+            <div id="status" class="status">Veuillez charger le fichier CSV pour afficher l'historique cumulé.</div>
+        </div>
 
-        <canvas id="myChart"></canvas>
-
+        <div class="chart-container">
+            <canvas id="envChart"></canvas>
+        </div>
     </div>
 
-
-
     <script>
-
-        const dataJson = localStorage.getItem('graphData');
-
-        
-
-        if (dataJson) {
-
-            const rawData = JSON.parse(dataJson);
-
-            
-
-            // Dictionnaire en MAJUSCULES pour correspondre au XML
-
-            const configReacteurs = {
-
-                "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-
-                "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-
-                "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-
-                "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
-
-                "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-
-                "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-
-                "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-
-                "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-
-                "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-
-                "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-
-                "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-
-                "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-
-                "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-
-                "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-
-                "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-
-                "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-
-                "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-
-                "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-
-                "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-
-                "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-
-                "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-
-                "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-
-                "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-
-                "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-
-                "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-
-                "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-
-                "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-
-                "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-
-                "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-
-                "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-
-            };
-
-
-
-            // A. Préparation de la fonction de formatage pour les filtres plus bas
-
-            const getJour = (d) => new Date(d).toISOString().split('T')[0];
-
-
-
-           // 1. On récupère la date brute et on isole uniquement le YYYY-MM-DD
-
-const t2Stockee = localStorage.getItem('dateT2'); 
-
-const datePart = t2Stockee.split('T')[0]; 
-
-
-
-// 2. On crée l'objet date à partir de cette chaîne (interprété comme minuit UTC)
-
-let dateRef = new Date(datePart);
-
-
-
-// 3. On définit le point de départ : T2 - 1 jour
-
-let dateDepart = new Date(dateRef);
-
-dateDepart.setDate(dateRef.getDate() - 1); 
-
-
-
-// 4. Génération des 22 jours à partir de ce point
-
-let dates = [];
-
-for (let i = 0; i < 22; i++) {
-
-    let d = new Date(dateDepart);
-
-    d.setDate(dateDepart.getDate() + i);
-
-    dates.push(d.toISOString().split('T')[0]);
-
-}
-
-        
-
-            // C. Définition fixe des réacteurs (ceux que vous avez configurés)
-
-            const reacteurs = Object.keys(configReacteurs);
-
-            
-
-            const datasets = reacteurs.map(r => {
-
-                // On met le nom trouvé dans le XML en majuscules pour comparer
-
-                const nomRecherche = r.toUpperCase().trim();
-
-                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
-
-                
-
-                let bg = cfg.color;
-
-                if (typeof pattern !== 'undefined' && pattern.draw) {
-
-                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch(e) {}
-
+        let myChartInstance = null;
+
+        function chargerCsvHistorique() {
+            const fileInput = document.getElementById('fichierCsv');
+            const statusEl = document.getElementById('status');
+
+            if (fileInput.files.length === 0) {
+                alert("Veuillez sélectionner le fichier CSV d'EDF.");
+                return;
+            }
+
+            statusEl.textContent = "Traitement et cumul des pertes environnementales...";
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    analyserEtTracerCumul(e.target.result);
+                    statusEl.textContent = "Graphique généré avec succès.";
+                } catch (err) {
+                    statusEl.textContent = "Erreur lors du traitement du CSV.";
+                    console.error(err);
                 }
+            };
+            reader.readAsText(file);
+        }
 
-          return {
+        function analyserEtTracerCumul(csvText) {
+            const lignes = csvText.split(/\r\n|\n/);
+            if (lignes.length < 2) return;
 
-    label: r,
+            const separateur = lignes[0].includes(';') ? ';' : ',';
+            const enTetes = lignes[0].split(separateur).map(h => h.replace(/"/g, '').trim());
 
-    data: dates.map(d => {
+            const idxStart = enTetes.findIndex(h => h.toLowerCase().includes('start'));
+            const idxStop = enTetes.findIndex(h => h.toLowerCase().includes('stop') || h.toLowerCase().includes('end'));
+            const idxUnavail = enTetes.findIndex(h => h.toLowerCase().includes('unavailable'));
+            const idxRemarks = enTetes.findIndex(h => h.toLowerCase().includes('remark'));
+            const idxFuel = enTetes.findIndex(h => h.toLowerCase().includes('fuel'));
 
-        let debutJour = new Date(d);
+            let evenementsEnv = [];
 
-        debutJour.setHours(0, 0, 0, 0);
-
-        let finJour = new Date(debutJour.getTime() + 86400000); 
-
-
-
-        const evenementsDuJour = rawData.filter(i => {
-
-            let debutEvt = new Date(i.dateDebut);
-
-            let finEvt = new Date(i.dateFin);
-
-            return i.asset.toUpperCase().trim() === r.toUpperCase().trim() && 
-
-                   debutEvt < finJour && 
-
-                   finEvt > debutJour;
-
-        });
-
-
-
-        if (evenementsDuJour.length === 0) return 0;
-
-
-
-        let timeline = [];
-
-        evenementsDuJour.forEach(e => {
-
-            let debutEvt = new Date(e.dateDebut);
-
-            let finEvt = new Date(e.dateFin);
-
-
-
-            let mDebut = Math.max(0, Math.floor((debutEvt - debutJour) / 60000));
-
-            let mFin = Math.min(1440, Math.ceil((finEvt - debutJour) / 60000));
-
-
-
-            timeline.push({ m: mDebut, type: 1, val: Number(e.unavailable || 0) });
-
-            timeline.push({ m: mFin, type: -1, val: Number(e.unavailable || 0) });
-
-        });
-
-
-
-        timeline.sort((a, b) => a.m - b.m || a.type - b.type);
-
-
-
-        let picMax = 0;
-
-        let courant = 0;
-
-        timeline.forEach(step => {
-
-            courant += (step.type * step.val);
-
-            if (courant > picMax) picMax = courant;
-
-        });
-
-
-
-        return picMax; // On retourne le nombre ici, fini.
-
-    }), 
-
-    backgroundColor: bg
-
-};      
-
+            for (let i = 1; i < lignes.length; i++) {
+                if (!lignes[i].trim()) continue;
+                const cols = lignes[i].split(separateur).map(c => c.replace(/^"|"$/g, '').trim());
                 
+                const startStr = cols[idxStart] || '';
+                const stopStr = cols[idxStop] || '';
+                const unavailMW = parseFloat(cols[idxUnavail]) || 0;
+                const remarks = idxRemarks !== -1 ? cols[idxRemarks].toLowerCase() : '';
+                const fuel = idxFuel !== -1 ? cols[idxFuel].toLowerCase() : 'nuclear';
 
+                // Filtrage strict demandé : environnemental (climatique) et nucléaire
+                if (fuel.includes('nuclear') && remarks.includes("environ") && startStr && stopStr) {
+                    evenementsEnv.push({
+                        dateDebut: new Date(startStr),
+                        dateFin: new Date(stopStr),
+                        unavailableMW: unavailMW
+                    });
+                }
+            }
+
+            // Définition de la période de référence de l'axe X (ex: du 1er mai au 15 novembre, format MM-DD)
+            // On génère la liste des jours de référence (ex: 1er mai de l'année type jusqu'au 15 nov)
+            let labelsJours = [];
+            let refDate = new Date(2024, 4, 1); // 1er mai (mois 4 = mai)
+            let endDate = new Date(2024, 10, 15); // 15 novembre
+
+            let mapJourIndex = {}; // "MM-DD" -> index dans le tableau
+            let idxCounter = 0;
+            while (refDate <= endDate) {
+                let m = String(refDate.getMonth() + 1).padStart(2, '0');
+                let d = String(refDate.getDate()).padStart(2, '0');
+                let mmdd = `${m}-${d}`;
+                labelsJours.push(mmdd);
+                mapJourIndex[mmdd] = idxCounter++;
+                refDate.setDate(refDate.getDate() + 1);
+            }
+
+            // Regrouper les événements par année civile
+            let dataParAnnee = {}; // Année -> Tableau journalier de pertes en GWh
+
+            // Identifier l'année en cours
+            const anneeEnCours = new Date().getFullYear().toString();
+
+            // Remplir les pertes journalières (converties en GWh : MW * heures / 1000)
+            evenementsEnv.forEach(ev => {
+                let curr = new Date(ev.dateDebut);
+                while (curr <= ev.dateFin) {
+                    let y = curr.getFullYear().toString();
+                    let m = String(curr.getMonth() + 1).padStart(2, '0');
+                    let d = String(curr.getDate()).padStart(2, '0');
+                    let mmdd = `${m}-${d}`;
+
+                    if (mapJourIndex[mmdd] !== undefined) {
+                        if (!dataParAnnee[y]) {
+                            dataParAnnee[y] = new Array(labelsJours.length).fill(0);
+                        }
+                        // Estimation de l'énergie perdue sur la journée en GWh (MW * 24h / 1000) ou proportionnelle
+                        let energieJourGWh = (ev.unavailableMW * 24) / 1000; 
+                        dataParAnnee[y][mapJourIndex[mmdd]] += energieJourGWh;
+                    }
+                    curr.setDate(curr.getDate() + 1);
+                }
             });
 
+            // Transformer en courbes cumulées (somme croissante au fil des jours)
+            let datasets = [];
+            let anneesDisponibles = Object.keys(dataParAnnee).sort();
 
+            anneesDisponibles.forEach(annee => {
+                let cumul = 0;
+                let dataCumulee = dataParAnnee[annee].map(val => {
+                    cumul += val;
+                    return Number(cumul.toFixed(2));
+                });
 
-            new Chart(document.getElementById('myChart'), {
+                let estAnneeEnCours = (annee === anneeEnCours);
 
-                type: 'bar',
+                datasets.push({
+                    label: estAnneeEnCours ? 'Année en cours (' + annee + ')' : annee,
+                    data: dataCumulee,
+                    borderColor: estAnneeEnCours ? '#dc3545' : '#cccccc',
+                    backgroundColor: estAnneeEnCours ? '#dc3545' : '#cccccc',
+                    borderWidth: estAnneeEnCours ? 3 : 1.5,
+                    pointRadius: 0,
+                    tension: 0.1,
+                    order: estAnneeEnCours ? 1 : 2 // Année en cours au premier plan (rouge)
+                });
+            });
 
-                data: { labels: dates, datasets: datasets },
-
-             options: {
-        scales: {
-            x: {
-                stacked: true
-            },
-            y: {
-                stacked: true,
-                beginAtZero: true,
-                suggestedMax: 11000,
-                ticks: {
-                    stepSize: 1000
-                }
+            // Affichage du graphique Chart.js
+            const ctx = document.getElementById('envChart').getContext('2d');
+            if (myChartInstance) {
+                myChartInstance.destroy();
             }
-        },
-        plugins: {
-            tooltip: {
-                callbacks: {
-                    footer: (tooltipItems) => {
-                        const dataIndex = tooltipItems[0].dataIndex;
-                        const totalJour = tooltipItems[0].chart.data.datasets.reduce((somme, ds) => {
-                            return somme + (Number(ds.data[dataIndex]) || 0);
-                        }, 0);
-                        return `Pic de coupe simultanée : ${totalJour} MW`;
+
+            myChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labelsJours,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Date (Mois-Jour)' },
+                            grid: { color: '#eee' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Pertes totales (GWh)' },
+                            beginAtZero: true,
+                            grid: { color: '#eee' }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        legend: {
+                            position: 'top'
+                        }
                     }
                 }
-            }
+            });
         }
-    } 
-});
-
-        } else {
-
-            document.body.innerHTML = "<h2>Aucune donnée.</h2>";
-
-        }
-
     </script>
-
 </body>
-
-</html> 
-
+</html>
