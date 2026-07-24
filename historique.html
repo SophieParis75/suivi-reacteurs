@@ -165,57 +165,76 @@
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
             const indexLigneEntetes = 1;
-            const idxStart = 5;      // Colonne F (Date de début)
-            const idxStop = 6;       // Colonne G (Date de fin)
-            const idxPMax = 10;      // Colonne K (Puissance nominale)
-            const idxPDispo = 11;    // Colonne L (Puissance disponible)
+            // Repérons les indices colonnes d'après la structure classique EDF DOAAT :
+            // Souvent : ID message / Evénement, Numéro de version, Date début, Date fin, PMax, PDispo, etc.
+            // Ajustons selon la structure standard :
+            const idxIdMsg = 0;      // Colonne A : Identifiant de l'indisponibilité / message
+            const idxVersion = 1;    // Colonne B : Numéro de version du message
+            const idxStart = 5;      // Colonne F : Date de début
+            const idxStop = 6;       // Colonne G : Date de fin
+            const idxPMax = 10;      // Colonne K : Puissance nominale
+            const idxPDispo = 11;    // Colonne L : Puissance disponible
 
-            let evenementsEnv = [];
+            let evenementsBrutsParId = {};
 
             for (let i = indexLigneEntetes + 1; i < lignes.length; i++) {
                 const cols = lignes[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
                 if (cols.length <= idxStop) continue;
 
+                let idMsg = cols[idxIdMsg] || i; // Identifiant unique de l'événement
+                let versionMsg = parseInt(cols[idxVersion]) || 1; // Numéro de version
+
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                
                 const ligneComplete = cols.join(' ').toLowerCase();
 
-                // Application stricte : mot-clé nucléaire ET racine "environ"
                 const estNucleaire = ligneComplete.includes('nucl');
                 const estEnvironnement = ligneComplete.includes('environ');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
-                    let parseDateEDF = (str) => {
-                        let parts = str.split(' ');
-                        if (parts.length < 2) return new Date(str);
-                        let dateParts = parts[0].split('/');
-                        let timeParts = parts[1].split(':');
-                        if (dateParts.length === 3 && timeParts.length >= 2) {
-                            return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1]);
-                        }
-                        return new Date(str);
-                    };
+                    // On ne garde ou ne remplace que si c'est une version plus récente pour un même ID
+                    if (!evenementsBrutsParId[idMsg] || versionMsg >= evenementsBrutsParId[idMsg].version) {
+                        
+                        let parseDateEDF = (str) => {
+                            let parts = str.split(' ');
+                            if (parts.length < 2) return new Date(str);
+                            let dateParts = parts[0].split('/');
+                            let timeParts = parts[1].split(':');
+                            if (dateParts.length === 3 && timeParts.length >= 2) {
+                                return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1]);
+                            }
+                            return new Date(str);
+                        };
 
-                    let dDebut = parseDateEDF(startStr);
-                    let dFin = parseDateEDF(stopStr);
-                    
-                    if (!isNaN(dDebut) && !isNaN(dFin)) {
-                        let pMax = parseFloat(cols[idxPMax]) || 0;
-                        let pDispo = parseFloat(cols[idxPDispo]) || 0;
-                        let unavailMW = pMax - pDispo;
+                        let dDebut = parseDateEDF(startStr);
+                        let dFin = parseDateEDF(stopStr);
 
-                        // Suppression totale de la rustine des 900 MW : on ne garde que les pertes réelles strictement positives
-                        if (unavailMW > 0) {
-                            evenementsEnv.push({
-                                dateDebut: dDebut,
-                                dateFin: dFin,
-                                unavailableMW: unavailMW
-                            });
+                        if (!isNaN(dDebut) && !isNaN(dFin)) {
+                            let pMax = parseFloat(cols[idxPMax]) || 0;
+                            let pDispo = parseFloat(cols[idxPDispo]) || 0;
+                            let unavailMW = pMax - pDispo;
+
+                            if (unavailMW > 0) {
+                                evenementsBrutsParId[idMsg] = {
+                                    version: versionMsg,
+                                    dateDebut: dDebut,
+                                    dateFin: dFin,
+                                    unavailableMW: unavailMW
+                                };
+                            }
                         }
                     }
                 }
             }
+
+            // On transforme l'objet filtré en tableau propre
+            let evenementsEnv = Object.values(evenementsBrutsParId);
+
+            if (evenementsEnv.length === 0) {
+                throw new Error("Aucun événement 'nucl' avec la racine 'environ' n'a été isolé après filtrage des versions.");
+            }
+
+            // ... suite du traitement journalier et cumulé habituel ...
 
             if (evenementsEnv.length === 0) {
                 throw new Error("Aucun événement 'nucl' avec la racine 'environ' n'a été isolé. Vérifiez le contenu du fichier.");
