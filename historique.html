@@ -181,8 +181,9 @@
                 
                 const ligneComplete = cols.join(' ').toLowerCase();
 
+                // Application stricte : mot-clé nucléaire ET racine "environ"
                 const estNucleaire = ligneComplete.includes('nucl');
-                const estEnvironnement = ligneComplete.includes('environ') || ligneComplete.includes('climat') || ligneComplete.includes('temperature') || ligneComplete.includes('chaleur') || ligneComplete.includes('externes');
+                const estEnvironnement = ligneComplete.includes('environ');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
                     let parseDateEDF = (str) => {
@@ -204,21 +205,20 @@
                         let pDispo = parseFloat(cols[idxPDispo]) || 0;
                         let unavailMW = pMax - pDispo;
 
-                        if (unavailMW <= 0) {
-                            unavailMW = 900; 
+                        // Suppression totale de la rustine des 900 MW : on ne garde que les pertes réelles strictement positives
+                        if (unavailMW > 0) {
+                            evenementsEnv.push({
+                                dateDebut: dDebut,
+                                dateFin: dFin,
+                                unavailableMW: unavailMW
+                            });
                         }
-
-                        evenementsEnv.push({
-                            dateDebut: dDebut,
-                            dateFin: dFin,
-                            unavailableMW: unavailMW
-                        });
                     }
                 }
             }
 
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'nucl' lié à l'environnement n'a été isolé. Vérifiez le contenu du fichier.");
+                throw new Error("Aucun événement 'nucl' avec la racine 'environ' n'a été isolé. Vérifiez le contenu du fichier.");
             }
 
             let labelsJours = [];
@@ -308,7 +308,6 @@
                                 autoSkip: false,
                                 maxRotation: 0,
                                 callback: function(val, index) {
-                                    // Affiche uniquement le libellé si c'est le 1er du mois (ex: "1/5", "1/6", etc.)
                                     let lbl = displayLabels[val];
                                     if (lbl && (lbl.startsWith('1/') || lbl === '1/12')) {
                                         return lbl;
