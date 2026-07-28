@@ -247,9 +247,9 @@
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
 
-                if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
-                    const remLower = remarks.toLowerCase();
-                   if (remLower.includes("environ"))
+                if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase().includes("nucl")) {
+    const remLower = remarks.toLowerCase();
+    if (remLower.includes("environ"))
 					{
                         
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
