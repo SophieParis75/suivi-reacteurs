@@ -97,11 +97,11 @@
                         <th>Indisponibilités simultanées à T2</th>
                         <th>Pic d'indisponibilités simultanées Aujourd'hui (Max à T2)</th>
                         <th>Créneau(x) du Pic d'Aujourd'hui</th>
-                        <th>Cumul d'indisponibilité Aujourd'hui (MW)</th>
+                        <th>Cumul des indisponibilités Aujourd'hui (MW)</th>
                         <th>% Du parc indisponible au pic d'Aujourd'hui</th>
                         <th>Pic d'indisponibilités simultanées Demain (Max à T2)</th>
                         <th>Créneau(x) du Pic de Demain</th>
-                        <th>Cumul d'indisponibilité Demain (MW)</th>
+                        <th>Cumul des indisponibilités Demain (MW)</th>
                         <th>% Du parc indisponible au pic Demain</th>
                     </tr>
                 </thead>
@@ -381,12 +381,10 @@
                 let segments = [];
                 let maxPuissance = 0;
                 let topInstantMilli = null;
-                let sommeMWHeures = 0;
+                let sommeCumulMW = 0;
 
                 for (let i = 0; i < chronologie.length - 1; i++) {
-                    let tStart = chronologie[i];
-                    let tEnd = chronologie[i+1];
-                    let instantMilieu = new Date((tStart + tEnd) / 2);
+                    let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
                     let puissanceSegment = 0;
 
                     evenementsFiltres.forEach(ev => {
@@ -397,10 +395,10 @@
                         maxPuissance = puissanceSegment;
                         topInstantMilli = instantMilieu.getTime();
                     }
-                    segments.push({ start: new Date(tStart), end: new Date(tEnd), h: puissanceSegment });
-
-                    let dureeHeures = (tEnd - tStart) / (1000 * 60 * 60);
-                    sommeMWHeures += puissanceSegment * dureeHeures;
+                    segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
+                    
+                    // Somme des puissances indisponibles sur tous les segments distincts de la journée
+                    sommeCumulMW += puissanceSegment;
                 }
 
                 let creneauxPic = [];
@@ -418,7 +416,7 @@
                     });
                 }
 
-                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', cumulMW: Math.round(sommeMWHeures), list: reacteursDuPic };
+                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', cumulMW: sommeCumulMW, list: reacteursDuPic };
             }
 
             const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
@@ -430,11 +428,11 @@
                     <td class="highlight">${totalT2} MW</td>
                     <td class="highlight">${resultatAuj.max} MW</td>
                     <td>${resultatAuj.intervals}</td>
-                    <td><b>${resultatAuj.cumulMW.toLocaleString('fr-FR')} MW</b></td>
+                    <td class="highlight">${resultatAuj.cumulMW.toLocaleString('fr-FR')} MW</td>
                     <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                     <td class="highlight">${resultatDemain.max} MW</td>
                     <td>${resultatDemain.intervals}</td>
-                    <td><b>${resultatDemain.cumulMW.toLocaleString('fr-FR')} MW</b></td>
+                    <td class="highlight">${resultatDemain.cumulMW.toLocaleString('fr-FR')} MW</td>
                     <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                 </tr>
             `;
