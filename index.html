@@ -84,11 +84,8 @@
                 <button onclick="chargerFichierLocal()">Analyse</button>
             </div>
         </div>
+        
         <div id="resultats" style="display:none;">
-            <!-- Renvoi vers la page de l'historique des indisponibilités -->
-            <div style="margin-bottom: 20px; text-align: left;">
-                <a href="historique.html" target="_blank" class="btn-link" style="background: #0056b3; font-size: 14px;">👉 Voir l'historique des indisponibilités</a>
-            </div>
             <h2>Résumé</h2>
             <table id="tableResume">
                 <thead>
@@ -97,16 +94,15 @@
                         <th>Indisponibilités simultanées à T2</th>
                         <th>Pic d'indisponibilités simultanées Aujourd'hui (Max à T2)</th>
                         <th>Créneau(x) du Pic d'Aujourd'hui</th>
-                        <th>Cumul d'indisponibilités Aujourd'hui (MW)</th>
                         <th>% Du parc indisponible au pic d'Aujourd'hui</th>
                         <th>Pic d'indisponibilités simultanées Demain (Max à T2)</th>
                         <th>Créneau(x) du Pic de Demain</th>
-                        <th>Cumul d'indisponibilités Demain (MW)</th>
                         <th>% Du parc indisponible au pic Demain</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
+
             <h2>🔄 Changements constatés entre les dates T1 et T2</h2>
             <div class="delta-box">
                 <div class="delta-card" style="border-top: 4px solid #dc3545;">
@@ -131,23 +127,11 @@
                 </thead>
                 <tbody></tbody>
             </table>
-            <h2>📝 Synthèse des changements</h2>
-            <div class="news-box" style="border-top: 4px solid #0056b3;">
-                <div id="changesBody"></div>
-            </div>
+	    <h2>📝 Synthèse des changements</h2>
+	<div class="news-box" style="border-top: 4px solid #0056b3;">
+	    <div id="changesBody"></div>
+	</div>
 
-            <h2>📌 Liste des réacteurs indisponibles à T1</h2>
-            <table id="tableIndisponiblesT1">
-                <thead>
-                    <tr>
-                        <th>Réacteur (Unit)</th>
-                        <th>Indisponibilité (MW)</th>
-                        <th>From (Date / Heure)</th>
-                        <th>To (Date / Heure)</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
 
             <h2>📌 Liste des réacteurs indisponibles à T2</h2>
             <table id="tableIndisponiblesT2">
@@ -258,18 +242,13 @@
                 const remarks = extraireChampStrict(texteHTML, "Remarks");
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type");
 
-                const pubDateTag = items[i].getElementsByTagName("pubDate")[0];
-                let pubDateStr = pubDateTag ? pubDateTag.textContent : '';
-                if (!pubDateStr) {
-                    pubDateStr = extraireChampStrict(texteHTML, "Publication date / time");
-                }
-
                 if (eventStatus.toLowerCase() === "actif" && fuelType.toLowerCase() === "nuclear") {
                     const remLower = remarks.toLowerCase();
-                    if (remLower.includes("environ")) {
+                    if (remLower.includes("causes externes liées à l'environnement") || remLower.includes("environmental issues")) {
+                        
                         const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+                        const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+                        const unavailable = parseInt(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
                         const available = installed - unavailable;
                         const eventStartStr = extraireChampStrict(texteHTML, "Event start");
                         const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
@@ -278,8 +257,7 @@
                             evenementsFiltres.push({
                                 asset, installed, unavailable, available, 
                                 dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr),
-                                pubDate: pubDateStr ? new Date(pubDateStr) : new Date(0)
+                                dateFin: new Date(eventStopStr)
                             });
                             tousLesReacteursUniques.add(asset);
                         }
@@ -287,56 +265,27 @@
                 }
             }
 
-            localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
 
             let sommeMaintenant = 0;
             let totalT2 = 0;
-            let listReacteursT1 = [];
             let listReacteursT2 = [];
 
-         // --- FILTRAGE HISTORIQUE T1 STRICT (Connaissance figée à T1) ---
-            tousLesReacteursUniques.forEach(reacteur => {
-                // On filtre les messages publiés AVANT ou À T1 pour ce réacteur
-                const versionsT1 = evenementsFiltres.filter(e => e.asset === reacteur && e.pubDate <= datePivot);
-                if (versionsT1.length > 0) {
-                    versionsT1.sort((a, b) => a.pubDate - b.pubDate);
-                    const dernierEvT1 = versionsT1[versionsT1.length - 1];
-
-                    // On vérifie si cet événement, tel qu'il était connu à T1, était en cours
-                    if (dernierEvT1.dateDebut <= datePivot && dernierEvT1.dateFin >= datePivot) {
-                        pannesA_T1[reacteur] += dernierEvT1.unavailable;
-                        sommeMaintenant += dernierEvT1.unavailable;
-                        listReacteursT1.push(dernierEvT1);
-                    }
+            evenementsFiltres.forEach(ev => {
+                if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
+                    pannesA_T1[ev.asset] += ev.unavailable;
+                    sommeMaintenant += ev.unavailable;
+                }
+                if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
+                    pannesA_T2[ev.asset] += ev.unavailable;
+                    totalT2 += ev.unavailable;
+                    listReacteursT2.push(ev);
                 }
             });
 
-            // --- FILTRAGE HISTORIQUE T2 (Dernier message publié avant T2) ---
-            tousLesReacteursUniques.forEach(reacteur => {
-                const versionsT2 = evenementsFiltres.filter(e => e.asset === reacteur && e.pubDate <= dateT2);
-                if (versionsT2.length > 0) {
-                    versionsT2.sort((a, b) => a.pubDate - b.pubDate);
-                    const dernierEvT2 = versionsT2[versionsT2.length - 1];
-
-                    if (dateT2 >= dernierEvT2.dateDebut && dateT2 <= dernierEvT2.dateFin) {
-                        pannesA_T2[reacteur] += dernierEvT2.unavailable;
-                        totalT2 += dernierEvT2.unavailable;
-                        listReacteursT2.push(dernierEvT2);
-                    }
-                }
-            });
-
-            // Remplissage de la table des indisponibilités à T1
-            let htmlIndisponiblesT1 = '';
-            listReacteursT1.forEach(ev => {
-                htmlIndisponiblesT1 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
-            });
-            document.getElementById('tableIndisponiblesT1').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT1 || '<tr><td colspan="4">Aucun réacteur indisponible à T1.</td></tr>';
-
-            // Remplissage de la table des indisponibilités à T2
+            // Remplissage de la nouvelle table des indisponibilités à T2
             let htmlIndisponiblesT2 = '';
             listReacteursT2.forEach(ev => {
                 htmlIndisponiblesT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
@@ -357,7 +306,7 @@
                     htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Restriction accrue / Nouvel arrêt</td></tr>`;
                 } else if (diff < 0) {
                     countMoins++;
-                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT2} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
+                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
                 }
             });
 
@@ -372,18 +321,7 @@
 
             function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
                 let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
-                let reacteursTouches = new Set();
-                let cumulMW = 0;
-
                 evenementsFiltres.forEach(ev => {
-                    // Si l'indisponibilité environnementale touche la journée
-                    if (ev.dateDebut <= finJour && ev.dateFin >= debutJour) {
-                        // On additionne les MW une seule fois par réacteur touché
-                        if (!reacteursTouches.has(ev.asset)) {
-                            reacteursTouches.add(ev.asset);
-                            cumulMW += ev.unavailable;
-                        }
-                    }
                     if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
                     if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
                 });
@@ -423,7 +361,7 @@
                     });
                 }
 
-                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', cumul: cumulMW, list: reacteursDuPic };
+                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', list: reacteursDuPic };
             }
 
             const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
@@ -435,11 +373,9 @@
                     <td class="highlight">${totalT2} MW</td>
                     <td class="highlight">${resultatAuj.max} MW</td>
                     <td>${resultatAuj.intervals}</td>
-                    <td><b>${resultatAuj.cumul} MW</b></td>
                     <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                     <td class="highlight">${resultatDemain.max} MW</td>
                     <td>${resultatDemain.intervals}</td>
-                    <td><b>${resultatDemain.cumul} MW</b></td>
                     <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                 </tr>
             `;
@@ -456,23 +392,26 @@
             });
             document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
 
-            // --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
+// --- GÉNÉRATEUR DE PHRASES DE CHANGEMENT ---
             let phrases = [];
             tousLesReacteursUniques.forEach(reacteur => {
                 const capT1 = pannesA_T1[reacteur];
                 const capT2 = pannesA_T2[reacteur];
                 const diff = capT2 - capT1;
 
+                // Chercher les événements pour comparer les dates de fin
                 const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
                 const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
 
                 if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
                     let phrase = `<strong>${reacteur}</strong> : `;
                     
+                    // Analyse capacité
                     if (capT1 === 0 && capT2 > 0) phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
                     else if (capT1 > 0 && capT2 === 0) phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
                     else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
 
+                    // Analyse durée
                     if (evT1 && evT2) {
                         const deltaMs = evT2.dateFin - evT1.dateFin;
                         if (Math.abs(deltaMs) >= 3600000) {
@@ -486,12 +425,14 @@
             document.getElementById('changesBody').innerHTML = phrases.length > 0 
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
-
-            localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
+	// --- AJOUTS POUR LE GRAPHIQUE ---
+            localStorage.setItem('graphData', JSON.stringify(listReacteursT2));
             document.getElementById('resultats').innerHTML += 
                 '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
 
             document.getElementById('resultats').style.display = 'block';
+
+
         }
     </script>
 </body>
