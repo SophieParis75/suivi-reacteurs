@@ -97,11 +97,11 @@
                         <th>Indisponibilités simultanées à T2</th>
                         <th>Pic d'indisponibilités simultanées Aujourd'hui (Max à T2)</th>
                         <th>Créneau(x) du Pic d'Aujourd'hui</th>
-                        <th>Cumul des indisponibilités Aujourd'hui (MW)</th>
+                        <th>Cumul d'indisponibilités Aujourd'hui (MW)</th>
                         <th>% Du parc indisponible au pic d'Aujourd'hui</th>
                         <th>Pic d'indisponibilités simultanées Demain (Max à T2)</th>
                         <th>Créneau(x) du Pic de Demain</th>
-                        <th>Cumul des indisponibilités Demain (MW)</th>
+                        <th>Cumul d'indisponibilités Demain (MW)</th>
                         <th>% Du parc indisponible au pic Demain</th>
                     </tr>
                 </thead>
@@ -357,7 +357,7 @@
                     htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Restriction accrue / Nouvel arrêt</td></tr>`;
                 } else if (diff < 0) {
                     countMoins++;
-                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
+                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT2} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Retour réseau partiel ou total</td></tr>`;
                 }
             });
 
@@ -372,7 +372,18 @@
 
             function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
                 let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
+                let reacteursTouches = new Set();
+                let cumulMW = 0;
+
                 evenementsFiltres.forEach(ev => {
+                    // Si l'indisponibilité environnementale touche la journée
+                    if (ev.dateDebut <= finJour && ev.dateFin >= debutJour) {
+                        // On additionne les MW une seule fois par réacteur touché
+                        if (!reacteursTouches.has(ev.asset)) {
+                            reacteursTouches.add(ev.asset);
+                            cumulMW += ev.unavailable;
+                        }
+                    }
                     if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
                     if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
                 });
@@ -381,7 +392,6 @@
                 let segments = [];
                 let maxPuissance = 0;
                 let topInstantMilli = null;
-                let sommeCumulMW = 0;
 
                 for (let i = 0; i < chronologie.length - 1; i++) {
                     let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
@@ -396,9 +406,6 @@
                         topInstantMilli = instantMilieu.getTime();
                     }
                     segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
-                    
-                    // Somme des puissances indisponibles sur tous les segments distincts de la journée
-                    sommeCumulMW += puissanceSegment;
                 }
 
                 let creneauxPic = [];
@@ -416,7 +423,7 @@
                     });
                 }
 
-                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', cumulMW: sommeCumulMW, list: reacteursDuPic };
+                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', cumul: cumulMW, list: reacteursDuPic };
             }
 
             const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
@@ -428,11 +435,11 @@
                     <td class="highlight">${totalT2} MW</td>
                     <td class="highlight">${resultatAuj.max} MW</td>
                     <td>${resultatAuj.intervals}</td>
-                    <td class="highlight">${resultatAuj.cumulMW.toLocaleString('fr-FR')} MW</td>
+                    <td><b>${resultatAuj.cumul} MW</b></td>
                     <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                     <td class="highlight">${resultatDemain.max} MW</td>
                     <td>${resultatDemain.intervals}</td>
-                    <td class="highlight">${resultatDemain.cumulMW.toLocaleString('fr-FR')} MW</td>
+                    <td><b>${resultatDemain.cumul} MW</b></td>
                     <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                 </tr>
             `;
