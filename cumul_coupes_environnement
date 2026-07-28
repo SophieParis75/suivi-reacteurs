@@ -54,7 +54,23 @@
             <div id="msgErreur">⚠️ Code incorrect</div>
         </div>
     </div>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Cumul Coupes Environnement</title>
+</head>
+<body>
+    <!-- 📌 AJOUTEZ LE MÊME MENU ICI -->
+    <nav style="background-color: #f1f1f1; padding: 10px; margin-bottom: 20px;">
+        <a href="index.html">Accueil</a> | 
+        <a href="cumul_coupes_environnement.html">Cumul coupes environnement</a>
+    </nav>
 
+    <h1>Analyse du cumul des coupes environnement</h1>
+    <p>Contenu de votre page d'analyse...</p>
+</body>
+</html>
     <div id="applicationContent" style="display: none;">
         <h1>--------- ZONE D'AUDIT ET DE VÉRIFICATION DES CALCULS ---------</h1>
         
