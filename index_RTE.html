@@ -172,10 +172,31 @@
         function formaterHeure(dateObj) { return dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); }
         function formaterFull(dateObj) { return formaterDate(dateObj) + " à " + formaterHeure(dateObj); }
 
-        function extraireChampStrict(texte, cle) {
-            const regex = new RegExp(`<li>${cle}\\s*:\\s*([^<]+)</li>`, 'i');
-            const match = texte.match(regex);
-            return match ? match[1].trim() : '';
+        function parseDateFrOrIso(str) {
+            if (!str) return null;
+            str = str.trim();
+            // Format FR: JJ/MM/AAAA HH:MM
+            const matchFr = str.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
+            if (matchFr) {
+                return new Date(matchFr[3], matchFr[2] - 1, matchFr[1], matchFr[4], matchFr[5]);
+            }
+            // Format ISO basique
+            const d = new Date(str);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function extraireValeurChamp(htmlStr, cle) {
+            // 1. Détection dans liste HTML <li>Cle : Valeur</li>
+            let reg = new RegExp(`<li>${cle}\\s*:\\s*([^<]+)</li>`, 'i');
+            let m = htmlStr.match(reg);
+            if (m) return m[1].trim();
+
+            // 2. Détection dans tableau HTML <td>Cle</td><td>Valeur</td>
+            reg = new RegExp(`<td[^>]*>${cle}\\s*:?\\s*<\/td>\\s*<td[^>]*>([^<]+)<\/td>`, 'i');
+            m = htmlStr.match(reg);
+            if (m) return m[1].trim();
+
+            return '';
         }
 
         function chargerFichierLocal() {
@@ -198,51 +219,73 @@
             let mapEvenementsParId = {};
             let tousLesReacteursUniques = new Set();
 
-            // Remplacez la boucle de lecture XML par celle-ci :
+            for (let i = 0; i < items.length; i++) {
+                const descNode = items[i].getElementsByTagName("description")[0];
+                if (!descNode) continue;
+                
+                const texteHTML = descNode.textContent || descNode.innerHTML;
+                const texteMinuscule = texteHTML.toLowerCase();
 
-for (let i = 0; i < items.length; i++) {
-    const descNode = items[i].getElementsByTagName("description")[0];
-    if (!descNode) continue;
-    
-    const texteHTML = descNode.textContent || descNode.innerHTML;
+                // Filtres larges : contient "act", "nucl" et "environ"
+                if (texteMinuscule.includes("act") && texteMinuscule.includes("nucl") && texteMinuscule.includes("environ")) {
+                    
+                    // Extraction de l'ID d'événement EDF (ex: 05470_EDF_T_00313072)
+                    const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
+                    const eventId = matchIdEdf ? matchIdEdf[0] : (extraireValeurChamp(texteHTML, "Event ID") || ("evt_" + i));
 
-    const eventStatus = extraireChampStrict(texteHTML, "Event status").toLowerCase();
-    const remarks = extraireChampStrict(texteHTML, "Remarks").toLowerCase();
-    const fuelType = extraireChampStrict(texteHTML, "Fuel type").toLowerCase();
+                    // Extraction du réacteur
+                    let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
+                    if (!asset) {
+                        const matchAsset = texteHTML.match(/(CHOOZ\s*\d|BLAYAIS\s*\d|BUGEY\s*\d|GOLFECH\s*\d|ST ALBAN\s*\d|[A-Z\s\-]+(?=\s+Nucl))/i);
+                        if (matchAsset) asset = matchAsset[0].trim();
+                    }
 
-    if (eventStatus.includes("act") && fuelType.includes("nucl") && remarks.includes("environ")) {
-        
-        // 1. Recherche du vrai pattern d'ID EDF (ex: 05470_EDF_T_00313072)
-        const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
-        const eventId = matchIdEdf ? matchIdEdf[0] : (extraireChampStrict(texteHTML, "Event ID") || ("evt_" + i));
-        
-        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
-        const available = installed - unavailable;
-        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
-        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+                    // Extraction des dates
+                    let startStr = extraireValeurChamp(texteHTML, "Event start");
+                    let stopStr = extraireValeurChamp(texteHTML, "Event stop");
 
-        if (eventStartStr && eventStopStr && asset) {
-            // Seule la dernière version publiée pour CET ID d'événement précis est conservée
-            mapEvenementsParId[eventId] = {
-                id: eventId,
-                asset: asset, 
-                installed: installed, 
-                unavailable: unavailable, 
-                available: available, 
-                dateDebut: new Date(eventStartStr), 
-                dateFin: new Date(eventStopStr)
-            };
-            tousLesReacteursUniques.add(asset);
-        }
-    }
-}
+                    // Détection directe par Regex si format structuré
+                    if (!startStr || !stopStr) {
+                        const matchDates = texteHTML.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})/g);
+                        if (matchDates && matchDates.length >= 2) {
+                            startStr = matchDates[0];
+                            stopStr = matchDates[1];
+                        }
+                    }
+
+                    // Extraction de la capacité indisponible
+                    let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
+                    let unavailable = parseFloat(unavailStr);
+                    
+                    if (isNaN(unavailable)) {
+                        // Extraction secours par motifs numériques dans la chaîne
+                        const matchCap = texteHTML.match(/(\d{3,4})\s*(?:MW)?/g);
+                        if (matchCap && matchCap.length > 0) {
+                            // On prend la valeur numérique correspondant à l'indisponibilité
+                            const capValues = matchCap.map(v => parseFloat(v)).filter(v => v > 0 && v < 2000);
+                            if (capValues.length > 0) unavailable = capValues[capValues.length - 1];
+                        }
+                    }
+
+                    const dateDebut = parseDateFrOrIso(startStr);
+                    const dateFin = parseDateFrOrIso(stopStr);
+
+                    if (asset && dateDebut && dateFin && !isNaN(unavailable)) {
+                        mapEvenementsParId[eventId] = {
+                            id: eventId,
+                            asset: asset, 
+                            unavailable: unavailable, 
+                            dateDebut: dateDebut, 
+                            dateFin: dateFin
+                        };
+                        tousLesReacteursUniques.add(asset);
+                    }
+                }
+            }
 
             let evenementsFiltres = Object.values(mapEvenementsParId);
-
             localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
-            
+
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
@@ -250,11 +293,9 @@ for (let i = 0; i < items.length; i++) {
             let mapReacteursT2 = {};
 
             evenementsFiltres.forEach(ev => {
-                // Pour T1 : rétablit la valeur d'indisponibilité max si plusieurs pannes simultanées
                 if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
                     pannesA_T1[ev.asset] = Math.max(pannesA_T1[ev.asset] || 0, ev.unavailable);
                 }
-                // Pour T2 : retient l'événement max par réacteur
                 if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
                     const r = ev.asset;
                     if (!mapReacteursT2[r] || ev.unavailable > mapReacteursT2[r].unavailable) {
@@ -272,7 +313,6 @@ for (let i = 0; i < items.length; i++) {
 
             let sommeMaintenant = Object.values(pannesA_T1).reduce((acc, v) => acc + v, 0);
 
-            // Tri alphabétique des réacteurs à T2
             listReacteursT2.sort((a, b) => a.asset.localeCompare(b.asset, 'fr', { numeric: true }));
 
             let htmlIndisponiblesT2 = '';
@@ -390,21 +430,8 @@ for (let i = 0; i < items.length; i++) {
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
 
             localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
-            
-            const divResultats = document.getElementById('resultats');
-            if (!document.getElementById('linkGraphique')) {
-                const linkG = document.createElement('a');
-                linkG.id = 'linkGraphique';
-                linkG.href = 'graphique.html';
-                linkG.target = '_blank';
-                linkG.className = 'btn-link';
-                linkG.style.marginTop = '20px';
-                linkG.innerHTML = '📈 Voir le graphique détaillé';
-                divResultats.appendChild(document.createElement('br'));
-                divResultats.appendChild(linkG);
-            }
 
-            divResultats.style.display = 'block';
+            document.getElementById('resultats').style.display = 'block';
         }
     </script>
 </body>
