@@ -61,7 +61,7 @@
                         <input type="datetime-local" id="dateComparaison">
                     </div>
                 </div>
-                <button onclick="chargerFichierLocal()">Analyse</button>
+                <button id="btnAnalyse" onclick="chargerFichierLocal()">Analyse</button>
             </div>
         </div>
 
@@ -175,23 +175,19 @@
         function parseDateFrOrIso(str) {
             if (!str) return null;
             str = str.trim();
-            // Format FR: JJ/MM/AAAA HH:MM
-            const matchFr = str.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
+            const matchFr = str.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
             if (matchFr) {
                 return new Date(matchFr[3], matchFr[2] - 1, matchFr[1], matchFr[4], matchFr[5]);
             }
-            // Format ISO basique
             const d = new Date(str);
             return isNaN(d.getTime()) ? null : d;
         }
 
         function extraireValeurChamp(htmlStr, cle) {
-            // 1. Détection dans liste HTML <li>Cle : Valeur</li>
             let reg = new RegExp(`<li>${cle}\\s*:\\s*([^<]+)</li>`, 'i');
             let m = htmlStr.match(reg);
             if (m) return m[1].trim();
 
-            // 2. Détection dans tableau HTML <td>Cle</td><td>Valeur</td>
             reg = new RegExp(`<td[^>]*>${cle}\\s*:?\\s*<\/td>\\s*<td[^>]*>([^<]+)<\/td>`, 'i');
             m = htmlStr.match(reg);
             if (m) return m[1].trim();
@@ -209,89 +205,59 @@
         }
 
         function analyserDonneesBrutes(strXML) {
-    const datePivot = new Date(document.getElementById('datePivot').value);
-    const dateT2 = new Date(document.getElementById('dateComparaison').value);
-    
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(strXML, "text/xml");
-    const items = xmlDoc.getElementsByTagName("item");
+            const datePivot = new Date(document.getElementById('datePivot').value);
+            const dateT2 = new Date(document.getElementById('dateComparaison').value);
+            
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(strXML, "text/xml");
+            const items = xmlDoc.getElementsByTagName("item");
 
-    console.clear();
-    console.log(`=== AUDIT CONSOLE : ${items.length} éléments dans le flux XML ===`);
+            console.clear();
+            console.log(`=== DIAGNOSTIC : ${items.length} éléments scannés ===`);
 
-    let mapEvenementsParId = {};
-    let tousLesReacteursUniques = new Set();
+            let mapEvenementsParId = {};
+            let tousLesReacteursUniques = new Set();
 
-    for (let i = 0; i < items.length; i++) {
-        const descNode = items[i].getElementsByTagName("description")[0];
-        if (!descNode) continue;
-        
-        const texteHTML = descNode.textContent || descNode.innerHTML;
-        const texteMinuscule = texteHTML.toLowerCase();
+            for (let i = 0; i < items.length; i++) {
+                const descNode = items[i].getElementsByTagName("description")[0];
+                if (!descNode) continue;
+                
+                const texteHTML = descNode.textContent || descNode.innerHTML;
+                const texteMinuscule = texteHTML.toLowerCase();
 
-        // Target de diagnostic : Chooz ou Blayais 1
-        if (texteMinuscule.includes("chooz") || texteMinuscule.includes("blayais 1")) {
-            console.group(`🔍 Inspection Item #${i} (${texteMinuscule.includes("chooz") ? "CHOOZ" : "BLAYAIS 1"})`);
-            console.log("📄 TEXTE BRUT HTML :");
-            console.log(texteHTML);
+                // Inspection console pour Chooz et Blayais 1
+                if (texteMinuscule.includes("chooz") || texteMinuscule.includes("blayais 1")) {
+                    console.group(`🔍 Item #${i} (${texteMinuscule.includes("chooz") ? "CHOOZ" : "BLAYAIS 1"})`);
+                    console.log("📄 TEXTE BRUT HTML :\n", texteHTML);
+                    console.log("Filtres -> act:", texteMinuscule.includes("act"), "| nucl:", texteMinuscule.includes("nucl"), "| environ:", texteMinuscule.includes("environ"));
+                    console.groupEnd();
+                }
 
-            // Vérification des filtres
-            const aAct = texteMinuscule.includes("act");
-            const aNucl = texteMinuscule.includes("nucl");
-            const aEnviron = texteMinuscule.includes("environ");
+                if (texteMinuscule.includes("act") && texteMinuscule.includes("nucl") && texteMinuscule.includes("environ")) {
+                    const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
+                    const eventId = matchIdEdf ? matchIdEdf[0] : (extraireValeurChamp(texteHTML, "Event ID") || ("evt_" + i));
 
-            console.log(`Filtres -> "act": ${aAct} | "nucl": ${aNucl} | "environ": ${aEnviron}`);
+                    let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
+                    let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
+                    let unavailable = parseFloat(unavailStr);
+                    let startStr = extraireValeurChamp(texteHTML, "Event start");
+                    let stopStr = extraireValeurChamp(texteHTML, "Event stop");
 
-            // Test extraction ID
-            const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
-            console.log("ID EDF extrait :", matchIdEdf ? matchIdEdf[0] : "❌ NON TROUVÉ");
+                    const dateDebut = parseDateFrOrIso(startStr);
+                    const dateFin = parseDateFrOrIso(stopStr);
 
-            // Test extraction Nom Réacteur
-            let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
-            console.log("Réacteur (Champ) :", asset || "❌ vide");
-
-            // Test extraction MW
-            let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
-            console.log("MW (Champ) :", unavailStr || "❌ vide");
-
-            // Test extraction Dates
-            let startStr = extraireValeurChamp(texteHTML, "Event start");
-            let stopStr = extraireValeurChamp(texteHTML, "Event stop");
-            console.log("Dates (Champs) :", { startStr, stopStr });
-
-            console.groupEnd();
-        }
-
-        // --- Logique d'analyse normale ---
-        if (texteMinuscule.includes("act") && texteMinuscule.includes("nucl") && texteMinuscule.includes("environ")) {
-            const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
-            const eventId = matchIdEdf ? matchIdEdf[0] : (extraireValeurChamp(texteHTML, "Event ID") || ("evt_" + i));
-
-            let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
-            let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
-            let unavailable = parseFloat(unavailStr);
-            let startStr = extraireValeurChamp(texteHTML, "Event start");
-            let stopStr = extraireValeurChamp(texteHTML, "Event stop");
-
-            const dateDebut = parseDateFrOrIso(startStr);
-            const dateFin = parseDateFrOrIso(stopStr);
-
-            if (asset && dateDebut && dateFin && !isNaN(unavailable)) {
-                mapEvenementsParId[eventId] = {
-                    id: eventId,
-                    asset: asset, 
-                    unavailable: unavailable, 
-                    dateDebut: dateDebut, 
-                    dateFin: dateFin
-                };
-                tousLesReacteursUniques.add(asset);
+                    if (asset && dateDebut && dateFin && !isNaN(unavailable)) {
+                        mapEvenementsParId[eventId] = {
+                            id: eventId,
+                            asset: asset, 
+                            unavailable: unavailable, 
+                            dateDebut: dateDebut, 
+                            dateFin: dateFin
+                        };
+                        tousLesReacteursUniques.add(asset);
+                    }
+                }
             }
-        }
-    }
-
-    // Suite du traitement et affichage dans le DOM...
-    // (Conservez votre code de rendu existant ci-dessous)
-}
 
             let evenementsFiltres = Object.values(mapEvenementsParId);
             localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
@@ -408,38 +374,6 @@
                 htmlAuditDemain += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
             });
             document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
-
-            let phrases = [];
-            listeReacteursTriee.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur] || 0;
-                const capT2 = pannesA_T2[reacteur] || 0;
-                const diff = capT2 - capT1;
-
-                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
-                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
-
-                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
-                    let phrase = `<strong>${reacteur}</strong> : `;
-                    
-                    if (capT1 === 0 && capT2 > 0) phrase += `Nouvelle indisponibilité de ${capT2} MW.`;
-                    else if (capT1 > 0 && capT2 === 0) phrase += `L'indisponibilité de ${capT1} MW est terminée.`;
-                    else if (diff !== 0) phrase += `L'indisponibilité est passée de ${capT1} MW à ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
-
-                    if (evT1 && evT2) {
-                        const deltaMs = evT2.dateFin - evT1.dateFin;
-                        if (Math.abs(deltaMs) >= 3600000) {
-                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
-                            phrase += ` La durée de l'indisponibilité est ${deltaMs > 0 ? 'allongée' : 'raccourcie'} de ${deltaH} heures.`;
-                        }
-                    }
-                    phrases.push(phrase);
-                }
-            });
-            document.getElementById('changesBody').innerHTML = phrases.length > 0 
-                ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
-                : 'Aucun changement significatif de capacité ou de durée constaté.';
-
-            localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
 
             document.getElementById('resultats').style.display = 'block';
         }
