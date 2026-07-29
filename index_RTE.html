@@ -75,14 +75,12 @@
             <table id="tableResume">
                 <thead>
                     <tr>
-                        <th>Indisponibilités simultanées à T1</th>
-                        <th>Indisponibilités simultanées à T2</th>
-                        <th>Pic d'indisponibilités simultanées Aujourd'hui (Max à T2)</th>
-                        <th>Créneau(x) du Pic d'Aujourd'hui</th>
-                        <th>% Du parc indisponible au pic d'Aujourd'hui</th>
-                        <th>Pic d'indisponibilités simultanées Demain (Max à T2)</th>
-                        <th>Créneau(x) du Pic de Demain</th>
-                        <th>% Du parc indisponible au pic Demain</th>
+                        <th>Indisponibilités cumulées à T1</th>
+                        <th>Indisponibilités cumulées à T2</th>
+                        <th>Cumul max des Indisponibilités au jour T2</th>
+                        <th>% du parc indisponible au max au jour T2</th>
+                        <th>Cumul max des Indisponibilités au lendemain du jour T2</th>
+                        <th>% du parc indisponible au max au lendemain du jour T2</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -130,9 +128,9 @@
                 <tbody></tbody>
             </table>
 
-            <h2>🔍 Listes des réacteurs simultanément indisponibles aux Pics d'aujourd'hui et demain (basé sur T2)</h2>
+            <h2>🔍 Listes des réacteurs indisponibles aux Pics d'aujourd'hui et demain (basé sur T2)</h2>
             
-            <h3>Réacteurs retenus pour le PIC d'AUJOURD'HUI</h3>
+            <h3>Réacteurs retenus pour le cumul max d'indisponibilités au jour T2</h3>
             <table id="tableAuditAuj">
                 <thead>
                     <tr>
@@ -145,7 +143,7 @@
                 <tbody></tbody>
             </table>
 
-            <h3>Réacteurs retenus pour le PIC de DEMAIN</h3>
+            <h3>Réacteurs retenus pour le cumul max d'indisponibilités au lendemain du jour T2</h3>
             <table id="tableAuditDemain">
                 <thead>
                     <tr>
@@ -313,7 +311,6 @@
 
                 return { 
                     max: totalMaxJour, 
-                    intervals: reacteursDuPic.length > 0 ? 'Cumul journalier max' : 'Aucun', 
                     list: reacteursDuPic 
                 };
             }
@@ -326,10 +323,8 @@
                     <td class="highlight">${sommeMaintenant} MW</td>
                     <td class="highlight">${totalT2} MW</td>
                     <td class="highlight">${resultatAuj.max} MW</td>
-                    <td>${resultatAuj.intervals}</td>
                     <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                     <td class="highlight">${resultatDemain.max} MW</td>
-                    <td>${resultatDemain.intervals}</td>
                     <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
                 </tr>
             `;
