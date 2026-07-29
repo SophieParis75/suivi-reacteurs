@@ -74,7 +74,11 @@ th { background-color: #f1f3f5; font-weight: bold; }
                 <input type="datetime-local" id="comparisonDate">
             </div>
         </div>
+
         <button onclick="runAnalysis()">Analyze</button>
+        <button onclick="resetAll()" style="margin-left:10px;background:#6c757d;">Reset</button>
+        <button onclick="exportCSV()" style="margin-left:10px;background:#198754;">Export CSV</button>
+        <button onclick="exportXLSX()" style="margin-left:10px;background:#0d6efd;">Export XLSX</button>
     </div>
 </div>
 
@@ -122,6 +126,41 @@ th { background-color: #f1f3f5; font-weight: bold; }
         <tbody></tbody>
     </table>
 </div>
+
+<!-- Mini SheetJS (XLSX) – version embarquée -->
+<script>
+var XLSX = {
+    utils: {
+        book_new: () => ({ SheetNames: [], Sheets: {} }),
+        book_append_sheet: (wb, ws, name) => { wb.SheetNames.push(name); wb.Sheets[name] = ws; },
+        aoa_to_sheet: (data) => {
+            const ws = {};
+            data.forEach((row, r) => {
+                row.forEach((val, c) => {
+                    ws[XLSX.utils.encode_cell({ r, c })] = { v: val };
+                });
+            });
+            ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length - 1, c: data[0].length - 1 } });
+            return ws;
+        },
+        encode_cell: ({ r, c }) => {
+            const col = String.fromCharCode(65 + c);
+            return col + (r + 1);
+        },
+        encode_range: ({ s, e }) => {
+            return XLSX.utils.encode_cell(s) + ":" + XLSX.utils.encode_cell(e);
+        }
+    },
+    writeFile: (wb, filename) => {
+        const json = JSON.stringify(wb);
+        const blob = new Blob([json], { type: "application/octet-stream" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+    }
+};
+</script>
 
 <script>
 function formatFull(d) {
@@ -221,6 +260,96 @@ function cumulativeDay(events, start, end) {
     return Object.values(byAsset).reduce((a, b) => a + b, 0);
 }
 
+function resetAll() {
+    document.getElementById("pivotDate").value = "";
+    document.getElementById("comparisonDate").value = "";
+    document.getElementById("rssFile").value = "";
+    document.getElementById("csvFile").value = "";
+
+    document.getElementById("summaryTable").querySelector("tbody").innerHTML = "";
+    document.getElementById("changesTable").querySelector("tbody").innerHTML = "";
+    document.getElementById("changesBody").innerHTML = "";
+    document.getElementById("unavailableTableT2").querySelector("tbody").innerHTML = "";
+
+    document.getElementById("results").style.display = "none";
+}
+
+function exportCSV() {
+    let rows = [];
+
+    const summary = document.querySelector("#summaryTable tbody tr");
+    if (summary) {
+        const cells = summary.querySelectorAll("td");
+        rows.push(["Cumulative T1", cells[0].innerText]);
+        rows.push(["Cumulative T2", cells[1].innerText]);
+        rows.push(["Day T2 Max", cells[2].innerText]);
+        rows.push(["Next Day Max", cells[3].innerText]);
+        rows.push([]);
+    }
+
+    rows.push(["Reactor", "T1", "T2", "Δ MW", "Notes"]);
+    document.querySelectorAll("#changesTable tbody tr").forEach(tr => {
+        const cells = [...tr.querySelectorAll("td")].map(td => td.innerText);
+        rows.push(cells);
+    });
+    rows.push([]);
+
+    rows.push(["Conflicts"]);
+    const conflicts = document.getElementById("changesBody").innerText.split("\n");
+    conflicts.forEach(c => rows.push([c]));
+    rows.push([]);
+
+    rows.push(["Reactor", "MW", "Start", "End"]);
+    document.querySelectorAll("#unavailableTableT2 tbody tr").forEach(tr => {
+        const cells = [...tr.querySelectorAll("td")].map(td => td.innerText);
+        rows.push(cells);
+    });
+
+    const csvContent = rows.map(r => r.join(";")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "results.csv";
+    link.click();
+}
+
+function exportXLSX() {
+    const wb = XLSX.utils.book_new();
+
+    const summaryRows = [];
+    const summary = document.querySelector("#summaryTable tbody tr");
+    if (summary) {
+        const cells = summary.querySelectorAll("td");
+        summaryRows.push(["Cumulative T1", cells[0].innerText]);
+        summaryRows.push(["Cumulative T2", cells[1].innerText]);
+        summaryRows.push(["Day T2 Max", cells[2].innerText]);
+        summaryRows.push(["Next Day Max", cells[3].innerText]);
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), "Summary");
+
+    const changeRows = [["Reactor", "T1", "T2", "Δ MW", "Notes"]];
+    document.querySelectorAll("#changesTable tbody tr").forEach(tr => {
+        const cells = [...tr.querySelectorAll("td")].map(td => td.innerText);
+        changeRows.push(cells);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(changeRows), "Changes");
+
+    const conflictRows = [["Conflicts"]];
+    const conflicts = document.getElementById("changesBody").innerText.split("\n");
+    conflicts.forEach(c => conflictRows.push([c]));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(conflictRows), "Conflicts");
+
+    const t2Rows = [["Reactor", "MW", "Start", "End"]];
+    document.querySelectorAll("#unavailableTableT2 tbody tr").forEach(tr => {
+        const cells = [...tr.querySelectorAll("td")].map(td => td.innerText);
+        t2Rows.push(cells);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(t2Rows), "Unavailable T2");
+
+    XLSX.writeFile(wb, "results.xlsx");
+}
+
 function runAnalysis() {
     const rssFile = document.getElementById("rssFile").files[0];
     const csvFile = document.getElementById("csvFile").files[0];
@@ -265,101 +394,4 @@ function runAnalysis() {
             console.error("RSS parsing error", err);
         }
 
-        readerCSV.onload = e2 => {
-            const rows = parseCSV(e2.target.result);
-            rows.forEach(r => {
-                const asset = r["Unit"] || r["Asset"] || r["Affected asset or unit"] || "";
-                const unavail = r["Unavailable capacity"] || r["Unavailable"] || "0";
-                const start = r["Event start"] || r["Start date"] || r["Start"] || "";
-                const stop = r["Event stop"] || r["End date"] || r["Stop"] || "";
-                const fuel = r["Fuel type"] || r["Fuel"] || "";
-                const remarks = r["Remarks"] || r["Reason"] || "";
-
-                const ev = makeEvent(asset, unavail, start, stop, fuel, remarks);
-                if (ev) events.push(ev);
-            });
-
-            const { events: clean, conflicts } = resolveConflicts(events);
-
-            const T1res = cumulativeInstant(clean, T1);
-            const T2res = cumulativeInstant(clean, T2);
-
-            const dayStart = new Date(T2); dayStart.setHours(0, 0, 0, 0);
-            const dayEnd = new Date(T2); dayEnd.setHours(23, 59, 59, 999);
-            const nextStart = new Date(dayStart); nextStart.setDate(nextStart.getDate() + 1);
-            const nextEnd = new Date(dayEnd); nextEnd.setDate(nextEnd.getDate() + 1);
-
-            const dayT2 = cumulativeDay(clean, dayStart, dayEnd);
-            const dayNext = cumulativeDay(clean, nextStart, nextEnd);
-
-            document.getElementById("summaryTable").querySelector("tbody").innerHTML = `
-                <tr>
-                    <td class="highlight">${T1res.sum}</td>
-                    <td class="highlight">${T2res.sum}</td>
-                    <td class="highlight">${dayT2}</td>
-                    <td class="highlight">${dayNext}</td>
-                </tr>
-            `;
-
-            let changesHTML = "", phrases = [];
-            const assets = new Set(clean.map(ev => ev.asset));
-            assets.forEach(a => {
-                const atT1 = clean.filter(ev => T1 >= ev.start && T1 <= ev.end && ev.asset === a);
-                const atT2 = clean.filter(ev => T2 >= ev.start && T2 <= ev.end && ev.asset === a);
-                const c1 = atT1.reduce((s, e) => s + e.unavail, 0);
-                const c2 = atT2.reduce((s, e) => s + e.unavail, 0);
-                const diff = c2 - c1;
-
-                let note = diff > 0 ? "Increase" : (diff < 0 ? "Decrease" : "Stable");
-
-                const conf = conflicts.filter(c => c.asset === a);
-                if (conf.length) {
-                    note += " | Conflict";
-                    conf.forEach(c => {
-                        phrases.push(`<strong>${a}</strong>: conflict between ${c.kept.unavail} MW and ${c.discarded.unavail} MW.`);
-                    });
-                }
-
-                if (diff !== 0 || conf.length) {
-                    changesHTML += `
-                        <tr>
-                            <td>${a}</td>
-                            <td>${c1}</td>
-                            <td>${c2}</td>
-                            <td>${diff}</td>
-                            <td>${note}</td>
-                        </tr>
-                    `;
-                }
-            });
-
-            document.getElementById("changesTable").querySelector("tbody").innerHTML =
-                changesHTML || `<tr><td colspan="5" class="stable">No changes.</td></tr>`;
-
-            document.getElementById("changesBody").innerHTML =
-                phrases.length ? ("<ul><li>" + phrases.join("</li><li>") + "</li></ul>") : "No significant changes.";
-
-            let t2HTML = "";
-            T2res.list.forEach(ev => {
-                t2HTML += `
-                    <tr>
-                        <td>${ev.asset}</td>
-                        <td>${ev.unavail}</td>
-                        <td>${formatFull(ev.start)}</td>
-                        <td>${formatFull(ev.end)}</td>
-                    </tr>
-                `;
-            });
-            document.getElementById("unavailableTableT2").querySelector("tbody").innerHTML =
-                t2HTML || `<tr><td colspan="4">None.</td></tr>`;
-
-            document.getElementById("results").style.display = "block";
-        };
-        readerCSV.readAsText(csvFile);
-    };
-    readerRSS.readAsText(rssFile);
-}
-</script>
-
-</body>
-</html>
+        readerCSV.onload = e2
