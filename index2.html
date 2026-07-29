@@ -584,8 +584,7 @@ function runAnalysis() {
 }
 
 /* ------------------ INITIALISATION AUTOMATIQUE T1/T2 ------------------ */
-
-window.addEventListener("load", () => {
+function setDefaultDates() {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
@@ -594,9 +593,19 @@ window.addEventListener("load", () => {
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
-    document.getElementById("comparisonDate").value = toLocalInputValue(now);
-    document.getElementById("pivotDate").value = toLocalInputValue(yesterday);
+    const cmp = document.getElementById("comparisonDate");
+    const piv = document.getElementById("pivotDate");
+
+    if (cmp && piv) {
+        cmp.value = toLocalInputValue(now);       // T2 = maintenant
+        piv.value = toLocalInputValue(yesterday); // T1 = maintenant - 24h
+    }
+}
+
+window.addEventListener("load", () => {
+    setDefaultDates();
 });
+
 </script>
 </body>
 </html>
