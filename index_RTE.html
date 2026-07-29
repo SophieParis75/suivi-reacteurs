@@ -290,49 +290,32 @@
             const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
             const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
 
+            // NOUVELLE LOGIQUE : Cumul des indisponibilités maximales journalières par réacteur
             function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
-                let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
+                let maxParReacteur = {};
+
                 evenementsFiltres.forEach(ev => {
-                    if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
-                    if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
+                    // On vérifie si l'événement chevauche la journée cible
+                    if (ev.dateDebut <= finJour && ev.dateFin >= debutJour) {
+                        if (!maxParReacteur[ev.asset] || ev.unavailable > maxParReacteur[ev.asset].unavailable) {
+                            maxParReacteur[ev.asset] = ev;
+                        }
+                    }
                 });
 
-                let chronologie = Array.from(pointsDeTemps).sort((a, b) => a - b);
-                let segments = [];
-                let maxPuissance = 0;
-                let topInstantMilli = null;
-
-                for (let i = 0; i < chronologie.length - 1; i++) {
-                    let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
-                    let puissanceSegment = 0;
-
-                    evenementsFiltres.forEach(ev => {
-                        if (instantMilieu >= ev.dateDebut && instantMilieu <= ev.dateFin) puissanceSegment += ev.unavailable;
-                    });
-
-                    if (puissanceSegment > maxPuissance) {
-                        maxPuissance = puissanceSegment;
-                        topInstantMilli = instantMilieu.getTime();
-                    }
-                    segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
-                }
-
-                let creneauxPic = [];
-                if (maxPuissance > 0) {
-                    segments.forEach(seg => {
-                        if (seg.h === maxPuissance) creneauxPic.push(`${formaterHeure(seg.start)}-${formaterHeure(seg.end)}`);
-                    });
-                }
-
+                let totalMaxJour = 0;
                 let reacteursDuPic = [];
-                if (topInstantMilli) {
-                    let cible = new Date(topInstantMilli);
-                    evenementsFiltres.forEach(ev => {
-                        if (cible >= ev.dateDebut && cible <= ev.dateFin) reacteursDuPic.push(ev);
-                    });
-                }
 
-                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'Aucun', list: reacteursDuPic };
+                Object.values(maxParReacteur).forEach(ev => {
+                    totalMaxJour += ev.unavailable;
+                    reacteursDuPic.push(ev);
+                });
+
+                return { 
+                    max: totalMaxJour, 
+                    intervals: reacteursDuPic.length > 0 ? 'Cumul journalier max' : 'Aucun', 
+                    list: reacteursDuPic 
+                };
             }
 
             const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
