@@ -29,16 +29,36 @@ th { background-color: #f1f3f5; font-weight: bold; }
 <h1>NUCLEAR ENVIRONMENTAL UNAVAILABILITIES (Manual RSS + CSV)</h1>
 
 <div class="config-box">
-
     <div class="step">
-        <label>1. Load RSS file (downloaded from EDF):</label>
+        <label>1. Download the EDF RSS feed</label>
+        <a href="https://www.edf.fr/en/toutes-les-indisponibilites-doaat/feed" 
+           target="_blank" 
+           class="btn-link">
+           ⬇️ Download RSS Feed (Right-click → Save link as → Save)
+        </a>
+    </div>
+    
+    <div class="step">
+        <label for="rssFile">2. Load the downloaded RSS file:</label>
         <input type="file" id="rssFile" accept=".xml,.feed">
     </div>
+</div>
 
+<div class="config-box">
     <div class="step">
-        <label>2. Load CSV file (downloaded from EDF):</label>
+        <label>1. Download the EDF History log (Full CSV)</label>
+        <a href="https://doaat.edf.fr/en/doaat/export/full/csv?t=1785316681" 
+           target="_blank" 
+           class="btn-link">
+           ⬇️ Download EDF History log (Right-click → Save link as → Save)
+        </a>
+    </div>
+    
+    <div class="step">
+        <label for="csvFile">2. Load the downloaded History file:</label>
         <input type="file" id="csvFile" accept=".csv">
     </div>
+</div>
 
     <div class="step">
         <label>3. Choose analysis times:</label>
