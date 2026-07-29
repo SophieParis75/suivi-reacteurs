@@ -532,16 +532,11 @@ function runAnalysis() {
 
                 let note = diff > 0 ? "Increase" : (diff < 0 ? "Decrease" : "Stable");
 
-                const conf = conflicts.filter(c => c.asset === a);
+              // Conflits désactivés
+const conf = [];
 
-                if (conf.length) {
-                    note += " | Conflict";
-                    conf.forEach(c => {
-                        phrases.push(`<strong>${a}</strong>: conflict between ${c.kept.unavail} MW and ${c.discarded.unavail} MW.`);
-                    });
-                }
 
-                if (diff !== 0 || conf.length) {
+               if (diff !== 0) {
                     changesHTML += `
                         <tr>
                             <td>${a}</td>
@@ -556,9 +551,8 @@ function runAnalysis() {
 
             document.getElementById("changesTable").querySelector("tbody").innerHTML =
                 changesHTML || `<tr><td colspan="5" class="stable">No changes.</td></tr>`;
-
-            document.getElementById("changesBody").innerHTML =
-                phrases.length ? ("<ul><li>" + phrases.join("</li><li>") + "</li></ul>") : "No significant changes.";
+document.getElementById("changesBody").innerHTML = "No changes.";
+            
 
             /* ------------------ LISTE T2 ------------------ */
 
