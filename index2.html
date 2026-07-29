@@ -402,6 +402,9 @@ function resetAll() {
     document.getElementById("unavailableTableT2").querySelector("tbody").innerHTML = "";
 
     document.getElementById("results").style.display = "none";
+
+    // 👉 Remet les dates par défaut après le reset
+    setDefaultDates();
 }
 
 /* ------------------ ANALYSE PRINCIPALE ------------------ */
