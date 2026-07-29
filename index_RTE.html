@@ -198,40 +198,46 @@
             let mapEvenementsParId = {};
             let tousLesReacteursUniques = new Set();
 
-            for (let i = 0; i < items.length; i++) {
-                const descNode = items[i].getElementsByTagName("description")[0];
-                if (!descNode) continue;
-                
-                const texteHTML = descNode.textContent || descNode.innerHTML;
+            // Remplacez la boucle de lecture XML par celle-ci :
 
-                const eventStatus = extraireChampStrict(texteHTML, "Event status").toLowerCase();
-                const remarks = extraireChampStrict(texteHTML, "Remarks").toLowerCase();
-                const fuelType = extraireChampStrict(texteHTML, "Fuel type").toLowerCase();
+for (let i = 0; i < items.length; i++) {
+    const descNode = items[i].getElementsByTagName("description")[0];
+    if (!descNode) continue;
+    
+    const texteHTML = descNode.textContent || descNode.innerHTML;
 
-                if (eventStatus.includes("act") && fuelType.includes("nucl") && remarks.includes("environ")) {
-                    const eventId = extraireChampStrict(texteHTML, "Event ID") || extraireChampStrict(texteHTML, "Event code") || ("evt_" + i);
-                    const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                    const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                    const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
-                    const available = installed - unavailable;
-                    const eventStartStr = extraireChampStrict(texteHTML, "Event start");
-                    const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+    const eventStatus = extraireChampStrict(texteHTML, "Event status").toLowerCase();
+    const remarks = extraireChampStrict(texteHTML, "Remarks").toLowerCase();
+    const fuelType = extraireChampStrict(texteHTML, "Fuel type").toLowerCase();
 
-                    if (eventStartStr && eventStopStr) {
-                        // Conserve la dernière version de chaque ID d'événement unique
-                        mapEvenementsParId[eventId] = {
-                            id: eventId,
-                            asset: asset, 
-                            installed: installed, 
-                            unavailable: unavailable, 
-                            available: available, 
-                            dateDebut: new Date(eventStartStr), 
-                            dateFin: new Date(eventStopStr)
-                        };
-                        tousLesReacteursUniques.add(asset);
-                    }
-                }
-            }
+    if (eventStatus.includes("act") && fuelType.includes("nucl") && remarks.includes("environ")) {
+        
+        // 1. Recherche du vrai pattern d'ID EDF (ex: 05470_EDF_T_00313072)
+        const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
+        const eventId = matchIdEdf ? matchIdEdf[0] : (extraireChampStrict(texteHTML, "Event ID") || ("evt_" + i));
+        
+        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
+        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+        const available = installed - unavailable;
+        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
+        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+
+        if (eventStartStr && eventStopStr && asset) {
+            // Seule la dernière version publiée pour CET ID d'événement précis est conservée
+            mapEvenementsParId[eventId] = {
+                id: eventId,
+                asset: asset, 
+                installed: installed, 
+                unavailable: unavailable, 
+                available: available, 
+                dateDebut: new Date(eventStartStr), 
+                dateFin: new Date(eventStopStr)
+            };
+            tousLesReacteursUniques.add(asset);
+        }
+    }
+}
 
             let evenementsFiltres = Object.values(mapEvenementsParId);
 
