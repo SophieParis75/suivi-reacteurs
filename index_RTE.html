@@ -90,7 +90,7 @@
                     <div id="countPlus" class="delta-val plus">0</div>
                 </div>
                 <div class="delta-card" style="border-top: 4px solid #28a745;">
-                    <div>Retours de capacités surle réseau / Baisse des indisponibilités</div>
+                    <div>Retours de capacités sur le réseau / Baisse des indisponibilités</div>
                     <div id="countMoins" class="delta-val moins">0</div>
                 </div>
             </div>
@@ -195,7 +195,7 @@
             const xmlDoc = parser.parseFromString(strXML, "text/xml");
             const items = xmlDoc.getElementsByTagName("item");
 
-            let evenementsFiltres = [];
+            let mapEvenementsParId = {};
             let tousLesReacteursUniques = new Set();
 
             for (let i = 0; i < items.length; i++) {
@@ -208,51 +208,65 @@
                 const remarks = extraireChampStrict(texteHTML, "Remarks").toLowerCase();
                 const fuelType = extraireChampStrict(texteHTML, "Fuel type").toLowerCase();
 
-                // Recherche élargie : statut actif ("actif" ou "active"), combustible contenant "nucl", et remarques contenant "environ"
-                if ((eventStatus.includes("act")) && fuelType.includes("nucl")) {
-                   if (remarks.includes("environ")) {
-                        
-                        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                        const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                        const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
-                        const available = installed - unavailable;
-                        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
-                        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+                if (eventStatus.includes("act") && fuelType.includes("nucl") && remarks.includes("environ")) {
+                    const eventId = extraireChampStrict(texteHTML, "Event ID") || extraireChampStrict(texteHTML, "Event code") || ("evt_" + i);
+                    const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
+                    const installed = parseFloat(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
+                    const unavailable = parseFloat(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+                    const available = installed - unavailable;
+                    const eventStartStr = extraireChampStrict(texteHTML, "Event start");
+                    const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
 
-                        if(eventStartStr && eventStopStr) {
-                            evenementsFiltres.push({
-                                asset, installed, unavailable, available, 
-                                dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr)
-                            });
-                            tousLesReacteursUniques.add(asset);
-                        }
+                    if (eventStartStr && eventStopStr) {
+                        // Conserve la dernière version de chaque ID d'événement unique
+                        mapEvenementsParId[eventId] = {
+                            id: eventId,
+                            asset: asset, 
+                            installed: installed, 
+                            unavailable: unavailable, 
+                            available: available, 
+                            dateDebut: new Date(eventStartStr), 
+                            dateFin: new Date(eventStopStr)
+                        };
+                        tousLesReacteursUniques.add(asset);
                     }
                 }
             }
 
+            let evenementsFiltres = Object.values(mapEvenementsParId);
+
             localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
+            
             let pannesA_T1 = {};
             let pannesA_T2 = {};
             tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
 
-            let sommeMaintenant = 0;
-            let totalT2 = 0;
-            let listReacteursT2 = [];
+            let mapReacteursT2 = {};
 
             evenementsFiltres.forEach(ev => {
+                // Pour T1 : rétablit la valeur d'indisponibilité max si plusieurs pannes simultanées
                 if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
-                    pannesA_T1[ev.asset] += ev.unavailable;
-                    sommeMaintenant += ev.unavailable;
+                    pannesA_T1[ev.asset] = Math.max(pannesA_T1[ev.asset] || 0, ev.unavailable);
                 }
+                // Pour T2 : retient l'événement max par réacteur
                 if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
-                    pannesA_T2[ev.asset] += ev.unavailable;
-                    totalT2 += ev.unavailable;
-                    listReacteursT2.push(ev);
+                    const r = ev.asset;
+                    if (!mapReacteursT2[r] || ev.unavailable > mapReacteursT2[r].unavailable) {
+                        mapReacteursT2[r] = ev;
+                    }
                 }
             });
 
-            // Tri alphabétique de la liste des réacteurs indisponibles à T2
+            let listReacteursT2 = Object.values(mapReacteursT2);
+            let totalT2 = 0;
+            listReacteursT2.forEach(ev => {
+                pannesA_T2[ev.asset] = ev.unavailable;
+                totalT2 += ev.unavailable;
+            });
+
+            let sommeMaintenant = Object.values(pannesA_T1).reduce((acc, v) => acc + v, 0);
+
+            // Tri alphabétique des réacteurs à T2
             listReacteursT2.sort((a, b) => a.asset.localeCompare(b.asset, 'fr', { numeric: true }));
 
             let htmlIndisponiblesT2 = '';
@@ -265,9 +279,11 @@
             let countPlus = 0;
             let countMoins = 0;
 
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
+            let listeReacteursTriee = Array.from(tousLesReacteursUniques).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+
+            listeReacteursTriee.forEach(reacteur => {
+                const capT1 = pannesA_T1[reacteur] || 0;
+                const capT2 = pannesA_T2[reacteur] || 0;
                 const diff = capT2 - capT1;
 
                 if (diff > 0) {
@@ -288,7 +304,6 @@
             const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
             const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
 
-            // Sélection de l'indisponibilité max par réacteur et tri alphabétique
             function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
                 let maxParReacteur = {};
 
@@ -305,18 +320,11 @@
 
                 let totalMaxJour = 0;
                 let reacteursDuPic = Object.values(maxParReacteur);
-
-                // Tri alphabétique par nom de réacteur (asset)
                 reacteursDuPic.sort((a, b) => a.asset.localeCompare(b.asset, 'fr', { numeric: true }));
 
-                reacteursDuPic.forEach(ev => {
-                    totalMaxJour += ev.unavailable;
-                });
+                reacteursDuPic.forEach(ev => { totalMaxJour += ev.unavailable; });
 
-                return { 
-                    max: totalMaxJour, 
-                    list: reacteursDuPic 
-                };
+                return { max: totalMaxJour, list: reacteursDuPic };
             }
 
             const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
@@ -346,9 +354,9 @@
             document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">Aucun réacteur actif dans le pic.</td></tr>';
 
             let phrases = [];
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
+            listeReacteursTriee.forEach(reacteur => {
+                const capT1 = pannesA_T1[reacteur] || 0;
+                const capT2 = pannesA_T2[reacteur] || 0;
                 const diff = capT2 - capT1;
 
                 const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
@@ -376,10 +384,21 @@
                 : 'Aucun changement significatif de capacité ou de durée constaté.';
 
             localStorage.setItem('graphData', JSON.stringify(evenementsFiltres));
-            document.getElementById('resultats').innerHTML += 
-                '<br><a href="graphique.html" target="_blank" class="btn-link">📈 Voir le graphique détaillé</a>';
+            
+            const divResultats = document.getElementById('resultats');
+            if (!document.getElementById('linkGraphique')) {
+                const linkG = document.createElement('a');
+                linkG.id = 'linkGraphique';
+                linkG.href = 'graphique.html';
+                linkG.target = '_blank';
+                linkG.className = 'btn-link';
+                linkG.style.marginTop = '20px';
+                linkG.innerHTML = '📈 Voir le graphique détaillé';
+                divResultats.appendChild(document.createElement('br'));
+                divResultats.appendChild(linkG);
+            }
 
-            document.getElementById('resultats').style.display = 'block';
+            divResultats.style.display = 'block';
         }
     </script>
 </body>
