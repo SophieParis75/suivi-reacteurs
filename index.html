@@ -31,34 +31,38 @@
         .delta-card { background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex: 1; text-align: center; }
         .delta-val { font-size: 24px; font-weight: bold; margin-top: 5px; }
         .plus { color: #dc3545; font-weight: bold; }
-        .moins { color: #28a745; font-weight: bold; }
+        .minus { color: #28a745; font-weight: bold; }
 
         /* Lock screen styles */
-        #ecranVerrouillage { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #343a40; display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        #lockScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #343a40; display: flex; justify-content: center; align-items: center; z-index: 9999; }
         .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center; max-width: 350px; width: 100%; }
         .login-card h2 { border-bottom: none; color: #333; margin-top: 0; }
         .login-card input { width: 80%; margin-bottom: 15px; text-align: center; font-size: 16px; }
         .login-card button { width: 88%; background: #28a745; }
         .login-card button:hover { background: #218838; }
-        #msgErreur { color: #dc3545; font-weight: bold; font-size: 14px; margin-top: 10px; display: none; }
+        #errorMessage { color: #dc3545; font-weight: bold; font-size: 14px; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
 
-    <div id="ecranVerrouillage">
+    <!-- Disable lock screen code -->
+    <div id="lockScreen" style="display: none;">
         <div class="login-card">
             <h2>Secure Access</h2>
             <p>Please enter the passcode:</p>
-            <input type="password" id="codeSaisi" placeholder="Secret code" maxlength="10" onkeydown="if(event.key === 'Enter') verifierCode()">
-            <button onclick="verifierCode()">Unlock</button>
-            <div id="msgErreur">⚠️ Incorrect code</div>
+            <input type="password" id="enteredCode" placeholder="Secret code" maxlength="10" onkeydown="if(event.key === 'Enter') verifyCode()">
+            <button onclick="verifyCode()">Unlock</button>
+            <div id="errorMessage">⚠️ Incorrect code</div>
         </div>
     </div>
-
+    <!-- End lock screen code -->
+    
+<!-- Link to Cumulative environmental cuts page -->
 <nav style="background-color: #f1f1f1; padding: 10px; margin-bottom: 20px;">
     <a href="index.html">Home</a> | 
     <a href="cumulative_environment_cuts.html" target="_blank">Cumulative Environmental Cuts</a>
 </nav>
+<!-- End Link to Cumulative environmental cuts page -->
 
     <div id="applicationContent" style="display: none;">
         <h1>--------- AUDIT & CALCULATION VERIFICATION AREA ---------</h1>
@@ -70,29 +74,29 @@
             </div>
             
             <div class="step">
-                <label for="fichierRss">2. Load the downloaded file:</label>
-                <input type="file" id="fichierRss" accept=".xml,.feed">
+                <label for="rssFile">2. Load the downloaded file:</label>
+                <input type="file" id="rssFile" accept=".xml,.feed">
             </div>
 
             <div class="step">
                 <label>3. Analysis time boundaries:</label>
                 <div class="flex-inputs">
                     <div>
-                        <label for="datePivot" style="font-size: 0.9em; color: #555;">Previous Date/Time (T1):</label>
-                        <input type="datetime-local" id="datePivot">
+                        <label for="pivotDate" style="font-size: 0.9em; color: #555;">Previous Date/Time (T1):</label>
+                        <input type="datetime-local" id="pivotDate">
                     </div>
                     <div>
-                        <label for="dateComparaison" style="font-size: 0.9em; color: #555;">Comparison Date/Time (T2):</label>
-                        <input type="datetime-local" id="dateComparaison">
+                        <label for="comparisonDate" style="font-size: 0.9em; color: #555;">Comparison Date/Time (T2):</label>
+                        <input type="datetime-local" id="comparisonDate">
                     </div>
                 </div>
-                <button onclick="chargerFichierLocal()">Analyze</button>
+                <button onclick="loadLocalFile()">Analyze</button>
             </div>
         </div>
         
-        <div id="resultats" style="display:none;">
+        <div id="results" style="display:none;">
             <h2>Summary</h2>
-            <table id="tableResume">
+            <table id="summaryTable">
                 <thead>
                     <tr>
                         <th>Simultaneous Unavailabilities at T1</th>
@@ -108,7 +112,7 @@
                 <tbody></tbody>
             </table>
 
-            <h2>🔄 Observed Changes Between T1 and T2</h2>
+            <h2>🔄 Changes Between T1 and T2</h2>
             <div class="delta-box">
                 <div class="delta-card" style="border-top: 4px solid #dc3545;">
                     <div>New Reductions / Increase in Unavailabilities</div>
@@ -116,11 +120,11 @@
                 </div>
                 <div class="delta-card" style="border-top: 4px solid #28a745;">
                     <div>Capacity Restored to Grid / Decrease in Unavailabilities</div>
-                    <div id="countMoins" class="delta-val moins">0</div>
+                    <div id="countMinus" class="delta-val minus">0</div>
                 </div>
             </div>
             
-            <table id="tableChangements">
+            <table id="changesTable">
                 <thead>
                     <tr>
                         <th>Reactor (Unit)</th>
@@ -139,7 +143,7 @@
             </div>
 
             <h2>📌 List of Unavailable Reactors at T2</h2>
-            <table id="tableIndisponiblesT2">
+            <table id="unavailableTableT2">
                 <thead>
                     <tr>
                         <th>Reactor (Unit)</th>
@@ -151,10 +155,10 @@
                 <tbody></tbody>
             </table>
 
-            <h2>🔍 Lists of Simultaneously Unavailable Reactors at Today's and Tomorrow's Peaks (Based on T2)</h2>
+            <h2>🔍 Lists of Simultaneously Unavailable Reactors at Today's and Tomorrow's Peaks (Based on T2 as Today)</h2>
             
-            <h3>Reactors Retained for TODAY'S PEAK</h3>
-            <table id="tableAuditAuj">
+            <h3>Reactors Retained for Today's Peak</h3>
+            <table id="auditTableToday">
                 <thead>
                     <tr>
                         <th>Reactor (Unit)</th>
@@ -166,8 +170,8 @@
                 <tbody></tbody>
             </table>
 
-            <h3>Reactors Retained for TOMORROW'S PEAK</h3>
-            <table id="tableAuditDemain">
+            <h3>Reactors Retained for Tomorrow's Peak</h3>
+            <table id="auditTableTomorrow">
                 <thead>
                     <tr>
                         <th>Reactor (Unit)</th>
@@ -179,250 +183,253 @@
                 <tbody></tbody>
             </table>
 
-            <br><a href="chart_environment_cuts.html" target="_blank" class="btn-link">📈 View Detailed Chart</a>    
+            <br><a href="chart_environment_cuts.html" target="_blank" class="btn-link">📈 View Peak Unavailbility Chart</a>    
         </div>
     </div>
 
     <script>
-        const CAPACITE_TOTALE = 62990;
+        const TOTAL_CAPACITY = 62990;
         
         // Passcode configuration
-        const CODE_SECRET = "1789";
+        const SECRET_CODE = "1789";
 
-        function verifierCode() {
-            const saisie = document.getElementById('codeSaisi').value;
-            if (saisie === CODE_SECRET) {
-                document.getElementById('ecranVerrouillage').style.display = 'none';
+        function verifyCode() {
+            const input = document.getElementById('enteredCode').value;
+            if (input === SECRET_CODE) {
+                document.getElementById('lockScreen').style.display = 'none';
                 document.getElementById('applicationContent').style.display = 'block';
             } else {
-                document.getElementById('msgErreur').style.display = 'block';
-                document.getElementById('codeSaisi').value = '';
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('enteredCode').value = '';
             }
         }
 
         const t1 = new Date();
         t1.setMinutes(t1.getMinutes() - t1.getTimezoneOffset());
-        document.getElementById('datePivot').value = t1.toISOString().slice(0,16);
+        document.getElementById('pivotDate').value = t1.toISOString().slice(0,16);
 
         const t2 = new Date();
         t2.setHours(t2.getHours() + 1);
         t2.setMinutes(t2.getMinutes() - t2.getTimezoneOffset());
-        document.getElementById('dateComparaison').value = t2.toISOString().slice(0,16);
+        document.getElementById('comparisonDate').value = t2.toISOString().slice(0,16);
 
-        function formaterDate(dateObj) { return dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
-        function formaterHeure(dateObj) { return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
-        function formaterFull(dateObj) { return formaterDate(dateObj) + " at " + formaterHeure(dateObj); }
+        function formatDate(dateObj) { return dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+        function formatTime(dateObj) { return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+        function formatFull(dateObj) { return formatDate(dateObj) + " at " + formatTime(dateObj); }
 
-        function extraireChampStrict(texte, cle) {
-            const regex = new RegExp(`<li>${cle}\\s*:\\s*([^<]+)</li>`, 'i');
-            const match = texte.match(regex);
+        function extractStrictField(text, key) {
+            const regex = new RegExp(`<li>${key}\\s*:\\s*([^<]+)</li>`, 'i');
+            const match = text.match(regex);
             return match ? match[1].trim() : '';
         }
 
-        function chargerFichierLocal() {
-            const fileInput = document.getElementById('fichierRss');
-            if (fileInput.files.length === 0) { alert("Please select the XML file."); return; }
-            const file = fileInput.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) { analyserDonneesBrutes(e.target.result); };
-            reader.readAsText(file);
-        }
+        <!-- Default T2 is time of EDF file upload -->
+      function loadLocalFile() {
+    const fileInput = document.getElementById('rssFile');
+    if (fileInput.files.length === 0) { alert("Please select the XML file."); return; }
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) { 
+        // Set T2 (comparisonDate) to current date and time upon loading the file
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('comparisonDate').value = now.toISOString().slice(0, 16);
 
-        function analyserDonneesBrutes(strXML) {
-            const datePivot = new Date(document.getElementById('datePivot').value);
-            const dateT2 = new Date(document.getElementById('dateComparaison').value);
+        parseRawData(e.target.result); 
+    };
+    reader.readAsText(file);
+}
+        <!-- End Dynamic T2 -->
+    
+        function parseRawData(xmlStr) {
+            const pivotDate = new Date(document.getElementById('pivotDate').value);
+            const dateT2 = new Date(document.getElementById('comparisonDate').value);
             
             const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(strXML, "text/xml");
+            const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
             const items = xmlDoc.getElementsByTagName("item");
 
-            let evenementsFiltres = [];
-            let tousLesReacteursUniques = new Set();
+            let filteredEvents = [];
+            let allUniqueReactors = new Set();
 
             for (let i = 0; i < items.length; i++) {
                 const descNode = items[i].getElementsByTagName("description")[0];
                 if (!descNode) continue;
                 
-                const texteHTML = descNode.textContent || descNode.innerHTML;
+                const htmlText = descNode.textContent || descNode.innerHTML;
 
-                const eventStatus = extraireChampStrict(texteHTML, "Event status");
-                const remarks = extraireChampStrict(texteHTML, "Remarks");
-                const fuelType = extraireChampStrict(texteHTML, "Fuel type");
+                const eventStatus = extractStrictField(htmlText, "Event status");
+                const remarks = extractStrictField(htmlText, "Remarks");
+                const fuelType = extractStrictField(htmlText, "Fuel type");
 
-                // Compatibility check for active/actif status and nuclear fuel string
-                const isActif = eventStatus.toLowerCase() === "actif" || eventStatus.toLowerCase() === "active";
-                if (isActif && fuelType.toLowerCase().includes("nucl")) {
+                const isActive = eventStatus.toLowerCase() === "actif" || eventStatus.toLowerCase() === "active";
+                if (isActive && fuelType.toLowerCase().includes("nucl")) {
                     const remLower = remarks.toLowerCase();
                     if (remLower.includes("environ")) {
                         
-                        const asset = extraireChampStrict(texteHTML, "Affected asset or unit");
-                        const installed = parseInt(extraireChampStrict(texteHTML, "Installed capacity")) || 0;
-                        const unavailable = parseInt(extraireChampStrict(texteHTML, "Unavailable capacity")) || 0;
+                        const asset = extractStrictField(htmlText, "Affected asset or unit");
+                        const installed = parseInt(extractStrictField(htmlText, "Installed capacity")) || 0;
+                        const unavailable = parseInt(extractStrictField(htmlText, "Unavailable capacity")) || 0;
                         const available = installed - unavailable;
-                        const eventStartStr = extraireChampStrict(texteHTML, "Event start");
-                        const eventStopStr = extraireChampStrict(texteHTML, "Event stop");
+                        const eventStartStr = extractStrictField(htmlText, "Event start");
+                        const eventStopStr = extractStrictField(htmlText, "Event stop");
 
                         if(eventStartStr && eventStopStr) {
-                            evenementsFiltres.push({
+                            filteredEvents.push({
                                 asset, installed, unavailable, available, 
-                                dateDebut: new Date(eventStartStr), 
-                                dateFin: new Date(eventStopStr)
+                                startDate: new Date(eventStartStr), 
+                                endDate: new Date(eventStopStr)
                             });
-                            tousLesReacteursUniques.add(asset);
+                            allUniqueReactors.add(asset);
                         }
                     }
                 }
             }
 
-            let pannesA_T1 = {};
-            let pannesA_T2 = {};
-            tousLesReacteursUniques.forEach(r => { pannesA_T1[r] = 0; pannesA_T2[r] = 0; });
+            let outagesAtT1 = {};
+            let outagesAtT2 = {};
+            allUniqueReactors.forEach(r => { outagesAtT1[r] = 0; outagesAtT2[r] = 0; });
 
-            let sommeMaintenant = 0;
+            let currentSum = 0;
             let totalT2 = 0;
-            let listReacteursT2 = [];
+            let listReactorsT2 = [];
 
-            evenementsFiltres.forEach(ev => {
-                if (datePivot >= ev.dateDebut && datePivot <= ev.dateFin) {
-                    pannesA_T1[ev.asset] += ev.unavailable;
-                    sommeMaintenant += ev.unavailable;
+            filteredEvents.forEach(ev => {
+                if (pivotDate >= ev.startDate && pivotDate <= ev.endDate) {
+                    outagesAtT1[ev.asset] += ev.unavailable;
+                    currentSum += ev.unavailable;
                 }
-                if (dateT2 >= ev.dateDebut && dateT2 <= ev.dateFin) {
-                    pannesA_T2[ev.asset] += ev.unavailable;
+                if (dateT2 >= ev.startDate && dateT2 <= ev.endDate) {
+                    outagesAtT2[ev.asset] += ev.unavailable;
                     totalT2 += ev.unavailable;
-                    listReacteursT2.push(ev);
+                    listReactorsT2.push(ev);
                 }
             });
 
-            // Populate table of unavailabilities at T2
-            let htmlIndisponiblesT2 = '';
-            listReacteursT2.forEach(ev => {
-                htmlIndisponiblesT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            let htmlUnavailableT2 = '';
+            listReactorsT2.forEach(ev => {
+                htmlUnavailableT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formatFull(ev.startDate)}</td><td>${formatFull(ev.endDate)}</td></tr>`;
             });
-            document.getElementById('tableIndisponiblesT2').getElementsByTagName('tbody')[0].innerHTML = htmlIndisponiblesT2 || '<tr><td colspan="4">No reactors unavailable at T2.</td></tr>';
+            document.getElementById('unavailableTableT2').getElementsByTagName('tbody')[0].innerHTML = htmlUnavailableT2 || '<tr><td colspan="4">No reactors unavailable at T2.</td></tr>';
 
-            let htmlChangements = '';
+            let htmlChanges = '';
             let countPlus = 0;
-            let countMoins = 0;
+            let countMinus = 0;
 
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
+            allUniqueReactors.forEach(reactor => {
+                const capT1 = outagesAtT1[reactor];
+                const capT2 = outagesAtT2[reactor];
                 const diff = capT2 - capT1;
 
                 if (diff > 0) {
                     countPlus++;
-                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Increased restriction / New outage</td></tr>`;
+                    htmlChanges += `<tr><td><b>${reactor}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Increased restriction / New outage</td></tr>`;
                 } else if (diff < 0) {
-                    countMoins++;
-                    htmlChangements += `<tr><td><b>${reacteur}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="moins">${diff} MW</td><td>✅ Partial or full grid restoration</td></tr>`;
+                    countMinus++;
+                    htmlChanges += `<tr><td><b>${reactor}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="minus">${diff} MW</td><td>✅ Partial or full grid restoration</td></tr>`;
                 }
             });
 
             document.getElementById('countPlus').innerText = countPlus;
-            document.getElementById('countMoins').innerText = countMoins;
-            document.getElementById('tableChangements').getElementsByTagName('tbody')[0].innerHTML = htmlChangements || `<tr><td colspan="5" class="stable">No changes observed across the fleet between these two milestones. Unavailability is stable.</td></tr>`;
+            document.getElementById('countMinus').innerText = countMinus;
+            document.getElementById('changesTable').getElementsByTagName('tbody')[0].innerHTML = htmlChanges || `<tr><td colspan="5" class="stable">No changes observed across the fleet between these two milestones. Unavailability is stable.</td></tr>`;
 
-            const deAuj = new Date(dateT2); deAuj.setHours(0,0,0,0);
-            const aAuj = new Date(dateT2); aAuj.setHours(23,59,59,999);
-            const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
-            const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
+            const fromToday = new Date(dateT2); fromToday.setHours(0,0,0,0);
+            const toToday = new Date(dateT2); toToday.setHours(23,59,59,999);
+            const fromTomorrow = new Date(fromToday); fromTomorrow.setDate(fromTomorrow.getDate() + 1);
+            const toTomorrow = new Date(toToday); toTomorrow.setDate(toTomorrow.getDate() + 1);
 
-            function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
-                let pointsDeTemps = new Set([debutJour.getTime(), finJour.getTime()]);
-                evenementsFiltres.forEach(ev => {
-                    if (ev.dateDebut >= debutJour && ev.dateDebut <= finJour) pointsDeTemps.add(ev.dateDebut.getTime());
-                    if (ev.dateFin >= debutJour && ev.dateFin <= finJour) pointsDeTemps.add(ev.dateFin.getTime());
+            function analyzeDayPeakAndExtractReactors(dayStart, dayEnd) {
+                let timePoints = new Set([dayStart.getTime(), dayEnd.getTime()]);
+                filteredEvents.forEach(ev => {
+                    if (ev.startDate >= dayStart && ev.startDate <= dayEnd) timePoints.add(ev.startDate.getTime());
+                    if (ev.endDate >= dayStart && ev.endDate <= dayEnd) timePoints.add(ev.endDate.getTime());
                 });
 
-                let chronologie = Array.from(pointsDeTemps).sort((a, b) => a - b);
+                let chronology = Array.from(timePoints).sort((a, b) => a - b);
                 let segments = [];
-                let maxPuissance = 0;
+                let maxPower = 0;
                 let topInstantMilli = null;
 
-                for (let i = 0; i < chronologie.length - 1; i++) {
-                    let instantMilieu = new Date((chronologie[i] + chronologie[i+1]) / 2);
-                    let puissanceSegment = 0;
+                for (let i = 0; i < chronology.length - 1; i++) {
+                    let midInstant = new Date((chronology[i] + chronology[i+1]) / 2);
+                    let segmentPower = 0;
 
-                    evenementsFiltres.forEach(ev => {
-                        if (instantMilieu >= ev.dateDebut && instantMilieu <= ev.dateFin) puissanceSegment += ev.unavailable;
+                    filteredEvents.forEach(ev => {
+                        if (midInstant >= ev.startDate && midInstant <= ev.endDate) segmentPower += ev.unavailable;
                     });
 
-                    if (puissanceSegment > maxPuissance) {
-                        maxPuissance = puissanceSegment;
-                        topInstantMilli = instantMilieu.getTime();
+                    if (segmentPower > maxPower) {
+                        maxPower = segmentPower;
+                        topInstantMilli = midInstant.getTime();
                     }
-                    segments.push({ start: new Date(chronologie[i]), end: new Date(chronologie[i+1]), h: puissanceSegment });
+                    segments.push({ start: new Date(chronology[i]), end: new Date(chronology[i+1]), h: segmentPower });
                 }
 
-                let creneauxPic = [];
-                if (maxPuissance > 0) {
+                let peakSlots = [];
+                if (maxPower > 0) {
                     segments.forEach(seg => {
-                        if (seg.h === maxPuissance) creneauxPic.push(`${formaterHeure(seg.start)}-${formaterHeure(seg.end)}`);
+                        if (seg.h === maxPower) peakSlots.push(`${formatTime(seg.start)}-${formatTime(seg.end)}`);
                     });
                 }
 
-                let reacteursDuPic = [];
+                let peakReactors = [];
                 if (topInstantMilli) {
-                    let cible = new Date(topInstantMilli);
-                    evenementsFiltres.forEach(ev => {
-                        if (cible >= ev.dateDebut && cible <= ev.dateFin) reacteursDuPic.push(ev);
+                    let target = new Date(topInstantMilli);
+                    filteredEvents.forEach(ev => {
+                        if (target >= ev.startDate && target <= ev.endDate) peakReactors.push(ev);
                     });
                 }
 
-                return { max: maxPuissance, intervals: creneauxPic.join(', ') || 'None', list: reacteursDuPic };
+                return { max: maxPower, intervals: peakSlots.join(', ') || 'None', list: peakReactors };
             }
 
-            const resultatAuj = analyserPicJourEtExtraireReacteurs(deAuj, aAuj);
-            const resultatDemain = analyserPicJourEtExtraireReacteurs(deDemain, aDemain);
+            const resultToday = analyzeDayPeakAndExtractReactors(fromToday, toToday);
+            const resultTomorrow = analyzeDayPeakAndExtractReactors(fromTomorrow, toTomorrow);
 
-            document.getElementById('tableResume').getElementsByTagName('tbody')[0].innerHTML = `
+            document.getElementById('summaryTable').getElementsByTagName('tbody')[0].innerHTML = `
                 <tr>
-                    <td class="highlight">${sommeMaintenant} MW</td>
+                    <td class="highlight">${currentSum} MW</td>
                     <td class="highlight">${totalT2} MW</td>
-                    <td class="highlight">${resultatAuj.max} MW</td>
-                    <td>${resultatAuj.intervals}</td>
-                    <td>${((resultatAuj.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
-                    <td class="highlight">${resultatDemain.max} MW</td>
-                    <td>${resultatDemain.intervals}</td>
-                    <td>${((resultatDemain.max / CAPACITE_TOTALE) * 100).toFixed(2)} %</td>
+                    <td class="highlight">${resultToday.max} MW</td>
+                    <td>${resultToday.intervals}</td>
+                    <td>${((resultToday.max / TOTAL_CAPACITY) * 100).toFixed(2)} %</td>
+                    <td class="highlight">${resultTomorrow.max} MW</td>
+                    <td>${resultTomorrow.intervals}</td>
+                    <td>${((resultTomorrow.max / TOTAL_CAPACITY) * 100).toFixed(2)} %</td>
                 </tr>
             `;
 
-            let htmlAuditAuj = '';
-            resultatAuj.list.forEach(ev => {
-                htmlAuditAuj += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            let htmlAuditToday = '';
+            resultToday.list.forEach(ev => {
+                htmlAuditToday += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formatFull(ev.startDate)}</td><td>${formatFull(ev.endDate)}</td></tr>`;
             });
-            document.getElementById('tableAuditAuj').getElementsByTagName('tbody')[0].innerHTML = htmlAuditAuj || '<tr><td colspan="4">No active reactors during peak.</td></tr>';
+            document.getElementById('auditTableToday').getElementsByTagName('tbody')[0].innerHTML = htmlAuditToday || '<tr><td colspan="4">No active reactors during peak.</td></tr>';
 
-            let htmlAuditDemain = '';
-            resultatDemain.list.forEach(ev => {
-                htmlAuditDemain += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
+            let htmlAuditTomorrow = '';
+            resultTomorrow.list.forEach(ev => {
+                htmlAuditTomorrow += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formatFull(ev.startDate)}</td><td>${formatFull(ev.endDate)}</td></tr>`;
             });
-            document.getElementById('tableAuditDemain').getElementsByTagName('tbody')[0].innerHTML = htmlAuditDemain || '<tr><td colspan="4">No active reactors during peak.</td></tr>';
+            document.getElementById('auditTableTomorrow').getElementsByTagName('tbody')[0].innerHTML = htmlAuditTomorrow || '<tr><td colspan="4">No active reactors during peak.</td></tr>';
 
-            // --- CHANGE PHRASE GENERATOR ---
             let phrases = [];
-            tousLesReacteursUniques.forEach(reacteur => {
-                const capT1 = pannesA_T1[reacteur];
-                const capT2 = pannesA_T2[reacteur];
+            allUniqueReactors.forEach(reactor => {
+                const capT1 = outagesAtT1[reactor];
+                const capT2 = outagesAtT2[reactor];
                 const diff = capT2 - capT1;
 
-                // Find events to compare end dates
-                const evT1 = evenementsFiltres.find(e => e.asset === reacteur && datePivot >= e.dateDebut && datePivot <= e.dateFin);
-                const evT2 = evenementsFiltres.find(e => e.asset === reacteur && dateT2 >= e.dateDebut && dateT2 <= e.dateFin);
+                const evT1 = filteredEvents.find(e => e.asset === reactor && pivotDate >= e.startDate && pivotDate <= e.endDate);
+                const evT2 = filteredEvents.find(e => e.asset === reactor && dateT2 >= e.startDate && dateT2 <= e.endDate);
 
-                if (diff !== 0 || (evT1 && evT2 && evT1.dateFin.getTime() !== evT2.dateFin.getTime())) {
-                    let phrase = `<strong>${reacteur}</strong>: `;
+                if (diff !== 0 || (evT1 && evT2 && evT1.endDate.getTime() !== evT2.endDate.getTime())) {
+                    let phrase = `<strong>${reactor}</strong>: `;
                     
-                    // Capacity analysis
                     if (capT1 === 0 && capT2 > 0) phrase += `New unavailability of ${capT2} MW.`;
                     else if (capT1 > 0 && capT2 === 0) phrase += `Unavailability of ${capT1} MW has ended.`;
                     else if (diff !== 0) phrase += `Unavailability changed from ${capT1} MW to ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
 
-                    // Duration analysis
                     if (evT1 && evT2) {
-                        const deltaMs = evT2.dateFin - evT1.dateFin;
+                        const deltaMs = evT2.endDate - evT1.endDate;
                         if (Math.abs(deltaMs) >= 3600000) {
                             const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
                             phrase += ` The duration of unavailability was ${deltaMs > 0 ? 'extended' : 'shortened'} by ${deltaH} hours.`;
@@ -435,10 +442,9 @@
                 ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
                 : 'No significant changes in capacity or duration observed.';
 
-            // --- LOCAL STORAGE FOR CHART ---
-            localStorage.setItem('graphData', JSON.stringify(listReacteursT2));
+            localStorage.setItem('graphData', JSON.stringify(listReactorsT2));
             
-            document.getElementById('resultats').style.display = 'block';
+            document.getElementById('results').style.display = 'block';
         }
     </script>
 </body>
