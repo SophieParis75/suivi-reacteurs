@@ -223,9 +223,7 @@ function makeEvent(asset, unavail, start, stop, fuel, remarks) {
     };
 }
 
-/* ------------------ RÉSOLUTION DES CONFLITS EDF ------------------ */
-/* Logique métier : garder l'événement le plus long */
-
+/* ------------------ SIGNALEMENT DES CONFLITS (SANS FILTRAGE) ------------------ */
 function resolveConflicts(events) {
     const byAsset = {};
     events.forEach(ev => {
@@ -233,42 +231,31 @@ function resolveConflicts(events) {
         byAsset[ev.asset].push(ev);
     });
 
-    const final = [];
     const conflicts = [];
 
     Object.keys(byAsset).forEach(asset => {
-
         const list = byAsset[asset].sort((a, b) => a.start - b.start);
 
-        let chosen = list[0];
+        for (let i = 0; i < list.length; i++) {
+            for (let j = i + 1; j < list.length; j++) {
+                const ev1 = list[i];
+                const ev2 = list[j];
 
-        for (let i = 1; i < list.length; i++) {
-            const ev = list[i];
-
-            // Chevauchement ?
-            if (ev.start <= chosen.end && ev.end >= chosen.start) {
-
-                const durC = chosen.end - chosen.start;
-                const durE = ev.end - ev.start;
-
-                const keep = durC >= durE ? chosen : ev;
-                const drop = durC >= durE ? ev : chosen;
-
-                conflicts.push({ asset, kept: keep, discarded: drop });
-
-                chosen = keep;
-
-            } else {
-                final.push(ev);
+                // Vérification du chevauchement d'intervalles
+                if (ev1.start <= ev2.end && ev2.start <= ev1.end) {
+                    conflicts.push({
+                        asset: asset,
+                        ev1: ev1,
+                        ev2: ev2
+                    });
+                }
             }
         }
-
-        final.push(chosen);
     });
 
-    return { events: final, conflicts };
+    // On retourne la totalité des événements originaux + les conflits détectés
+    return { events, conflicts };
 }
-
 /* ------------------ CUMUL INSTANTANÉ ------------------ */
 
 function cumulativeInstant(events, t) {
@@ -408,6 +395,7 @@ function resetAll() {
 }
 
 /* ------------------ ANALYSE PRINCIPALE ------------------ */
+/* ------------------ ANALYSE PRINCIPALE ------------------ */
 
 function runAnalysis() {
 
@@ -516,7 +504,6 @@ function runAnalysis() {
             /* ------------------ CHANGEMENTS T1 → T2 ------------------ */
 
             let changesHTML = "";
-            let phrases = [];
 
             const assets = new Set(clean.map(ev => ev.asset));
 
@@ -532,11 +519,7 @@ function runAnalysis() {
 
                 let note = diff > 0 ? "Increase" : (diff < 0 ? "Decrease" : "Stable");
 
-              // Conflits désactivés
-const conf = [];
-
-
-               if (diff !== 0) {
+                if (diff !== 0) {
                     changesHTML += `
                         <tr>
                             <td>${a}</td>
@@ -551,8 +534,28 @@ const conf = [];
 
             document.getElementById("changesTable").querySelector("tbody").innerHTML =
                 changesHTML || `<tr><td colspan="5" class="stable">No changes.</td></tr>`;
-document.getElementById("changesBody").innerHTML = "No changes.";
-            
+
+            /* ------------------ SUMMARY OF CHANGES (AFFICHAGE DES CONFLITS) ------------------ */
+
+            let conflictsHTML = "";
+
+            if (conflicts && conflicts.length > 0) {
+                conflictsHTML = "<ul style='margin:0; padding-left:20px;'>";
+                conflicts.forEach(c => {
+                    const k = c.kept;
+                    const d = c.discarded;
+                    conflictsHTML += `<li>
+                        <strong>Conflict on ${c.asset}:</strong> 
+                        Overlapping event kept [${k.unavail} MW from ${formatFull(k.start)} to ${formatFull(k.end)}] 
+                        over [${d.unavail} MW from ${formatFull(d.start)} to ${formatFull(d.end)}]
+                    </li>`;
+                });
+                conflictsHTML += "</ul>";
+            } else {
+                conflictsHTML = "<p class='stable'>No conflicts detected.</p>";
+            }
+
+            document.getElementById("changesBody").innerHTML = conflictsHTML;
 
             /* ------------------ LISTE T2 ------------------ */
 
