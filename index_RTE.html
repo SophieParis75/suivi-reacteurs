@@ -209,79 +209,89 @@
         }
 
         function analyserDonneesBrutes(strXML) {
-            const datePivot = new Date(document.getElementById('datePivot').value);
-            const dateT2 = new Date(document.getElementById('dateComparaison').value);
-            
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(strXML, "text/xml");
-            const items = xmlDoc.getElementsByTagName("item");
+    const datePivot = new Date(document.getElementById('datePivot').value);
+    const dateT2 = new Date(document.getElementById('dateComparaison').value);
+    
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(strXML, "text/xml");
+    const items = xmlDoc.getElementsByTagName("item");
 
-            let mapEvenementsParId = {};
-            let tousLesReacteursUniques = new Set();
+    console.clear();
+    console.log(`=== AUDIT CONSOLE : ${items.length} éléments dans le flux XML ===`);
 
-            for (let i = 0; i < items.length; i++) {
-                const descNode = items[i].getElementsByTagName("description")[0];
-                if (!descNode) continue;
-                
-                const texteHTML = descNode.textContent || descNode.innerHTML;
-                const texteMinuscule = texteHTML.toLowerCase();
+    let mapEvenementsParId = {};
+    let tousLesReacteursUniques = new Set();
 
-                // Filtres larges : contient "act", "nucl" et "environ"
-                if (texteMinuscule.includes("act") && texteMinuscule.includes("nucl") && texteMinuscule.includes("environ")) {
-                    
-                    // Extraction de l'ID d'événement EDF (ex: 05470_EDF_T_00313072)
-                    const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
-                    const eventId = matchIdEdf ? matchIdEdf[0] : (extraireValeurChamp(texteHTML, "Event ID") || ("evt_" + i));
+    for (let i = 0; i < items.length; i++) {
+        const descNode = items[i].getElementsByTagName("description")[0];
+        if (!descNode) continue;
+        
+        const texteHTML = descNode.textContent || descNode.innerHTML;
+        const texteMinuscule = texteHTML.toLowerCase();
 
-                    // Extraction du réacteur
-                    let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
-                    if (!asset) {
-                        const matchAsset = texteHTML.match(/(CHOOZ\s*\d|BLAYAIS\s*\d|BUGEY\s*\d|GOLFECH\s*\d|ST ALBAN\s*\d|[A-Z\s\-]+(?=\s+Nucl))/i);
-                        if (matchAsset) asset = matchAsset[0].trim();
-                    }
+        // Target de diagnostic : Chooz ou Blayais 1
+        if (texteMinuscule.includes("chooz") || texteMinuscule.includes("blayais 1")) {
+            console.group(`🔍 Inspection Item #${i} (${texteMinuscule.includes("chooz") ? "CHOOZ" : "BLAYAIS 1"})`);
+            console.log("📄 TEXTE BRUT HTML :");
+            console.log(texteHTML);
 
-                    // Extraction des dates
-                    let startStr = extraireValeurChamp(texteHTML, "Event start");
-                    let stopStr = extraireValeurChamp(texteHTML, "Event stop");
+            // Vérification des filtres
+            const aAct = texteMinuscule.includes("act");
+            const aNucl = texteMinuscule.includes("nucl");
+            const aEnviron = texteMinuscule.includes("environ");
 
-                    // Détection directe par Regex si format structuré
-                    if (!startStr || !stopStr) {
-                        const matchDates = texteHTML.match(/(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2})/g);
-                        if (matchDates && matchDates.length >= 2) {
-                            startStr = matchDates[0];
-                            stopStr = matchDates[1];
-                        }
-                    }
+            console.log(`Filtres -> "act": ${aAct} | "nucl": ${aNucl} | "environ": ${aEnviron}`);
 
-                    // Extraction de la capacité indisponible
-                    let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
-                    let unavailable = parseFloat(unavailStr);
-                    
-                    if (isNaN(unavailable)) {
-                        // Extraction secours par motifs numériques dans la chaîne
-                        const matchCap = texteHTML.match(/(\d{3,4})\s*(?:MW)?/g);
-                        if (matchCap && matchCap.length > 0) {
-                            // On prend la valeur numérique correspondant à l'indisponibilité
-                            const capValues = matchCap.map(v => parseFloat(v)).filter(v => v > 0 && v < 2000);
-                            if (capValues.length > 0) unavailable = capValues[capValues.length - 1];
-                        }
-                    }
+            // Test extraction ID
+            const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
+            console.log("ID EDF extrait :", matchIdEdf ? matchIdEdf[0] : "❌ NON TROUVÉ");
 
-                    const dateDebut = parseDateFrOrIso(startStr);
-                    const dateFin = parseDateFrOrIso(stopStr);
+            // Test extraction Nom Réacteur
+            let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
+            console.log("Réacteur (Champ) :", asset || "❌ vide");
 
-                    if (asset && dateDebut && dateFin && !isNaN(unavailable)) {
-                        mapEvenementsParId[eventId] = {
-                            id: eventId,
-                            asset: asset, 
-                            unavailable: unavailable, 
-                            dateDebut: dateDebut, 
-                            dateFin: dateFin
-                        };
-                        tousLesReacteursUniques.add(asset);
-                    }
-                }
+            // Test extraction MW
+            let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
+            console.log("MW (Champ) :", unavailStr || "❌ vide");
+
+            // Test extraction Dates
+            let startStr = extraireValeurChamp(texteHTML, "Event start");
+            let stopStr = extraireValeurChamp(texteHTML, "Event stop");
+            console.log("Dates (Champs) :", { startStr, stopStr });
+
+            console.groupEnd();
+        }
+
+        // --- Logique d'analyse normale ---
+        if (texteMinuscule.includes("act") && texteMinuscule.includes("nucl") && texteMinuscule.includes("environ")) {
+            const matchIdEdf = texteHTML.match(/[0-9]{5}_EDF_[A-Z]_[0-9]+/i);
+            const eventId = matchIdEdf ? matchIdEdf[0] : (extraireValeurChamp(texteHTML, "Event ID") || ("evt_" + i));
+
+            let asset = extraireValeurChamp(texteHTML, "Affected asset or unit");
+            let unavailStr = extraireValeurChamp(texteHTML, "Unavailable capacity");
+            let unavailable = parseFloat(unavailStr);
+            let startStr = extraireValeurChamp(texteHTML, "Event start");
+            let stopStr = extraireValeurChamp(texteHTML, "Event stop");
+
+            const dateDebut = parseDateFrOrIso(startStr);
+            const dateFin = parseDateFrOrIso(stopStr);
+
+            if (asset && dateDebut && dateFin && !isNaN(unavailable)) {
+                mapEvenementsParId[eventId] = {
+                    id: eventId,
+                    asset: asset, 
+                    unavailable: unavailable, 
+                    dateDebut: dateDebut, 
+                    dateFin: dateFin
+                };
+                tousLesReacteursUniques.add(asset);
             }
+        }
+    }
+
+    // Suite du traitement et affichage dans le DOM...
+    // (Conservez votre code de rendu existant ci-dessous)
+}
 
             let evenementsFiltres = Object.values(mapEvenementsParId);
             localStorage.setItem('dateT2', document.getElementById('dateComparaison').value);
