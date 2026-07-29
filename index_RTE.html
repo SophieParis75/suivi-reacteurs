@@ -252,6 +252,9 @@
                 }
             });
 
+            // Tri alphabétique de la liste des réacteurs indisponibles à T2
+            listReacteursT2.sort((a, b) => a.asset.localeCompare(b.asset, 'fr', { numeric: true }));
+
             let htmlIndisponiblesT2 = '';
             listReacteursT2.forEach(ev => {
                 htmlIndisponiblesT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formaterFull(ev.dateDebut)}</td><td>${formaterFull(ev.dateFin)}</td></tr>`;
@@ -285,7 +288,7 @@
             const deDemain = new Date(deAuj); deDemain.setDate(deDemain.getDate() + 1);
             const aDemain = new Date(aAuj); aDemain.setDate(aDemain.getDate() + 1);
 
-            // CORRECTION : Sélection stricte de l'indisponibilité maximale par réacteur
+            // Sélection de l'indisponibilité max par réacteur et tri alphabétique
             function analyserPicJourEtExtraireReacteurs(debutJour, finJour) {
                 let maxParReacteur = {};
 
@@ -301,11 +304,13 @@
                 });
 
                 let totalMaxJour = 0;
-                let reacteursDuPic = [];
+                let reacteursDuPic = Object.values(maxParReacteur);
 
-                Object.values(maxParReacteur).forEach(ev => {
+                // Tri alphabétique par nom de réacteur (asset)
+                reacteursDuPic.sort((a, b) => a.asset.localeCompare(b.asset, 'fr', { numeric: true }));
+
+                reacteursDuPic.forEach(ev => {
                     totalMaxJour += ev.unavailable;
-                    reacteursDuPic.push(ev);
                 });
 
                 return { 
@@ -379,3 +384,5 @@
     </script>
 </body>
 </html>
+
+```
