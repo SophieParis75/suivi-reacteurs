@@ -21,6 +21,7 @@ th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0;
 th { background-color: #f1f3f5; font-weight: bold; }
 .highlight { font-weight: bold; color: #dc3545; }
 .stable { color: #6c757d; font-style: italic; }
+.btn-link { font-weight: bold; color: #0056b3; text-decoration: none; }
 </style>
 </head>
 
@@ -40,7 +41,7 @@ th { background-color: #f1f3f5; font-weight: bold; }
     
     <div class="step">
         <label for="rssFile">2. Load the downloaded RSS file:</label>
-        <input type="file" id="rssFile" accept=".xml,.feed">
+        <input type="file" id="rssFile" accept=".xml,.feed,.rss">
     </div>
 </div>
 
@@ -60,6 +61,7 @@ th { background-color: #f1f3f5; font-weight: bold; }
     </div>
 </div>
 
+<div class="config-box">
     <div class="step">
         <label>3. Choose analysis times:</label>
         <div class="flex-inputs">
@@ -74,6 +76,7 @@ th { background-color: #f1f3f5; font-weight: bold; }
         </div>
         <button onclick="runAnalysis()">Analyze</button>
     </div>
+</div>
 
 <div id="results" style="display:none;">
     <h2>Summary</h2>
@@ -121,136 +124,175 @@ th { background-color: #f1f3f5; font-weight: bold; }
 </div>
 
 <script>
-const TOTAL_CAPACITY = 62990;
+function formatFull(d) {
+    return isNaN(d) ? "Invalid" : d.toLocaleString();
+}
 
-// Helpers
-function formatFull(d){return d.toLocaleDateString()+" "+d.toLocaleTimeString();}
-function parseCSV(text){
-    const lines=text.split(/\r?\n/).filter(l=>l.trim());
-    const header=lines[0].split(";").map(h=>h.trim());
-    return lines.slice(1).map(line=>{
-        const cols=line.split(";");
-        const obj={};
-        header.forEach((h,i)=>obj[h]=cols[i]);
+function parseDateRobust(str) {
+    if (!str) return new Date(NaN);
+    let d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+
+    const parts = str.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+    if (parts) {
+        return new Date(parts[3], parts[2] - 1, parts[1], parts[4], parts[5]);
+    }
+    return new Date(NaN);
+}
+
+function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const header = lines[0].split(";").map(h => h.trim().replace(/^"|"$/g, ''));
+    return lines.slice(1).map(line => {
+        const cols = line.split(";").map(c => c.trim().replace(/^"|"$/g, ''));
+        const obj = {};
+        header.forEach((h, i) => obj[h] = cols[i] || "");
         return obj;
     });
 }
-function extractField(html,key){
-    const m=html.match(new RegExp(`<li>${key}\\s*:\\s*([^<]+)</li>`,"i"));
-    return m?m[1].trim():"";
+
+function extractField(html, key) {
+    const regex = new RegExp(`${key}\\s*:\\s*([^<\\n]+)`, "i");
+    const m = html.match(regex);
+    return m ? m[1].trim() : "";
 }
-function makeEvent(asset,unavail,start,stop,fuel,remarks){
-    if(!fuel.toLowerCase().includes("nucl"))return null;
-    if(!remarks.toLowerCase().includes("environ"))return null;
-    const s=new Date(start),e=new Date(stop);
-    if(isNaN(s)||isNaN(e))return null;
-    return {asset,unavail:parseInt(unavail)||0,start:s,end:e,fuel,remarks};
+
+function makeEvent(asset, unavail, start, stop, fuel, remarks) {
+    if (!fuel || !fuel.toLowerCase().includes("nucl")) return null;
+    if (!remarks || !remarks.toLowerCase().includes("environ")) return null;
+
+    const s = parseDateRobust(start);
+    const e = parseDateRobust(stop);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return null;
+
+    return { asset, unavail: parseInt(unavail, 10) || 0, start: s, end: e, fuel, remarks };
 }
-function resolveConflicts(events){
-    const byAsset={};
-    events.forEach(ev=>{
-        if(!byAsset[ev.asset])byAsset[ev.asset]=[];
+
+function resolveConflicts(events) {
+    const byAsset = {};
+    events.forEach(ev => {
+        if (!byAsset[ev.asset]) byAsset[ev.asset] = [];
         byAsset[ev.asset].push(ev);
     });
-    const final=[],conflicts=[];
-    Object.keys(byAsset).forEach(asset=>{
-        const list=byAsset[asset].sort((a,b)=>a.start-b.start);
-        let chosen=list[0];
-        for(let i=1;i<list.length;i++){
-            const ev=list[i];
-            if(ev.start<=chosen.end && ev.end>=chosen.start){
-                const durC=chosen.end-chosen.start;
-                const durE=ev.end-ev.start;
-                const keep=durC>=durE?chosen:ev;
-                const drop=durC>=durE?ev:chosen;
-                conflicts.push({asset,kept:keep,discarded:drop});
-                chosen=keep;
+
+    const final = [], conflicts = [];
+
+    Object.keys(byAsset).forEach(asset => {
+        const list = byAsset[asset].sort((a, b) => a.start - b.start);
+        let chosen = list[0];
+
+        for (let i = 1; i < list.length; i++) {
+            const ev = list[i];
+            if (ev.start <= chosen.end && ev.end >= chosen.start) {
+                const durC = chosen.end - chosen.start;
+                const durE = ev.end - ev.start;
+                const keep = durC >= durE ? chosen : ev;
+                const drop = durC >= durE ? ev : chosen;
+                conflicts.push({ asset, kept: keep, discarded: drop });
+                chosen = keep;
+            } else {
+                final.push(ev);
             }
         }
         final.push(chosen);
     });
-    return {events:final,conflicts};
+
+    return { events: final, conflicts };
 }
-function cumulativeInstant(events,t){
-    let sum=0,list=[];
-    events.forEach(ev=>{
-        if(t>=ev.start && t<=ev.end){
-            sum+=ev.unavail;
+
+function cumulativeInstant(events, t) {
+    let sum = 0, list = [];
+    events.forEach(ev => {
+        if (t >= ev.start && t <= ev.end) {
+            sum += ev.unavail;
             list.push(ev);
         }
     });
-    return {sum,list};
+    return { sum, list };
 }
-function cumulativeDay(events,start,end){
-    const byAsset={};
-    events.forEach(ev=>{
-        const s=ev.start<start?start:ev.start;
-        const e=ev.end>end?end:ev.end;
-        if(e<=start||s>=end)return;
-        byAsset[ev.asset]=Math.max(byAsset[ev.asset]||0,ev.unavail);
+
+function cumulativeDay(events, start, end) {
+    const byAsset = {};
+    events.forEach(ev => {
+        if (ev.end <= start || ev.start >= end) return;
+        byAsset[ev.asset] = Math.max(byAsset[ev.asset] || 0, ev.unavail);
     });
-    return Object.values(byAsset).reduce((a,b)=>a+b,0);
+    return Object.values(byAsset).reduce((a, b) => a + b, 0);
 }
 
-// MAIN
-function runAnalysis(){
-    const rssFile=document.getElementById("rssFile").files[0];
-    const csvFile=document.getElementById("csvFile").files[0];
-    if(!rssFile||!csvFile){alert("Load both RSS and CSV.");return;}
+function runAnalysis() {
+    const rssFile = document.getElementById("rssFile").files[0];
+    const csvFile = document.getElementById("csvFile").files[0];
 
-    const T1=new Date(document.getElementById("pivotDate").value);
-    const T2=new Date(document.getElementById("comparisonDate").value);
+    if (!rssFile || !csvFile) { alert("Load both RSS and CSV."); return; }
 
-    const readerRSS=new FileReader();
-    const readerCSV=new FileReader();
+    const valT1 = document.getElementById("pivotDate").value;
+    const valT2 = document.getElementById("comparisonDate").value;
 
-    readerRSS.onload=e=>{
-        const xml=new DOMParser().parseFromString(e.target.result,"text/xml");
-        const items=xml.getElementsByTagName("item");
-        let events=[];
-        for(let i=0;i<items.length;i++){
-            const desc=items[i].getElementsByTagName("description")[0];
-            if(!desc)continue;
-            const html=desc.textContent;
-            const status=extractField(html,"Event status");
-            if(!status.toLowerCase().includes("act"))continue;
-            const asset=extractField(html,"Affected asset or unit");
-            const unavail=extractField(html,"Unavailable capacity");
-            const start=extractField(html,"Event start");
-            const stop=extractField(html,"Event stop");
-            const fuel=extractField(html,"Fuel type");
-            const remarks=extractField(html,"Remarks");
-            const ev=makeEvent(asset,unavail,start,stop,fuel,remarks);
-            if(ev)events.push(ev);
+    if (!valT1 || !valT2) { alert("Please fill both dates."); return; }
+
+    const T1 = new Date(valT1);
+    const T2 = new Date(valT2);
+
+    const readerRSS = new FileReader();
+    const readerCSV = new FileReader();
+
+    readerRSS.onload = e => {
+        let events = [];
+        try {
+            const xml = new DOMParser().parseFromString(e.target.result, "text/xml");
+            const items = xml.getElementsByTagName("item");
+            for (let i = 0; i < items.length; i++) {
+                const desc = items[i].getElementsByTagName("description")[0];
+                if (!desc) continue;
+                const html = desc.textContent;
+
+                const status = extractField(html, "Event status");
+                if (status && !status.toLowerCase().includes("act")) continue;
+
+                const asset = extractField(html, "Affected asset or unit");
+                const unavail = extractField(html, "Unavailable capacity");
+                const start = extractField(html, "Event start");
+                const stop = extractField(html, "Event stop");
+                const fuel = extractField(html, "Fuel type");
+                const remarks = extractField(html, "Remarks");
+
+                const ev = makeEvent(asset, unavail, start, stop, fuel, remarks);
+                if (ev) events.push(ev);
+            }
+        } catch (err) {
+            console.error("RSS parsing error", err);
         }
 
-        readerCSV.onload=e2=>{
-            const rows=parseCSV(e2.target.result);
-            rows.forEach(r=>{
-                const asset=r["Unit"]||r["Asset"]||r["Affected asset or unit"]||"";
-                const unavail=r["Unavailable capacity"]||r["Unavailable"]||"0";
-                const start=r["Event start"]||r["Start date"]||r["Start"]||"";
-                const stop=r["Event stop"]||r["End date"]||r["Stop"]||"";
-                const fuel=r["Fuel type"]||r["Fuel"]||"";
-                const remarks=r["Remarks"]||r["Reason"]||"";
-                const ev=makeEvent(asset,unavail,start,stop,fuel,remarks);
-                if(ev)events.push(ev);
+        readerCSV.onload = e2 => {
+            const rows = parseCSV(e2.target.result);
+            rows.forEach(r => {
+                const asset = r["Unit"] || r["Asset"] || r["Affected asset or unit"] || "";
+                const unavail = r["Unavailable capacity"] || r["Unavailable"] || "0";
+                const start = r["Event start"] || r["Start date"] || r["Start"] || "";
+                const stop = r["Event stop"] || r["End date"] || r["Stop"] || "";
+                const fuel = r["Fuel type"] || r["Fuel"] || "";
+                const remarks = r["Remarks"] || r["Reason"] || "";
+
+                const ev = makeEvent(asset, unavail, start, stop, fuel, remarks);
+                if (ev) events.push(ev);
             });
 
-            const {events:clean,conflicts}=resolveConflicts(events);
+            const { events: clean, conflicts } = resolveConflicts(events);
 
-            const T1res=cumulativeInstant(clean,T1);
-            const T2res=cumulativeInstant(clean,T2);
+            const T1res = cumulativeInstant(clean, T1);
+            const T2res = cumulativeInstant(clean, T2);
 
-            const dayStart=new Date(T2);dayStart.setHours(0,0,0,0);
-            const dayEnd=new Date(T2);dayEnd.setHours(23,59,59,999);
-            const nextStart=new Date(dayStart);nextStart.setDate(nextStart.getDate()+1);
-            const nextEnd=new Date(dayEnd);nextEnd.setDate(nextEnd.getDate()+1);
+            const dayStart = new Date(T2); dayStart.setHours(0, 0, 0, 0);
+            const dayEnd = new Date(T2); dayEnd.setHours(23, 59, 59, 999);
+            const nextStart = new Date(dayStart); nextStart.setDate(nextStart.getDate() + 1);
+            const nextEnd = new Date(dayEnd); nextEnd.setDate(nextEnd.getDate() + 1);
 
-            const dayT2=cumulativeDay(clean,dayStart,dayEnd);
-            const dayNext=cumulativeDay(clean,nextStart,nextEnd);
+            const dayT2 = cumulativeDay(clean, dayStart, dayEnd);
+            const dayNext = cumulativeDay(clean, nextStart, nextEnd);
 
-            document.getElementById("summaryTable").querySelector("tbody").innerHTML=`
+            document.getElementById("summaryTable").querySelector("tbody").innerHTML = `
                 <tr>
                     <td class="highlight">${T1res.sum}</td>
                     <td class="highlight">${T2res.sum}</td>
@@ -259,30 +301,27 @@ function runAnalysis(){
                 </tr>
             `;
 
-            let changesHTML="",phrases=[];
-            const assets=new Set(clean.map(ev=>ev.asset));
-            assets.forEach(a=>{
-                const atT1=clean.filter(ev=>T1>=ev.start&&T1<=ev.end&&ev.asset===a);
-                const atT2=clean.filter(ev=>T2>=ev.start&&T2<=ev.end&&ev.asset===a);
-                const c1=atT1.reduce((s,e)=>s+e.unavail,0);
-                const c2=atT2.reduce((s,e)=>s+e.unavail,0);
-                const diff=c2-c1;
+            let changesHTML = "", phrases = [];
+            const assets = new Set(clean.map(ev => ev.asset));
+            assets.forEach(a => {
+                const atT1 = clean.filter(ev => T1 >= ev.start && T1 <= ev.end && ev.asset === a);
+                const atT2 = clean.filter(ev => T2 >= ev.start && T2 <= ev.end && ev.asset === a);
+                const c1 = atT1.reduce((s, e) => s + e.unavail, 0);
+                const c2 = atT2.reduce((s, e) => s + e.unavail, 0);
+                const diff = c2 - c1;
 
-                let note="";
-                if(diff>0)note="Increase";
-                else if(diff<0)note="Decrease";
-                else note="Stable";
+                let note = diff > 0 ? "Increase" : (diff < 0 ? "Decrease" : "Stable");
 
-                const conf=conflicts.filter(c=>c.asset===a);
-                if(conf.length){
-                    note+=" | Conflict";
-                    conf.forEach(c=>{
-                        phrases.push(`<strong>${a}</strong>: conflict between ${c.kept.unavail} MW (${formatFull(c.kept.start)} → ${formatFull(c.kept.end)}) and ${c.discarded.unavail} MW (${formatFull(c.discarded.start)} → ${formatFull(c.discarded.end)}).`);
+                const conf = conflicts.filter(c => c.asset === a);
+                if (conf.length) {
+                    note += " | Conflict";
+                    conf.forEach(c => {
+                        phrases.push(`<strong>${a}</strong>: conflict between ${c.kept.unavail} MW and ${c.discarded.unavail} MW.`);
                     });
                 }
 
-                if(diff!==0||conf.length){
-                    changesHTML+=`
+                if (diff !== 0 || conf.length) {
+                    changesHTML += `
                         <tr>
                             <td>${a}</td>
                             <td>${c1}</td>
@@ -294,15 +333,15 @@ function runAnalysis(){
                 }
             });
 
-            document.getElementById("changesTable").querySelector("tbody").innerHTML=
-                changesHTML||`<tr><td colspan="5" class="stable">No changes.</td></tr>`;
+            document.getElementById("changesTable").querySelector("tbody").innerHTML =
+                changesHTML || `<tr><td colspan="5" class="stable">No changes.</td></tr>`;
 
-            document.getElementById("changesBody").innerHTML=
-                phrases.length?("<ul><li>"+phrases.join("</li><li>")+"</li></ul>"):"No significant changes.";
+            document.getElementById("changesBody").innerHTML =
+                phrases.length ? ("<ul><li>" + phrases.join("</li><li>") + "</li></ul>") : "No significant changes.";
 
-            let t2HTML="";
-            T2res.list.forEach(ev=>{
-                t2HTML+=`
+            let t2HTML = "";
+            T2res.list.forEach(ev => {
+                t2HTML += `
                     <tr>
                         <td>${ev.asset}</td>
                         <td>${ev.unavail}</td>
@@ -311,10 +350,10 @@ function runAnalysis(){
                     </tr>
                 `;
             });
-            document.getElementById("unavailableTableT2").querySelector("tbody").innerHTML=
-                t2HTML||`<tr><td colspan="4">None.</td></tr>`;
+            document.getElementById("unavailableTableT2").querySelector("tbody").innerHTML =
+                t2HTML || `<tr><td colspan="4">None.</td></tr>`;
 
-            document.getElementById("results").style.display="block";
+            document.getElementById("results").style.display = "block";
         };
         readerCSV.readAsText(csvFile);
     };
