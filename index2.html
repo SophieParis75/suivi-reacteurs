@@ -1,451 +1,308 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EDF Local Flow Analyzer (Peaks & Variations Audit)</title>
-    <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 1200px; margin: 20px auto; padding: 0 20px; color: #333; background-color: #f8f9fa; }
-        .config-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 5px solid #0056b3; }
-        .flex-inputs { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 15px; }
-        .step { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #eee; }
-        .step:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-        label { font-weight: bold; display: block; margin-bottom: 5px; }
-        input[type="datetime-local"], input[type="file"], input[type="password"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
-        button { padding: 10px 20px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
-        button:hover { background: #003d7a; }
-        .btn-link { background: #6c757d; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-size: 13px; font-weight: bold; display: inline-block; margin-top: 5px; }
-        .btn-link:hover { background: #5a6268; }
-        h2 { border-bottom: 2px solid #0056b3; padding-bottom: 5px; color: #0056b3; margin-top: 30px; }
-        h3 { color: #dc3545; margin-top: 20px; border-bottom: 1px solid #dc3545; padding-bottom: 3px;}
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-radius: 4px; overflow: hidden; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }
-        th { background-color: #f1f3f5; font-weight: bold; }
-        tr:hover { background-color: #f8f9fa; }
-        .highlight { font-weight: bold; color: #dc3545; }
-        .badge { background: #e2e8f0; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; }
-        .stable { color: #6c757d; font-style: italic; }
-        
-        /* Variation counter styles */
-        .delta-box { display: flex; gap: 20px; margin-top: 15px; }
-        .delta-card { background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex: 1; text-align: center; }
-        .delta-val { font-size: 24px; font-weight: bold; margin-top: 5px; }
-        .plus { color: #dc3545; font-weight: bold; }
-        .minus { color: #28a745; font-weight: bold; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDF DOAAT – Nuclear Environmental Unavailabilities (Manual RSS + CSV)</title>
 
-        /* Lock screen styles */
-        #lockScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #343a40; display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .login-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center; max-width: 350px; width: 100%; }
-        .login-card h2 { border-bottom: none; color: #333; margin-top: 0; }
-        .login-card input { width: 80%; margin-bottom: 15px; text-align: center; font-size: 16px; }
-        .login-card button { width: 88%; background: #28a745; }
-        .login-card button:hover { background: #218838; }
-        #errorMessage { color: #dc3545; font-weight: bold; font-size: 14px; margin-top: 10px; display: none; }
-    </style>
+<style>
+body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 1200px; margin: 20px auto; padding: 0 20px; color: #333; background-color: #f8f9fa; }
+.config-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px; border-left: 5px solid #0056b3; }
+.flex-inputs { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 10px; margin-bottom: 15px; }
+.step { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #eee; }
+.step:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+label { font-weight: bold; display: block; margin-bottom: 5px; }
+input[type="datetime-local"], input[type="file"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+button { padding: 10px 20px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; }
+button:hover { background: #003d7a; }
+h2 { border-bottom: 2px solid #0056b3; padding-bottom: 5px; color: #0056b3; margin-top: 30px; }
+table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border-radius: 4px; overflow: hidden; }
+th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+th { background-color: #f1f3f5; font-weight: bold; }
+.highlight { font-weight: bold; color: #dc3545; }
+.stable { color: #6c757d; font-style: italic; }
+</style>
 </head>
+
 <body>
 
-    <!-- Disable lock screen code -->
-    <div id="lockScreen" style="display: none;">
-        <div class="login-card">
-            <h2>Secure Access</h2>
-            <p>Please enter the passcode:</p>
-            <input type="password" id="enteredCode" placeholder="Secret code" maxlength="10" onkeydown="if(event.key === 'Enter') verifyCode()">
-            <button onclick="verifyCode()">Unlock</button>
-            <div id="errorMessage">⚠️ Incorrect code</div>
-        </div>
-    </div>
-    <!-- End lock screen code -->
+<h1>NUCLEAR ENVIRONMENTAL UNAVAILABILITIES (Manual RSS + CSV)</h1>
 
-<!-- Link to Cumulative environmental cuts page -->
-<nav style="background-color: #f1f1f1; padding: 10px; margin-bottom: 20px;">
-    <a href="index.html">Home</a> | 
-    <a href="cumulative_environment_cuts.html" target="_blank">Cumulative Environmental Cuts</a>
-</nav>
-<!-- End Link to Cumulative environmental cuts page -->
+<div class="config-box">
 
-    <div id="applicationContent" style="display: block;">
-        <h1>--------- AUDIT & CALCULATION VERIFICATION AREA ---------</h1>
-        
-        <div class="config-box">
-            <div class="step">
-                <label>1. Download the EDF RSS feed:</label>
-                <a href="https://www.edf.fr/en/toutes-les-indisponibilites-doaat/feed" target="_blank" class="btn-link">⬇️ Download RSS Feed (Right-click ; Save link as ; Save)</a>
-            </div>
-            
-            <div class="step">
-                <label for="rssFile">2. Load the downloaded file:</label>
-                <input type="file" id="rssFile" accept=".xml,.feed">
-            </div>
-
-            <div class="step">
-                <label>3. Analysis time boundaries:</label>
-                <div class="flex-inputs">
-                    <div>
-                        <label for="pivotDate" style="font-size: 0.9em; color: #555;">Previous Date/Time (T1):</label>
-                        <input type="datetime-local" id="pivotDate">
-                    </div>
-                    <div>
-                        <label for="comparisonDate" style="font-size: 0.9em; color: #555;">Comparison Date/Time (T2):</label>
-                        <input type="datetime-local" id="comparisonDate">
-                    </div>
-                </div>
-                <button onclick="loadLocalFile()">Analyze</button>
-            </div>
-        </div>
-        
-        <div id="results" style="display:none;">
-            <h2>Summary</h2>
-            <table id="summaryTable">
-                <thead>
-                    <tr>
-                        <th>Simultaneous Unavailabilities at T1</th>
-                        <th>Simultaneous Unavailabilities at T2</th>
-                        <th>Peak Simultaneous Unavailabilities Today</th>
-                        <th>Today's Peak Time Slot(s)</th>
-                        <th>% Of Fleet Unavailable at Today's Peak</th>
-                        <th>Peak Simultaneous Unavailabilities Tomorrow</th>
-                        <th>Tomorrow's Peak Time Slot(s)</th>
-                        <th>% Of Fleet Unavailable at Tomorrow's Peak</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-
-            <h2>🔄 Changes Between T1 and T2</h2>
-            <div class="delta-box">
-                <div class="delta-card" style="border-top: 4px solid #dc3545;">
-                    <div>New Reductions / Increase in Unavailabilities</div>
-                    <div id="countPlus" class="delta-val plus">0</div>
-                </div>
-                <div class="delta-card" style="border-top: 4px solid #28a745;">
-                    <div>Capacity Restored to Grid / Decrease in Unavailabilities</div>
-                    <div id="countMinus" class="delta-val minus">0</div>
-                </div>
-            </div>
-            
-            <table id="changesTable">
-                <thead>
-                    <tr>
-                        <th>Reactor (Unit)</th>
-                        <th>Status at T1</th>
-                        <th>Status at T2</th>
-                        <th>Variation</th>
-                        <th>Evolution Type</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-
-            <h2>📝 Summary of Changes</h2>
-            <div class="news-box" style="border-top: 4px solid #0056b3;">
-                <div id="changesBody"></div>
-            </div>
-
-            <h2>📌 List of Unavailable Reactors at T2</h2>
-            <table id="unavailableTableT2">
-                <thead>
-                    <tr>
-                        <th>Reactor (Unit)</th>
-                        <th>Unavailability (MW)</th>
-                        <th>From (Date / Time)</th>
-                        <th>To (Date / Time)</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-
-            <h2>🔍 Lists of Simultaneously Unavailable Reactors at Today's and Tomorrow's Peaks (Based on T2 as Today)</h2>
-            
-            <h3>Reactors Retained for Today's Peak</h3>
-            <table id="auditTableToday">
-                <thead>
-                    <tr>
-                        <th>Reactor (Unit)</th>
-                        <th>Unavailability (MW)</th>
-                        <th>From (Date / Time)</th>
-                        <th>To (Date / Time)</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-
-            <h3>Reactors Retained for Tomorrow's Peak</h3>
-            <table id="auditTableTomorrow">
-                <thead>
-                    <tr>
-                        <th>Reactor (Unit)</th>
-                        <th>Unavailability (MW)</th>
-                        <th>From (Date / Time)</th>
-                        <th>To (Date / Time)</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-
-            <br><a href="chart_environment_cuts.html" target="_blank" class="btn-link">📈 View Peak Unavailbility Chart</a>    
-        </div>
+    <div class="step">
+        <label>1. Load RSS file (downloaded from EDF):</label>
+        <input type="file" id="rssFile" accept=".xml,.feed">
     </div>
 
-    <script>
-        const TOTAL_CAPACITY = 62990;
-        
-        // Passcode configuration
-        const SECRET_CODE = "1789";
+    <div class="step">
+        <label>2. Load CSV file (downloaded from EDF):</label>
+        <input type="file" id="csvFile" accept=".csv">
+    </div>
 
-        function verifyCode() {
-            const input = document.getElementById('enteredCode').value;
-            if (input === SECRET_CODE) {
-                document.getElementById('lockScreen').style.display = 'none';
-                document.getElementById('applicationContent').style.display = 'block';
-            } else {
-                document.getElementById('errorMessage').style.display = 'block';
-                document.getElementById('enteredCode').value = '';
+    <div class="step">
+        <label>3. Choose analysis times:</label>
+        <div class="flex-inputs">
+            <div>
+                <label for="pivotDate">Previous Date/Time (T1):</label>
+                <input type="datetime-local" id="pivotDate">
+            </div>
+            <div>
+                <label for="comparisonDate">Comparison Date/Time (T2):</label>
+                <input type="datetime-local" id="comparisonDate">
+            </div>
+        </div>
+        <button onclick="runAnalysis()">Analyze</button>
+    </div>
+
+</div>
+
+<div id="results" style="display:none;">
+    <h2>Summary</h2>
+    <table id="summaryTable">
+        <thead>
+            <tr>
+                <th>Cumulative at T1 (MW)</th>
+                <th>Cumulative at T2 (MW)</th>
+                <th>Cumulative for T2's Day (MW)</th>
+                <th>Cumulative for Next Day (MW)</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <h2>Changes Between T1 and T2</h2>
+    <table id="changesTable">
+        <thead>
+            <tr>
+                <th>Reactor</th>
+                <th>T1 (MW)</th>
+                <th>T2 (MW)</th>
+                <th>Δ MW</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <h2>Summary of Changes</h2>
+    <div id="changesBody"></div>
+
+    <h2>Reactors Unavailable at T2</h2>
+    <table id="unavailableTableT2">
+        <thead>
+            <tr>
+                <th>Reactor</th>
+                <th>MW</th>
+                <th>From</th>
+                <th>To</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+const TOTAL_CAPACITY = 62990;
+
+// Helpers
+function formatFull(d){return d.toLocaleDateString()+" "+d.toLocaleTimeString();}
+function parseCSV(text){
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    const header=lines[0].split(";").map(h=>h.trim());
+    return lines.slice(1).map(line=>{
+        const cols=line.split(";");
+        const obj={};
+        header.forEach((h,i)=>obj[h]=cols[i]);
+        return obj;
+    });
+}
+function extractField(html,key){
+    const m=html.match(new RegExp(`<li>${key}\\s*:\\s*([^<]+)</li>`,"i"));
+    return m?m[1].trim():"";
+}
+function makeEvent(asset,unavail,start,stop,fuel,remarks){
+    if(!fuel.toLowerCase().includes("nucl"))return null;
+    if(!remarks.toLowerCase().includes("environ"))return null;
+    const s=new Date(start),e=new Date(stop);
+    if(isNaN(s)||isNaN(e))return null;
+    return {asset,unavail:parseInt(unavail)||0,start:s,end:e,fuel,remarks};
+}
+function resolveConflicts(events){
+    const byAsset={};
+    events.forEach(ev=>{
+        if(!byAsset[ev.asset])byAsset[ev.asset]=[];
+        byAsset[ev.asset].push(ev);
+    });
+    const final=[],conflicts=[];
+    Object.keys(byAsset).forEach(asset=>{
+        const list=byAsset[asset].sort((a,b)=>a.start-b.start);
+        let chosen=list[0];
+        for(let i=1;i<list.length;i++){
+            const ev=list[i];
+            if(ev.start<=chosen.end && ev.end>=chosen.start){
+                const durC=chosen.end-chosen.start;
+                const durE=ev.end-ev.start;
+                const keep=durC>=durE?chosen:ev;
+                const drop=durC>=durE?ev:chosen;
+                conflicts.push({asset,kept:keep,discarded:drop});
+                chosen=keep;
             }
         }
+        final.push(chosen);
+    });
+    return {events:final,conflicts};
+}
+function cumulativeInstant(events,t){
+    let sum=0,list=[];
+    events.forEach(ev=>{
+        if(t>=ev.start && t<=ev.end){
+            sum+=ev.unavail;
+            list.push(ev);
+        }
+    });
+    return {sum,list};
+}
+function cumulativeDay(events,start,end){
+    const byAsset={};
+    events.forEach(ev=>{
+        const s=ev.start<start?start:ev.start;
+        const e=ev.end>end?end:ev.end;
+        if(e<=start||s>=end)return;
+        byAsset[ev.asset]=Math.max(byAsset[ev.asset]||0,ev.unavail);
+    });
+    return Object.values(byAsset).reduce((a,b)=>a+b,0);
+}
 
-        // Helper to format Date to YYYY-MM-DDTHH:mm in local time
-        function getLocalDateTimeISO(dateObj) {
-            const year = dateObj.getFullYear();
-            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const day = String(dateObj.getDate()).padStart(2, '0');
-            const hours = String(dateObj.getHours()).padStart(2, '0');
-            const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hours}:${minutes}`;
+// MAIN
+function runAnalysis(){
+    const rssFile=document.getElementById("rssFile").files[0];
+    const csvFile=document.getElementById("csvFile").files[0];
+    if(!rssFile||!csvFile){alert("Load both RSS and CSV.");return;}
+
+    const T1=new Date(document.getElementById("pivotDate").value);
+    const T2=new Date(document.getElementById("comparisonDate").value);
+
+    const readerRSS=new FileReader();
+    const readerCSV=new FileReader();
+
+    readerRSS.onload=e=>{
+        const xml=new DOMParser().parseFromString(e.target.result,"text/xml");
+        const items=xml.getElementsByTagName("item");
+        let events=[];
+        for(let i=0;i<items.length;i++){
+            const desc=items[i].getElementsByTagName("description")[0];
+            if(!desc)continue;
+            const html=desc.textContent;
+            const status=extractField(html,"Event status");
+            if(!status.toLowerCase().includes("act"))continue;
+            const asset=extractField(html,"Affected asset or unit");
+            const unavail=extractField(html,"Unavailable capacity");
+            const start=extractField(html,"Event start");
+            const stop=extractField(html,"Event stop");
+            const fuel=extractField(html,"Fuel type");
+            const remarks=extractField(html,"Remarks");
+            const ev=makeEvent(asset,unavail,start,stop,fuel,remarks);
+            if(ev)events.push(ev);
         }
 
-        // Set initial local French time for T1 and T2 when the page loads
-        const now = new Date();
-        document.getElementById('pivotDate').value = getLocalDateTimeISO(now);
-        document.getElementById('comparisonDate').value = getLocalDateTimeISO(now);
-
-        function formatDate(dateObj) { return dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
-        function formatTime(dateObj) { return dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
-        function formatFull(dateObj) { return formatDate(dateObj) + " at " + formatTime(dateObj); }
-
-        function extractStrictField(text, key) {
-            const regex = new RegExp(`<li>${key}\\s*:\\s*([^<]+)</li>`, 'i');
-            const match = text.match(regex);
-            return match ? match[1].trim() : '';
-        }
-
-        function loadLocalFile() {
-            const fileInput = document.getElementById('rssFile');
-            if (fileInput.files.length === 0) { alert("Please select the XML file."); return; }
-            const file = fileInput.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) { 
-                // Parses the file using whatever T1 and T2 values are currently in the input boxes
-                parseRawData(e.target.result); 
-            };
-            reader.readAsText(file);
-        }
-    
-        function parseRawData(xmlStr) {
-            const pivotDate = new Date(document.getElementById('pivotDate').value);
-            const dateT2 = new Date(document.getElementById('comparisonDate').value);
-            
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
-            const items = xmlDoc.getElementsByTagName("item");
-
-            let filteredEvents = [];
-            let allUniqueReactors = new Set();
-
-            for (let i = 0; i < items.length; i++) {
-                const descNode = items[i].getElementsByTagName("description")[0];
-                if (!descNode) continue;
-                
-                const htmlText = descNode.textContent || descNode.innerHTML;
-
-                const eventStatus = extractStrictField(htmlText, "Event status");
-                const remarks = extractStrictField(htmlText, "Remarks");
-                const fuelType = extractStrictField(htmlText, "Fuel type");
-
-                const isActive = eventStatus.toLowerCase() === "actif" || eventStatus.toLowerCase() === "active";
-                if (isActive && fuelType.toLowerCase().includes("nucl")) {
-                    const remLower = remarks.toLowerCase();
-                    if (remLower.includes("environ")) {
-                        
-                        const asset = extractStrictField(htmlText, "Affected asset or unit");
-                        const installed = parseInt(extractStrictField(htmlText, "Installed capacity")) || 0;
-                        const unavailable = parseInt(extractStrictField(htmlText, "Unavailable capacity")) || 0;
-                        const available = installed - unavailable;
-                        const eventStartStr = extractStrictField(htmlText, "Event start");
-                        const eventStopStr = extractStrictField(htmlText, "Event stop");
-
-                        if(eventStartStr && eventStopStr) {
-                            filteredEvents.push({
-                                asset, installed, unavailable, available, 
-                                startDate: new Date(eventStartStr), 
-                                endDate: new Date(eventStopStr)
-                            });
-                            allUniqueReactors.add(asset);
-                        }
-                    }
-                }
-            }
-
-            let outagesAtT1 = {};
-            let outagesAtT2 = {};
-            allUniqueReactors.forEach(r => { outagesAtT1[r] = 0; outagesAtT2[r] = 0; });
-
-            let currentSum = 0;
-            let totalT2 = 0;
-            let listReactorsT2 = [];
-
-            filteredEvents.forEach(ev => {
-                if (pivotDate >= ev.startDate && pivotDate <= ev.endDate) {
-                    outagesAtT1[ev.asset] += ev.unavailable;
-                    currentSum += ev.unavailable;
-                }
-                if (dateT2 >= ev.startDate && dateT2 <= ev.endDate) {
-                    outagesAtT2[ev.asset] += ev.unavailable;
-                    totalT2 += ev.unavailable;
-                    listReactorsT2.push(ev);
-                }
+        readerCSV.onload=e2=>{
+            const rows=parseCSV(e2.target.result);
+            rows.forEach(r=>{
+                const asset=r["Unit"]||r["Asset"]||r["Affected asset or unit"]||"";
+                const unavail=r["Unavailable capacity"]||r["Unavailable"]||"0";
+                const start=r["Event start"]||r["Start date"]||r["Start"]||"";
+                const stop=r["Event stop"]||r["End date"]||r["Stop"]||"";
+                const fuel=r["Fuel type"]||r["Fuel"]||"";
+                const remarks=r["Remarks"]||r["Reason"]||"";
+                const ev=makeEvent(asset,unavail,start,stop,fuel,remarks);
+                if(ev)events.push(ev);
             });
 
-            let htmlUnavailableT2 = '';
-            listReactorsT2.forEach(ev => {
-                htmlUnavailableT2 += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formatFull(ev.startDate)}</td><td>${formatFull(ev.endDate)}</td></tr>`;
-            });
-            document.getElementById('unavailableTableT2').getElementsByTagName('tbody')[0].innerHTML = htmlUnavailableT2 || '<tr><td colspan="4">No reactors unavailable at T2.</td></tr>';
+            const {events:clean,conflicts}=resolveConflicts(events);
 
-            let htmlChanges = '';
-            let countPlus = 0;
-            let countMinus = 0;
+            const T1res=cumulativeInstant(clean,T1);
+            const T2res=cumulativeInstant(clean,T2);
 
-            allUniqueReactors.forEach(reactor => {
-                const capT1 = outagesAtT1[reactor];
-                const capT2 = outagesAtT2[reactor];
-                const diff = capT2 - capT1;
+            const dayStart=new Date(T2);dayStart.setHours(0,0,0,0);
+            const dayEnd=new Date(T2);dayEnd.setHours(23,59,59,999);
+            const nextStart=new Date(dayStart);nextStart.setDate(nextStart.getDate()+1);
+            const nextEnd=new Date(dayEnd);nextEnd.setDate(nextEnd.getDate()+1);
 
-                if (diff > 0) {
-                    countPlus++;
-                    htmlChanges += `<tr><td><b>${reactor}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="plus">+${diff} MW</td><td>🚨 Increased restriction / New outage</td></tr>`;
-                } else if (diff < 0) {
-                    countMinus++;
-                    htmlChanges += `<tr><td><b>${reactor}</b></td><td>${capT1} MW</td><td>${capT2} MW</td><td class="minus">${diff} MW</td><td>✅ Partial or full grid restoration</td></tr>`;
-                }
-            });
+            const dayT2=cumulativeDay(clean,dayStart,dayEnd);
+            const dayNext=cumulativeDay(clean,nextStart,nextEnd);
 
-            document.getElementById('countPlus').innerText = countPlus;
-            document.getElementById('countMinus').innerText = countMinus;
-            document.getElementById('changesTable').getElementsByTagName('tbody')[0].innerHTML = htmlChanges || `<tr><td colspan="5" class="stable">No changes observed across the fleet between these two milestones. Unavailability is stable.</td></tr>`;
-
-            const fromToday = new Date(dateT2); fromToday.setHours(0,0,0,0);
-            const toToday = new Date(dateT2); toToday.setHours(23,59,59,999);
-            const fromTomorrow = new Date(fromToday); fromTomorrow.setDate(fromTomorrow.getDate() + 1);
-            const toTomorrow = new Date(toToday); toTomorrow.setDate(toTomorrow.getDate() + 1);
-
-            function analyzeDayPeakAndExtractReactors(dayStart, dayEnd) {
-                let timePoints = new Set([dayStart.getTime(), dayEnd.getTime()]);
-                filteredEvents.forEach(ev => {
-                    if (ev.startDate >= dayStart && ev.startDate <= dayEnd) timePoints.add(ev.startDate.getTime());
-                    if (ev.endDate >= dayStart && ev.endDate <= dayEnd) timePoints.add(ev.endDate.getTime());
-                });
-
-                let chronology = Array.from(timePoints).sort((a, b) => a - b);
-                let segments = [];
-                let maxPower = 0;
-                let topInstantMilli = null;
-
-                for (let i = 0; i < chronology.length - 1; i++) {
-                    let midInstant = new Date((chronology[i] + chronology[i+1]) / 2);
-                    let segmentPower = 0;
-
-                    filteredEvents.forEach(ev => {
-                        if (midInstant >= ev.startDate && midInstant <= ev.endDate) segmentPower += ev.unavailable;
-                    });
-
-                    if (segmentPower > maxPower) {
-                        maxPower = segmentPower;
-                        topInstantMilli = midInstant.getTime();
-                    }
-                    segments.push({ start: new Date(chronology[i]), end: new Date(chronology[i+1]), h: segmentPower });
-                }
-
-                let peakSlots = [];
-                if (maxPower > 0) {
-                    segments.forEach(seg => {
-                        if (seg.h === maxPower) peakSlots.push(`${formatTime(seg.start)}-${formatTime(seg.end)}`);
-                    });
-                }
-
-                let peakReactors = [];
-                if (topInstantMilli) {
-                    let target = new Date(topInstantMilli);
-                    filteredEvents.forEach(ev => {
-                        if (target >= ev.startDate && target <= ev.endDate) peakReactors.push(ev);
-                    });
-                }
-
-                return { max: maxPower, intervals: peakSlots.join(', ') || 'None', list: peakReactors };
-            }
-
-            const resultToday = analyzeDayPeakAndExtractReactors(fromToday, toToday);
-            const resultTomorrow = analyzeDayPeakAndExtractReactors(fromTomorrow, toTomorrow);
-
-            document.getElementById('summaryTable').getElementsByTagName('tbody')[0].innerHTML = `
+            document.getElementById("summaryTable").querySelector("tbody").innerHTML=`
                 <tr>
-                    <td class="highlight">${currentSum} MW</td>
-                    <td class="highlight">${totalT2} MW</td>
-                    <td class="highlight">${resultToday.max} MW</td>
-                    <td>${resultToday.intervals}</td>
-                    <td>${((resultToday.max / TOTAL_CAPACITY) * 100).toFixed(2)} %</td>
-                    <td class="highlight">${resultTomorrow.max} MW</td>
-                    <td>${resultTomorrow.intervals}</td>
-                    <td>${((resultTomorrow.max / TOTAL_CAPACITY) * 100).toFixed(2)} %</td>
+                    <td class="highlight">${T1res.sum}</td>
+                    <td class="highlight">${T2res.sum}</td>
+                    <td class="highlight">${dayT2}</td>
+                    <td class="highlight">${dayNext}</td>
                 </tr>
             `;
 
-            let htmlAuditToday = '';
-            resultToday.list.forEach(ev => {
-                htmlAuditToday += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formatFull(ev.startDate)}</td><td>${formatFull(ev.endDate)}</td></tr>`;
-            });
-            document.getElementById('auditTableToday').getElementsByTagName('tbody')[0].innerHTML = htmlAuditToday || '<tr><td colspan="4">No active reactors during peak.</td></tr>';
+            let changesHTML="",phrases=[];
+            const assets=new Set(clean.map(ev=>ev.asset));
+            assets.forEach(a=>{
+                const atT1=clean.filter(ev=>T1>=ev.start&&T1<=ev.end&&ev.asset===a);
+                const atT2=clean.filter(ev=>T2>=ev.start&&T2<=ev.end&&ev.asset===a);
+                const c1=atT1.reduce((s,e)=>s+e.unavail,0);
+                const c2=atT2.reduce((s,e)=>s+e.unavail,0);
+                const diff=c2-c1;
 
-            let htmlAuditTomorrow = '';
-            resultTomorrow.list.forEach(ev => {
-                htmlAuditTomorrow += `<tr><td><b>${ev.asset}</b></td><td class="highlight">${ev.unavailable} MW</td><td>${formatFull(ev.startDate)}</td><td>${formatFull(ev.endDate)}</td></tr>`;
-            });
-            document.getElementById('auditTableTomorrow').getElementsByTagName('tbody')[0].innerHTML = htmlAuditTomorrow || '<tr><td colspan="4">No active reactors during peak.</td></tr>';
+                let note="";
+                if(diff>0)note="Increase";
+                else if(diff<0)note="Decrease";
+                else note="Stable";
 
-            let phrases = [];
-            allUniqueReactors.forEach(reactor => {
-                const capT1 = outagesAtT1[reactor];
-                const capT2 = outagesAtT2[reactor];
-                const diff = capT2 - capT1;
+                const conf=conflicts.filter(c=>c.asset===a);
+                if(conf.length){
+                    note+=" | Conflict";
+                    conf.forEach(c=>{
+                        phrases.push(`<strong>${a}</strong>: conflict between ${c.kept.unavail} MW (${formatFull(c.kept.start)} → ${formatFull(c.kept.end)}) and ${c.discarded.unavail} MW (${formatFull(c.discarded.start)} → ${formatFull(c.discarded.end)}).`);
+                    });
+                }
 
-                const evT1 = filteredEvents.find(e => e.asset === reactor && pivotDate >= e.startDate && pivotDate <= e.endDate);
-                const evT2 = filteredEvents.find(e => e.asset === reactor && dateT2 >= e.startDate && dateT2 <= e.endDate);
-
-                if (diff !== 0 || (evT1 && evT2 && evT1.endDate.getTime() !== evT2.endDate.getTime())) {
-                    let phrase = `<strong>${reactor}</strong>: `;
-                    
-                    if (capT1 === 0 && capT2 > 0) phrase += `New unavailability of ${capT2} MW.`;
-                    else if (capT1 > 0 && capT2 === 0) phrase += `Unavailability of ${capT1} MW has ended.`;
-                    else if (diff !== 0) phrase += `Unavailability changed from ${capT1} MW to ${capT2} MW (${diff > 0 ? '+' : ''}${diff} MW).`;
-
-                    if (evT1 && evT2) {
-                        const deltaMs = evT2.endDate - evT1.endDate;
-                        if (Math.abs(deltaMs) >= 3600000) {
-                            const deltaH = Math.abs(deltaMs / 3600000).toFixed(1);
-                            phrase += ` The duration of unavailability was ${deltaMs > 0 ? 'extended' : 'shortened'} by ${deltaH} hours.`;
-                        }
-                    }
-                    phrases.push(phrase);
+                if(diff!==0||conf.length){
+                    changesHTML+=`
+                        <tr>
+                            <td>${a}</td>
+                            <td>${c1}</td>
+                            <td>${c2}</td>
+                            <td>${diff}</td>
+                            <td>${note}</td>
+                        </tr>
+                    `;
                 }
             });
-            document.getElementById('changesBody').innerHTML = phrases.length > 0 
-                ? '<ul><li>' + phrases.join('</li><li>') + '</li></ul>' 
-                : 'No significant changes in capacity or duration observed.';
 
-            localStorage.setItem('graphData', JSON.stringify(listReactorsT2));
-            
-            document.getElementById('results').style.display = 'block';
-        }
-    </script>
+            document.getElementById("changesTable").querySelector("tbody").innerHTML=
+                changesHTML||`<tr><td colspan="5" class="stable">No changes.</td></tr>`;
+
+            document.getElementById("changesBody").innerHTML=
+                phrases.length?("<ul><li>"+phrases.join("</li><li>")+"</li></ul>"):"No significant changes.";
+
+            let t2HTML="";
+            T2res.list.forEach(ev=>{
+                t2HTML+=`
+                    <tr>
+                        <td>${ev.asset}</td>
+                        <td>${ev.unavail}</td>
+                        <td>${formatFull(ev.start)}</td>
+                        <td>${formatFull(ev.end)}</td>
+                    </tr>
+                `;
+            });
+            document.getElementById("unavailableTableT2").querySelector("tbody").innerHTML=
+                t2HTML||`<tr><td colspan="4">None.</td></tr>`;
+
+            document.getElementById("results").style.display="block";
+        };
+        readerCSV.readAsText(csvFile);
+    };
+    readerRSS.readAsText(rssFile);
+}
+</script>
+
 </body>
 </html>
