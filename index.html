@@ -214,7 +214,7 @@
             return `${year}-${month}-${day}T${hours}:${minutes}`;
         }
 
-        // Set initial local French time for T1 and T2
+        // Set initial local French time for T1 and T2 when the page loads
         const now = new Date();
         document.getElementById('pivotDate').value = getLocalDateTimeISO(now);
         document.getElementById('comparisonDate').value = getLocalDateTimeISO(now);
@@ -235,10 +235,7 @@
             const file = fileInput.files[0];
             const reader = new FileReader();
             reader.onload = function(e) { 
-                // Set T2 (comparisonDate) to current local French date and time upon loading the file
-                const nowLoaded = new Date();
-                document.getElementById('comparisonDate').value = getLocalDateTimeISO(nowLoaded);
-
+                // Parses the file using whatever T1 and T2 values are currently in the input boxes
                 parseRawData(e.target.result); 
             };
             reader.readAsText(file);
