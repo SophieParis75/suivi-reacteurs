@@ -585,8 +585,9 @@ function runAnalysis() {
 
     readerRSS.readAsText(rssFile);
 }
-
-/* ------------------ INITIALISATION AUTOMATIQUE T1/T2 ------------------ */
+    </script> 
+<script>
+    /* ------------------ INITIALISATION AUTOMATIQUE T1/T2 ------------------ */
 function setDefaultDates() {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -600,15 +601,14 @@ function setDefaultDates() {
     const piv = document.getElementById("pivotDate");
 
     if (cmp && piv) {
-        cmp.value = toLocalInputValue(now);       // T2 = maintenant
-        piv.value = toLocalInputValue(yesterday); // T1 = maintenant - 24h
+        cmp.value = toLocalInputValue(now);
+        piv.value = toLocalInputValue(yesterday);
     }
 }
 
 window.addEventListener("load", () => {
     setDefaultDates();
 });
-
 </script>
 </body>
 </html>
