@@ -14,11 +14,12 @@ class handler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed_path.query)
         
-        start_date = params.get('start_date', [''])[0]
-        end_date = params.get('end_date', [''])[0]
+        # Récupération des dates transmises par le front-end
+        start_date = params.get('start_date', ['2026-07-29T00:00:00Z'])[0]
+        end_date = params.get('end_date', ['2026-08-05T00:00:00Z'])[0]
 
         try:
-            # 1. Obtenir le jeton OAuth2 RTE
+            # 1. Obtention du jeton OAuth2
             credentials = f"{RTE_CLIENT_ID}:{RTE_CLIENT_SECRET}"
             encoded_credentials = base64.b64encode(credentials.encode()).decode()
             
@@ -36,14 +37,14 @@ class handler(BaseHTTPRequestHandler):
                 token_data = json.loads(token_res.read().decode())
                 access_token = token_data.get("access_token")
 
-            # 2. Encodage des dates et ajout de date_type=EVENT_DATE
-            safe_start = urllib.parse.quote(start_date)
-            safe_end = urllib.parse.quote(end_date)
+            # 2. Encodage strict de l'URL d'appel
+            query_params = urllib.parse.urlencode({
+                'start_date': start_date,
+                'end_date': end_date,
+                'date_type': 'EVENT_DATE'
+            })
             
-            rte_url = (
-                f"https://digital.iservices.rte-france.com/open_api/unavailability/v4/generation_unavailabilities"
-                f"?start_date={safe_start}&end_date={safe_end}&date_type=EVENT_DATE"
-            )
+            rte_url = f"https://digital.iservices.rte-france.com/open_api/unavailability/v4/generation_unavailabilities?{query_params}"
             
             data_req = urllib.request.Request(
                 rte_url,
@@ -56,7 +57,6 @@ class handler(BaseHTTPRequestHandler):
             with urllib.request.urlopen(data_req) as data_res:
                 response_data = data_res.read().decode()
 
-            # 3. Réponse OK 200
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -64,12 +64,21 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(response_data.encode())
 
         except urllib.error.HTTPError as e:
-            error_body = e.read().decode() if e.fp else str(e)
+            # Capture du corps brut de la réponse d'erreur de RTE
+            try:
+                error_body = e.read().decode('utf-8')
+            except Exception:
+                error_body = str(e)
+
             self.send_response(e.code)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps({"error": f"RTE API HTTP {e.code}", "details": error_body}).encode())
+            self.wfile.write(json.dumps({
+                "error": f"RTE API HTTP {e.code}",
+                "details": error_body,
+                "url_called": rte_url if 'rte_url' in locals() else "N/A"
+            }).encode())
 
         except Exception as e:
             self.send_response(500)
