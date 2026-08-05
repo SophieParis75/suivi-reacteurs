@@ -1,7 +1,6 @@
 import os
 import json
 import urllib.request
-import urllib.parse
 import urllib.error
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timedelta, timezone
@@ -38,21 +37,17 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Fuseau horaire Europe/Paris (+02:00 en été)
+            # Heure Paris (+02:00)
             tz_paris = timezone(timedelta(hours=2))
             now = datetime.now(tz_paris)
             yesterday = now - timedelta(days=1)
 
-            # Format ISO 8601 strict : YYYY-MM-DDTHH:mm:ss+02:00
-            start_str = yesterday.strftime('%Y-%m-%dT%H:%M:%S+02:00')
-            end_str = now.strftime('%Y-%m-%dT%H:%M:%S+02:00')
-
-            # urllib.parse.quote avec safe='' force l'encodage de '+' en '%2B' et ':' en '%3A'
-            start_param = urllib.parse.quote(start_str, safe='')
-            end_param = urllib.parse.quote(end_str, safe='')
+            # Format strict : les ':' doivent rester intacts, seul le '+' devient %2B
+            start_str = yesterday.strftime('%Y-%m-%dT%H:%M:%S') + "%2B02:00"
+            end_str = now.strftime('%Y-%m-%dT%H:%M:%S') + "%2B02:00"
 
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            full_url = f"{base_url}?start_date={start_param}&end_date={end_param}&date_type=created_date"
+            full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=created_date"
 
             req_rte = urllib.request.Request(
                 full_url,
