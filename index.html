@@ -1,133 +1,28 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Suivi des indisponibilités nucléaires environnementales</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; }
-    .control-panel { margin-bottom: 20px; background: #f9f9f9; padding: 15px; border-radius: 6px; }
-    label { font-weight: bold; margin-right: 10px; }
-    input[type="datetime-local"] { margin-right: 15px; padding: 6px; }
-    button { padding: 7px 18px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    button:hover { background: #003d80; }
-    .metric-container { display: flex; gap: 20px; margin-top: 20px; }
-    .metric-card { background: #f4f4f4; padding: 15px; border-radius: 6px; border-left: 5px solid #0056b3; min-width: 220px; }
-    .metric-card h3 { margin: 0 0 10px 0; font-size: 14px; color: #555; }
-    .metric-card p { margin: 0; font-size: 22px; font-weight: bold; }
-  </style>
+    <meta charset="UTF-8">
+    <title>Test Connexion RTE</title>
 </head>
-<body>
+<body style="font-family: monospace; padding: 20px; background: #121212; color: #00ff66;">
+    <h1>Test Connexion API RTE</h1>
+    <button onclick="testRTE()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Lancer le test API</button>
+    
+    <h2>Résultat brut de l'API :</h2>
+    <pre id="output" style="background: #000; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-break: break-all;">Cliquer sur le bouton pour tester...</pre>
 
-  <h1>Suivi des indisponibilités nucléaires (Causes environnementales)</h1>
-
-  <div class="control-panel">
-    <label for="startDate">Début :</label>
-    <input type="datetime-local" id="startDate">
-
-    <label for="endDate">Fin :</label>
-    <input type="datetime-local" id="endDate">
-
-    <button onclick="fetchUnavailabilities()">Calculer le cumul</button>
-  </div>
-
-  <div class="metric-container">
-    <div class="metric-card">
-      <h3>Réacteurs concernés</h3>
-      <p id="msgCount">0</p>
-    </div>
-    <div class="metric-card">
-      <h3>Puissance indisponible cumulée</h3>
-      <p><span id="mwSum">0</span> MW</p>
-    </div>
-  </div>
-
-  <script>
-    // Initialisation par défaut : du 02/08/2026 00:00 au 05/08/2026 23:59
-    document.getElementById('startDate').value = '2026-08-02T00:00';
-    document.getElementById('endDate').value = '2026-08-05T23:59';
-
-    async function fetchUnavailabilities() {
-      const startDateVal = document.getElementById('startDate').value;
-      const endDateVal = document.getElementById('endDate').value;
-
-      if (!startDateVal || !endDateVal) {
-        alert("Veuillez sélectionner une date de début et de fin.");
-        return;
-      }
-
-      const isoStart = new Date(startDateVal).toISOString();
-      const isoEnd = new Date(endDateVal).toISOString();
-
-      document.getElementById('msgCount').textContent = 'Chargement...';
-      document.getElementById('mwSum').textContent = 'Chargement...';
-
-      try {
-        const response = await fetch(`/api/rte?start_date=${encodeURIComponent(isoStart)}&end_date=${encodeURIComponent(isoEnd)}`);
-        
-        if (!response.ok) {
-          throw new Error(`Erreur HTTP: ${response.status}`);
+    <script>
+        async function testRTE() {
+            const out = document.getElementById('output');
+            out.textContent = "Appel à /api/rte en cours...";
+            try {
+                const res = await fetch('/api/rte');
+                const data = await res.json();
+                out.textContent = JSON.stringify(data, null, 2);
+            } catch (err) {
+                out.textContent = "Erreur de requête client : " + err.message;
+            }
         }
-
-        const data = await response.json();
-        const events = data.generation_unavailabilities || [];
-
-        // 1. Filtrage global : recherche insensible aux cas/accents de "nucl" et "environ" sur tout l'objet JSON
-        const filteredEvents = events.filter(item => {
-          const rawText = JSON.stringify(item).toLowerCase();
-          return rawText.includes('nucl') && rawText.includes('environ');
-        });
-
-        // 2. Dédoublonnage 1 : Conserver uniquement la version la plus récente par identifiant de message
-        const latestVersions = {};
-        filteredEvents.forEach(item => {
-          const id = item.identifier || item.id;
-          const version = Number(item.version) || 0;
-          
-          if (!latestVersions[id] || version > (Number(latestVersions[id].version) || 0)) {
-            latestVersions[id] = item;
-          }
-        });
-        const uniqueMessages = Object.values(latestVersions);
-
-        // 3. Dédoublonnage 2 : Conserver la perte de puissance MAX par réacteur (Tranche / Unit)
-        const maxLossPerUnit = {};
-        uniqueMessages.forEach(item => {
-          // Extraction du code ou nom de l'unité/réacteur
-          const unitKey = (item.unit && (item.unit.eic_code || item.unit.name)) || item.unit_name || item.identifier || item.id;
-          
-          // Recherche des valeurs de capacité nominale et disponible
-          const nominal = Number(item.nominal_power || item.nominal_power_mw || (item.unit && item.unit.nominal_power)) || 0;
-          const available = Number(item.available_capacity || item.available_capacity_mw) || 0;
-          
-          const currentLoss = Math.max(0, nominal - available);
-
-          if (!maxLossPerUnit[unitKey] || currentLoss > maxLossPerUnit[unitKey].loss) {
-            maxLossPerUnit[unitKey] = {
-              item: item,
-              loss: currentLoss
-            };
-          }
-        });
-
-        const maxLossEvents = Object.values(maxLossPerUnit);
-
-        // 4. Somme totale des pertes maximales
-        const totalMWLoss = maxLossEvents.reduce((acc, record) => acc + record.loss, 0);
-
-        // Mise à jour directe du DOM
-        document.getElementById('msgCount').textContent = maxLossEvents.length;
-        document.getElementById('mwSum').textContent = totalMWLoss.toLocaleString('fr-FR');
-
-      } catch (error) {
-        console.error("Erreur de récupération :", error);
-        document.getElementById('msgCount').textContent = 'Erreur';
-        document.getElementById('mwSum').textContent = 'Erreur';
-      }
-    }
-
-    // Exécution automatique au chargement de la page
-    fetchUnavailabilities();
-  </script>
+    </script>
 </body>
 </html>
