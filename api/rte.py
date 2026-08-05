@@ -36,11 +36,14 @@ class handler(BaseHTTPRequestHandler):
                 token_data = json.loads(token_res.read().decode())
                 access_token = token_data.get("access_token")
 
-            # 2. Formatage des dates et requête vers l'API d'indisponibilité RTE v4
-            safe_start = urllib.parse.quote(start_date, safe='')
-            safe_end = urllib.parse.quote(end_date, safe='')
+            # 2. Encodage des dates et ajout de date_type=EVENT_DATE
+            safe_start = urllib.parse.quote(start_date)
+            safe_end = urllib.parse.quote(end_date)
             
-            rte_url = f"https://digital.iservices.rte-france.com/open_api/unavailability/v4/generation_unavailabilities?start_date={safe_start}&end_date={safe_end}"
+            rte_url = (
+                f"https://digital.iservices.rte-france.com/open_api/unavailability/v4/generation_unavailabilities"
+                f"?start_date={safe_start}&end_date={safe_end}&date_type=EVENT_DATE"
+            )
             
             data_req = urllib.request.Request(
                 rte_url,
@@ -53,7 +56,7 @@ class handler(BaseHTTPRequestHandler):
             with urllib.request.urlopen(data_req) as data_res:
                 response_data = data_res.read().decode()
 
-            # 3. Réponse OK 200 au navigateur
+            # 3. Réponse OK 200
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -61,7 +64,6 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(response_data.encode())
 
         except urllib.error.HTTPError as e:
-            # Capture des erreurs retournées directement par RTE (ex: 400, 403, 404)
             error_body = e.read().decode() if e.fp else str(e)
             self.send_response(e.code)
             self.send_header('Content-Type', 'application/json')
