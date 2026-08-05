@@ -38,25 +38,16 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Dates sur 24h avec fuseau +02:00 tel que requis par RTE (API v7.0)
+            # Dates au format ISO 8601 strict (YYYY-MM-DDTHH:mm:ss+02:00)
             now = datetime.now()
             start_dt = now - timedelta(days=1)
             
-            # Format ex: 2026-08-04T00:00:00+02:00
             start_str = start_dt.strftime('%Y-%m-%dT00:00:00+02:00')
             end_str = now.strftime('%Y-%m-%dT23:59:59+02:00')
 
-            # URL V7 exacte selon la documentation officielle
+            # Construction brute sans encodage urllib qui transforme '+' en '%2B'
             rte_base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            
-            # Paramètres conformes V7
-            params = urllib.parse.urlencode({
-                "start_date": start_str,
-                "end_date": end_str,
-                "date_type": "created_date"
-            })
-
-            full_url = f"{rte_base_url}?{params}"
+            full_url = f"{rte_base_url}?start_date={start_str}&end_date={end_str}&date_type=created_date"
 
             req_rte = urllib.request.Request(
                 full_url,
