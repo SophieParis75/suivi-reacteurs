@@ -4,6 +4,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from http.server import BaseHTTPRequestHandler
+from datetime import datetime, timedelta, timezone
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -32,16 +33,26 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "Variables d'environnement manquantes"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
 
-            start_date_val = "2026-08-04T00:00:00+02:00"
-            end_date_val = "2026-08-05T23:59:59+02:00"
+            # Fuseau horaire Europe/Paris (+02:00 en été)
+            tz_paris = timezone(timedelta(hours=2))
+            now = datetime.now(tz_paris)
+            yesterday = now - timedelta(days=1)
 
-            query_string = f"start_date={urllib.parse.quote(start_date_val)}&end_date={urllib.parse.quote(end_date_val)}&date_type=created_date"
-            full_url = f"https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities?{query_string}"
+            # Format ISO 8601 strict : YYYY-MM-DDTHH:mm:ss+02:00
+            start_str = yesterday.strftime('%Y-%m-%dT%H:%M:%S+02:00')
+            end_str = now.strftime('%Y-%m-%dT%H:%M:%S+02:00')
+
+            # urllib.parse.quote avec safe='' force l'encodage de '+' en '%2B' et ':' en '%3A'
+            start_param = urllib.parse.quote(start_str, safe='')
+            end_param = urllib.parse.quote(end_str, safe='')
+
+            base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
+            full_url = f"{base_url}?start_date={start_param}&end_date={end_param}&date_type=created_date"
 
             req_rte = urllib.request.Request(
                 full_url,
