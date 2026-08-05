@@ -70,7 +70,8 @@
         const resultsElement = document.getElementById('results');
 
         try {
-          const response = await fetch('/api/rte?start_date=2026-07-29T00:00:00Z&end_date=2026-08-05T00:00:00Z');
+          // Correct: leading slash ensures absolute path to Vercel serverless function
+const response = await fetch('/api/rte?start_date=2026-07-29T00:00:00Z&end_date=2026-08-05T00:00:00Z');
           const data = await response.json();
 
           const latestFilteredEvents = filterAndDeduplicateEvents(data);
