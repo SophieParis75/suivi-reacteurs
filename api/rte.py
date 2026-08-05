@@ -1,9 +1,9 @@
 import os
 import json
 import urllib.request
+import urllib.parse
 import urllib.error
 from http.server import BaseHTTPRequestHandler
-from datetime import datetime, timedelta
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -32,21 +32,16 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "Variables d'environnement manquantes"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
 
-            # Dates formatées selon le guide v7 avec %2B pour le signe '+'
-            now = datetime.now()
-            start_dt = now - timedelta(days=1)
-            
-            # Exemple conforme v7 : 2026-08-04T00:00:00%2B02:00
-            start_str = start_dt.strftime('%Y-%m-%dT00:00:00') + "%2B02:00"
-            end_str = now.strftime('%Y-%m-%dT23:59:59') + "%2B02:00"
+            start_date_val = "2026-08-04T00:00:00+02:00"
+            end_date_val = "2026-08-05T23:59:59+02:00"
 
-            rte_base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            full_url = f"{rte_base_url}?start_date={start_str}&end_date={end_str}&date_type=created_date"
+            query_string = f"start_date={urllib.parse.quote(start_date_val)}&end_date={urllib.parse.quote(end_date_val)}&date_type=created_date"
+            full_url = f"https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities?{query_string}"
 
             req_rte = urllib.request.Request(
                 full_url,
