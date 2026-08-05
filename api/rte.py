@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timedelta, timezone
 
 def get_rte_token(client_id, client_secret):
-    url = "https://digital.iservices.rte-france.com/token/oauth/"
+    url = "https://digital.iservices.rte-france.com/token/oauth/" 
     auth_str = f"{client_id}:{client_secret}"
     import base64
     b64_auth = base64.b64encode(auth_str.encode()).decode()
