@@ -2,13 +2,13 @@ import os
 import json
 import urllib.request
 import urllib.error
+import base64
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timedelta, timezone
 
 def get_rte_token(client_id, client_secret):
-    url = "https://digital.iservices.rte-france.com/token/oauth/" 
+    url = "https://digital.iservices.rte-france.com/token/oauth/"
     auth_str = f"{client_id}:{client_secret}"
-    import base64
     b64_auth = base64.b64encode(auth_str.encode()).decode()
     
     headers = {
@@ -37,16 +37,17 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Dates ISO 8601 UTC (format accepté par RTE)
+            # Horodatage au format ISO 8601 UTC avec 'Z'
             now_utc = datetime.now(timezone.utc)
             start_utc = now_utc - timedelta(days=1)
 
             start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_str = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-            # Correctif v7.0 : date_type exige CREATION_DATE en majuscules
+            # Paramètres conformes au schéma v7.0 de RTE
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=CREATION_DATE"
+            params = f"start_date={start_str}&end_date={end_str}&date_type=CreationDate&production_type=NUCLEAR"
+            full_url = f"{base_url}?{params}"
 
             req_rte = urllib.request.Request(
                 full_url,
