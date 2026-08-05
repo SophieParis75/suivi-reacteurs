@@ -25,17 +25,6 @@ def get_rte_token(client_id, client_secret):
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            start_date_raw = query_components.get('start_date', [None])[0]
-            end_date_raw = query_components.get('end_date', [None])[0]
-
-            if not start_date_raw or not end_date_raw:
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "Missing start_date or end_date"}).encode('utf-8'))
-                return
-
             client_id = os.environ.get("RTE_CLIENT_ID")
             client_secret = os.environ.get("RTE_CLIENT_SECRET")
 
@@ -43,31 +32,24 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"error": "Variables d'environnement RTE_CLIENT_ID ou RTE_CLIENT_SECRET non définies sur Vercel"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "Variables d'environnement RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquantes"}).encode('utf-8'))
                 return
 
-            # Nettoyage et formatage strict ISO 8601 (+02:00) requis par l'API RTE
-            start_clean = start_date_raw.split('.')[0] if '.' in start_date_raw else start_date_raw
-            end_clean = end_date_raw.split('.')[0] if '.' in end_date_raw else end_date_raw
-            
-            if not start_clean.endswith('+02:00') and not start_clean.endswith('Z'):
-                start_clean += "+02:00"
-            else:
-                start_clean = start_clean.replace('Z', '+02:00')
-
-            if not end_clean.endswith('+02:00') and not end_clean.endswith('Z'):
-                end_clean += "+02:00"
-            else:
-                end_clean = end_clean.replace('Z', '+02:00')
-
-            # Obtenir le token d'accès OAuth
+            # 1. Obtenir le Token
             token = get_rte_token(client_id, client_secret)
 
-            # Requête vers l'API RTE
-            rte_url = f"https://digital.iservices.rte-france.com/open_api/generation_unavailabilities/v4/generation_unavailabilities?start_date={urllib.parse.quote(start_clean)}&end_date={urllib.parse.quote(end_clean)}"
+            # 2. Appel API RTE sans filtre de date dynamique
+            # On interroge directement la plage actuelle avec encodage ISO strict
+            rte_url = "https://digital.iservices.rte-france.com/open_api/generation_unavailabilities/v4/generation_unavailabilities"
+            params = urllib.parse.urlencode({
+                "start_date": "2026-08-01T00:00:00+02:00",
+                "end_date": "2026-08-05T00:00:00+02:00"
+            })
             
+            full_url = f"{rte_url}?{params}"
+
             req_rte = urllib.request.Request(
-                rte_url,
+                full_url,
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/json"
@@ -77,7 +59,7 @@ class handler(BaseHTTPRequestHandler):
 
             with urllib.request.urlopen(req_rte, timeout=15) as resp:
                 body = resp.read()
-                self.send_response(resp.status)
+                self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(body)
@@ -87,9 +69,17 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(e.code)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({"error_from_rte": error_body, "code": e.code}).encode('utf-8'))
+            self.wfile.write(json.dumps({
+                "status": "HTTPError",
+                "code": e.code,
+                "rte_response": error_body
+            }).encode('utf-8'))
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({"error": str(e), "type": type(e).__name__}).encode('utf-8'))
+            self.wfile.write(json.dumps({
+                "status": "Exception",
+                "message": str(e),
+                "type": type(e).__name__
+            }).encode('utf-8'))
