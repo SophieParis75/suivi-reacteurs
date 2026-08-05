@@ -359,9 +359,9 @@
                                 color: function(context) {
                                     let label = context.chart.data.labels[context.index];
                                     if (label && label.startsWith('1/')) {
-                                        return '#e0e0e0'; // Quadrillage uniquement pour les 1er du mois
+                                        return '#e0e0e0';
                                     }
-                                    return 'transparent'; // Pas de ligne de quadrillage pour les autres jours
+                                    return 'transparent';
                                 }
                             },
                             ticks: {
@@ -378,7 +378,7 @@
                             beginAtZero: true,
                             grid: { color: '#e0e0e0' },
                             ticks: {
-                                stepSize: 1000 // Repères et lignes de quadrillage uniquement tous les 1 000 GWh
+                                stepSize: 1000
                             }
                         }
                     },
@@ -386,6 +386,10 @@
                         tooltip: {
                             mode: 'index',
                             intersect: false,
+                            // TRI DÉCROISSANT DES ANNÉES DANS L'INFO-BULLE (ex: 2026, 2025, 2024...)
+                            itemSort: function(a, b) {
+                                return parseInt(b.dataset.label) - parseInt(a.dataset.label);
+                            },
                             callbacks: {
                                 title: function(tooltipItems) {
                                     if (tooltipItems.length > 0) {
