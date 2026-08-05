@@ -4,6 +4,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from http.server import BaseHTTPRequestHandler
+from datetime import datetime, timedelta, timezone
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -32,24 +33,23 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "Variables d'environnement RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquantes"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant"}).encode('utf-8'))
                 return
 
-            # 1. Obtenir le Token
             token = get_rte_token(client_id, client_secret)
 
-            # 2. Appel API RTE sans filtre de date dynamique
-            # On interroge directement la plage actuelle avec encodage ISO strict
-            rte_url = "https://digital.iservices.rte-france.com/open_api/generation_unavailabilities/v4/generation_unavailabilities"
-            params = urllib.parse.urlencode({
-                "start_date": "2026-08-01T00:00:00+02:00",
-                "end_date": "2026-08-05T00:00:00+02:00"
-            })
+            # Plage automatique de 24h jusqu'à maintenant en UTC ISO 8601 (ex: 2026-08-04T21:30:00Z)
+            now = datetime.now(timezone.utc)
+            start_dt = now - timedelta(hours=24)
             
-            full_url = f"{rte_url}?{params}"
+            start_str = start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+            end_str = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+            # Construction manuelle pour éviter le sur-encodage des deux-points et du Z
+            rte_url = f"https://digital.iservices.rte-france.com/open_api/generation_unavailabilities/v4/generation_unavailabilities?start_date={start_str}&end_date={end_str}"
 
             req_rte = urllib.request.Request(
-                full_url,
+                rte_url,
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/json"
@@ -72,6 +72,7 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "status": "HTTPError",
                 "code": e.code,
+                "requested_url": rte_url if 'rte_url' in locals() else None,
                 "rte_response": error_body
             }).encode('utf-8'))
         except Exception as e:
