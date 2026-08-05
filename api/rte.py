@@ -37,16 +37,16 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Dates en UTC avec notation 'Z'
+            # Dates ISO 8601 UTC (format accepté par RTE)
             now_utc = datetime.now(timezone.utc)
             start_utc = now_utc - timedelta(days=1)
 
-            # Format ISO 8601 UTC : YYYY-MM-DDTHH:mm:ssZ
             start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_str = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
+            # Correctif v7.0 : date_type exige CREATION_DATE en majuscules
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=created_date"
+            full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=CREATION_DATE"
 
             req_rte = urllib.request.Request(
                 full_url,
