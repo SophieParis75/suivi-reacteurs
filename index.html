@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi des indisponibilités nucléaires</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; }
+        .card { border: 1px solid #ccc; padding: 15px; border-radius: 8px; max-width: 500px; background: #f9f9f9; }
+        .highlight { color: #d9534f; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Suivi des indisponibilités nucléaires (Motif environnemental)</h1>
+
+    <div class="card">
+        <h2>Résultats du filtrage</h2>
+        <div id="status">Chargement des données RTE...</div>
+        <div id="results" style="display:none;">
+            <p>Nombre de messages uniques : <span id="message-count" class="highlight">0</span></p>
+            <p>Cumul de puissance indisponible : <span id="total-losses" class="highlight">0</span> MW</p>
+        </div>
+    </div>
+
+    <script>
+      // Filter events matching 'nucl' and 'environ' keywords, keeping only the latest version per message ID
+      function filterAndDeduplicateEvents(rteData) {
+        const eventsList = rteData.generation_unavailabilities || [];
+        const latestEventsMap = new Map();
+
+        eventsList.forEach(event => {
+          const rawText = JSON.stringify(event).toLowerCase();
+
+          // Apply root keyword matching for nuclear and environmental constraints
+          if (rawText.includes("nucl") && rawText.includes("environ")) {
+            const messageId = event.identifier;
+            const currentVersion = event.version || 1;
+
+            // Retain the message if new or if the version is more recent
+            if (!latestEventsMap.has(messageId) || currentVersion > latestEventsMap.get(messageId).version) {
+              latestEventsMap.set(messageId, event);
+            }
+          }
+        });
+
+        return Array.from(latestEventsMap.values());
+      }
+
+      // Calculate total capacity losses (nominal capacity minus available capacity)
+      function calculateTotalCapacityLoss(filteredEvents) {
+        let totalLossMW = 0;
+
+        filteredEvents.forEach(event => {
+          if (event.values && Array.isArray(event.values)) {
+            event.values.forEach(val => {
+              const nominalPower = val.nominal_power || 0;
+              const availableCapacity = val.available_capacity || 0;
+              totalLossMW += (nominalPower - availableCapacity);
+            });
+          }
+        });
+
+        return totalLossMW;
+      }
+
+      // Fetch data from Vercel backend API and update UI
+      async function fetchRteData() {
+        const statusElement = document.getElementById('status');
+        const resultsElement = document.getElementById('results');
+
+        try {
+          const response = await fetch('/api/rte?start_date=2026-07-29T00:00:00Z&end_date=2026-08-05T00:00:00Z');
+          const data = await response.json();
+
+          const latestFilteredEvents = filterAndDeduplicateEvents(data);
+          const totalLossesMW = calculateTotalCapacityLoss(latestFilteredEvents);
+
+          statusElement.style.display = 'none';
+          resultsElement.style.display = 'block';
+
+          document.getElementById('message-count').textContent = latestFilteredEvents.length;
+          document.getElementById('total-losses').textContent = totalLossesMW.toLocaleString('fr-FR');
+
+        } catch (error) {
+          console.error("Data fetching error:", error);
+          statusElement.textContent = "Erreur lors de la récupération des données.";
+        }
+      }
+
+      // Execute on load
+      fetchRteData();
+    </script>
+</body>
+</html>
