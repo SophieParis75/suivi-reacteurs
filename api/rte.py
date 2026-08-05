@@ -32,19 +32,18 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "Variables d'environnement manquantes"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
 
-            # Heure Paris (+02:00)
-            tz_paris = timezone(timedelta(hours=2))
-            now = datetime.now(tz_paris)
-            yesterday = now - timedelta(days=1)
+            # Dates en UTC avec notation 'Z'
+            now_utc = datetime.now(timezone.utc)
+            start_utc = now_utc - timedelta(days=1)
 
-            # Format strict : les ':' doivent rester intacts, seul le '+' devient %2B
-            start_str = yesterday.strftime('%Y-%m-%dT%H:%M:%S') + "%2B02:00"
-            end_str = now.strftime('%Y-%m-%dT%H:%M:%S') + "%2B02:00"
+            # Format ISO 8601 UTC : YYYY-MM-DDTHH:mm:ssZ
+            start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+            end_str = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
             full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=created_date"
