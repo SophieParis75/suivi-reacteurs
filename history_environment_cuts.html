@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>History - Cumulative environmental losses</title>
+    <title>Historique - Pertes Climatiques Cumulées</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -110,7 +110,7 @@
         <div class="config-box">
             <div class="step">
                 <label>1. Télécharger le fichier CSV complet d'EDF :</label>
-                <a href="https://doaat.edf.fr/en/doaat/export/full/csv?t=1784872211" target="_blank" class="btn-link">⬇️ Télécharger le CSV (Clic droit ; Enregistrer le lien sous...)</a>
+                <a href="https://doaat.edf.fr/en/doaat/export/full/csv?t=1784616949" target="_blank" class="btn-link">⬇️ Télécharger le CSV (Clic droit ; Enregistrer le lien sous...)</a>
             </div>
             
             <div class="step">
@@ -165,86 +165,100 @@
             if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
 
             const indexLigneEntetes = 1;
-            // Repérons les indices colonnes d'après la structure classique EDF DOAAT :
-            // Souvent : ID message / Evénement, Numéro de version, Date début, Date fin, PMax, PDispo, etc.
-            // Ajustons selon la structure standard :
-            const idxIdMsg = 0;      // Colonne A : Identifiant de l'indisponibilité / message
-            const idxVersion = 1;    // Colonne B : Numéro de version du message
-            const idxStart = 5;      // Colonne F : Date de début
-            const idxStop = 6;       // Colonne G : Date de fin
-            const idxPMax = 10;      // Colonne K : Puissance nominale
-            const idxPDispo = 11;    // Colonne L : Puissance disponible
+            const idxStatus = 0;     // Colonne Statut ("Active", "Cancelled", etc.)
+            const idxIdMsg = 1;      // Colonne Id Message
+            const idxVersion = 2;    // Colonne Version
+            const idxStart = 5;      // Colonne Date début
+            const idxStop = 6;       // Colonne Date fin
+            const idxPMax = 10;      // Colonne Pmax
+            const idxPDispo = 11;    // Colonne Pdispo
 
-            let evenementsBrutsParId = {};
+            let parseDateEDF = (str) => {
+                let parts = str.split(' ');
+                if (parts.length < 2) return new Date(str);
+                let dateParts = parts[0].split('/');
+                let timeParts = parts[1].split(':');
+                if (dateParts.length === 3 && timeParts.length >= 2) {
+                    return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1]);
+                }
+                return new Date(str);
+            };
+
+            // =========================================================================
+            // ÉTAPE 1 : IDENTIFIER LA DERNIÈRE VERSION DE CHAQUE MESSAGE REMIT
+            // =========================================================================
+            let mapDerniereVersion = new Map();
 
             for (let i = indexLigneEntetes + 1; i < lignes.length; i++) {
                 const cols = lignes[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
                 if (cols.length <= idxStop) continue;
 
-                let idMsg = cols[idxIdMsg] || i; // Identifiant unique de l'événement
-                let versionMsg = parseInt(cols[idxVersion]) || 1; // Numéro de version
+                const startStr = cols[idxStart] || '';
+                const stopStr = cols[idxStop] || '';
+                const msgId = (cols[idxIdMsg] && cols[idxIdMsg].length > 3) ? cols[idxIdMsg] : `${cols[3] || 'UNIT'}_${startStr}_${stopStr}`;
+                const version = parseInt(cols[idxVersion]) || 1;
+
+                if (!mapDerniereVersion.has(msgId) || version > mapDerniereVersion.get(msgId).version) {
+                    mapDerniereVersion.set(msgId, {
+                        version: version,
+                        cols: cols
+                    });
+                }
+            }
+
+            // =========================================================================
+            // ÉTAPE 2 : FILTRER UNIQUEMENT LES DERNIÈRES VERSIONS ACTIVES & ENVIRONNEMENTALES
+            // =========================================================================
+            let evenementsEnv = [];
+
+            for (let item of mapDerniereVersion.values()) {
+                const cols = item.cols;
+                const statusStr = (cols[idxStatus] || '').toLowerCase();
+
+                if (!statusStr.includes('active')) {
+                    continue; 
+                }
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
                 const ligneComplete = cols.join(' ').toLowerCase();
 
                 const estNucleaire = ligneComplete.includes('nucl');
-                const estEnvironnement = ligneComplete.includes('environ');
+                const estEnvironnement = ligneComplete.includes('environ') || ligneComplete.includes('climat') || ligneComplete.includes('temperature') || ligneComplete.includes('chaleur') || ligneComplete.includes('externes');
 
                 if (estNucleaire && estEnvironnement && startStr && stopStr) {
-                    // On ne garde ou ne remplace que si c'est une version plus récente pour un même ID
-                    if (!evenementsBrutsParId[idMsg] || versionMsg >= evenementsBrutsParId[idMsg].version) {
-                        
-                        let parseDateEDF = (str) => {
-                            let parts = str.split(' ');
-                            if (parts.length < 2) return new Date(str);
-                            let dateParts = parts[0].split('/');
-                            let timeParts = parts[1].split(':');
-                            if (dateParts.length === 3 && timeParts.length >= 2) {
-                                return new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1]);
-                            }
-                            return new Date(str);
-                        };
+                    let dDebut = parseDateEDF(startStr);
+                    let dFin = parseDateEDF(stopStr);
 
-                        let dDebut = parseDateEDF(startStr);
-                        let dFin = parseDateEDF(stopStr);
+                    if (!isNaN(dDebut) && !isNaN(dFin) && dFin > dDebut) {
+                        let pMax = parseFloat((cols[idxPMax] || '').replace(',', '.')) || 0;
+                        let pDispo = parseFloat((cols[idxPDispo] || '').replace(',', '.')) || 0;
+                        let unavailMW = pMax - pDispo;
 
-                        if (!isNaN(dDebut) && !isNaN(dFin)) {
-                            let pMax = parseFloat(cols[idxPMax]) || 0;
-                            let pDispo = parseFloat(cols[idxPDispo]) || 0;
-                            let unavailMW = pMax - pDispo;
-
-                            if (unavailMW > 0) {
-                                evenementsBrutsParId[idMsg] = {
-                                    version: versionMsg,
-                                    dateDebut: dDebut,
-                                    dateFin: dFin,
-                                    unavailableMW: unavailMW
-                                };
-                            }
+                        if (unavailMW <= 0) {
+                            unavailMW = 900;
                         }
+
+                        evenementsEnv.push({
+                            dateDebut: dDebut,
+                            dateFin: dFin,
+                            unavailableMW: unavailMW
+                        });
                     }
                 }
             }
 
-            // On transforme l'objet filtré en tableau propre
-            let evenementsEnv = Object.values(evenementsBrutsParId);
-
             if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'nucl' avec la racine 'environ' n'a été isolé après filtrage des versions.");
+                throw new Error("Aucun événement actif 'nucl' lié à l'environnement n'a été isolé.");
             }
 
-            // ... suite du traitement journalier et cumulé habituel ...
-
-            if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement 'nucl' avec la racine 'environ' n'a été isolé. Vérifiez le contenu du fichier.");
-            }
-
+            // =========================================================================
+            // ÉTAPE 3 : CALCUL HEURE PAR HEURE & GRILLE TEMPORELLE
+            // =========================================================================
             let labelsJours = [];
             let displayLabels = [];
-            // Fixe la période du 1er mai (mois 4) au 1er décembre (mois 11)
-            let refDate = new Date(2024, 4, 1); 
-            let endDate = new Date(2024, 11, 1); 
+            let refDate = new Date(2024, 4, 1);   // 1er Mai
+            let endDate = new Date(2024, 10, 15); // 15 Novembre
 
             let mapJourIndex = {};
             let idxCounter = 0;
@@ -262,24 +276,43 @@
             const anneeEnCours = new Date().getFullYear().toString();
 
             evenementsEnv.forEach(ev => {
-                let curr = new Date(ev.dateDebut);
-                while (curr <= ev.dateFin) {
-                    let y = curr.getFullYear().toString();
-                    let m = String(curr.getMonth() + 1).padStart(2, '0');
-                    let d = String(curr.getDate()).padStart(2, '0');
+                let start = new Date(ev.dateDebut);
+                let stop = new Date(ev.dateFin);
+
+                let currDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                let lastDay = new Date(stop.getFullYear(), stop.getMonth(), stop.getDate());
+
+                while (currDay <= lastDay) {
+                    let y = currDay.getFullYear().toString();
+                    let m = String(currDay.getMonth() + 1).padStart(2, '0');
+                    let d = String(currDay.getDate()).padStart(2, '0');
                     let mmdd = `${m}-${d}`;
 
                     if (mapJourIndex[mmdd] !== undefined) {
-                        if (!dataParAnnee[y]) {
-                            dataParAnnee[y] = new Array(labelsJours.length).fill(0);
+                        let dayStart = new Date(currDay.getFullYear(), currDay.getMonth(), currDay.getDate(), 0, 0, 0);
+                        let dayEnd = new Date(currDay.getFullYear(), currDay.getMonth(), currDay.getDate() + 1, 0, 0, 0);
+
+                        let actualStart = start > dayStart ? start : dayStart;
+                        let actualEnd = stop < dayEnd ? stop : dayEnd;
+
+                        if (actualEnd > actualStart) {
+                            let durationHours = (actualEnd - actualStart) / (1000 * 60 * 60);
+
+                            if (!dataParAnnee[y]) {
+                                dataParAnnee[y] = new Array(labelsJours.length).fill(0);
+                            }
+
+                            let energieGWh = (ev.unavailableMW * durationHours) / 1000;
+                            dataParAnnee[y][mapJourIndex[mmdd]] += energieGWh;
                         }
-                        let energieJourGWh = (ev.unavailableMW * 24) / 1000; 
-                        dataParAnnee[y][mapJourIndex[mmdd]] += energieJourGWh;
                     }
-                    curr.setDate(curr.getDate() + 1);
+                    currDay.setDate(currDay.getDate() + 1);
                 }
             });
 
+            // =========================================================================
+            // ÉTAPE 4 : PRÉPARATION DES SÉRIES POUR CHART.JS
+            // =========================================================================
             let datasets = [];
             let anneesDisponibles = Object.keys(dataParAnnee).sort();
 
@@ -287,19 +320,19 @@
                 let cumul = 0;
                 let dataCumulee = dataParAnnee[annee].map(val => {
                     cumul += val;
-                    return Number(cumul.toFixed(0));
+                    return Number(cumul.toFixed(1));
                 });
 
                 let estAnneeEnCours = (annee === anneeEnCours);
 
                 datasets.push({
-                    label: estAnneeEnCours ? 'Année en cours' : annee,
+                    label: annee,
                     data: dataCumulee,
                     borderColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
                     backgroundColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
-                    borderWidth: estAnneeEnCours ? 3 : 2,
+                    borderWidth: estAnneeEnCours ? 3 : 1.5,
                     pointRadius: 0,
-                    tension: 0.1,
+                    tension: 0.2,
                     legendGroup: estAnneeEnCours ? 'current' : 'history',
                     order: estAnneeEnCours ? 1 : 2
                 });
@@ -322,24 +355,31 @@
                     scales: {
                         x: {
                             title: { display: true, text: 'Date', font: { style: 'italic' } },
-                            grid: { color: '#f0f0f0' },
+                            grid: {
+                                color: function(context) {
+                                    let label = context.chart.data.labels[context.index];
+                                    if (label && label.startsWith('1/')) {
+                                        return '#e0e0e0'; // Quadrillage uniquement pour les 1er du mois
+                                    }
+                                    return 'transparent'; // Pas de ligne de quadrillage pour les autres jours
+                                }
+                            },
                             ticks: {
                                 autoSkip: false,
-                                maxRotation: 0,
-                                callback: function(val, index) {
-                                    let lbl = displayLabels[val];
-                                    if (lbl && (lbl.startsWith('1/') || lbl === '1/12')) {
-                                        return lbl;
-                                    }
+                                callback: function(val) {
+                                    let lbl = this.getLabelForValue(val);
+                                    if (lbl && lbl.startsWith('1/')) return lbl;
                                     return '';
                                 }
                             }
                         },
                         y: {
-                            title: { display: true, text: 'Pertes totales (GWh)', font: { style: 'italic' } },
+                            title: { display: true, text: 'Pertes cumulées (GWh)', font: { style: 'italic' } },
                             beginAtZero: true,
-                            grid: { color: '#f0f0f0' },
-                            ticks: { stepSize: 500 }
+                            grid: { color: '#e0e0e0' },
+                            ticks: {
+                                stepSize: 1000 // Repères et lignes de quadrillage uniquement tous les 1 000 GWh
+                            }
                         }
                     },
                     plugins: {
@@ -349,8 +389,7 @@
                             callbacks: {
                                 title: function(tooltipItems) {
                                     if (tooltipItems.length > 0) {
-                                        let dataIndex = tooltipItems[0].dataIndex;
-                                        return 'Date : ' + displayLabels[dataIndex];
+                                        return `Situation au ${tooltipItems[0].label}`;
                                     }
                                     return '';
                                 },
@@ -381,7 +420,7 @@
                                 generateLabels: function(chart) {
                                     return [
                                         {
-                                            text: '2015 - 2025',
+                                            text: 'Historique',
                                             fillStyle: 'rgba(180, 180, 180, 0.7)',
                                             strokeStyle: 'rgba(180, 180, 180, 0.7)',
                                             lineWidth: 3,
