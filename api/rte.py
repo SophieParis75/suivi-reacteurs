@@ -14,7 +14,6 @@ class handler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed_path.query)
         
-        # Récupération des dates transmises par le front-end
         start_date = params.get('start_date', ['2026-07-29T00:00:00Z'])[0]
         end_date = params.get('end_date', ['2026-08-05T00:00:00Z'])[0]
 
@@ -37,14 +36,14 @@ class handler(BaseHTTPRequestHandler):
                 token_data = json.loads(token_res.read().decode())
                 access_token = token_data.get("access_token")
 
-            # 2. Encodage strict de l'URL d'appel
-            query_params = urllib.parse.urlencode({
-                'start_date': start_date,
-                'end_date': end_date,
-                'date_type': 'EVENT_DATE'
-            })
+            # 2. Encodage des dates en conservant : et - intacts
+            safe_start = urllib.parse.quote(start_date, safe=':-')
+            safe_end = urllib.parse.quote(end_date, safe=':-')
             
-            rte_url = f"https://digital.iservices.rte-france.com/open_api/unavailability/v4/generation_unavailabilities?{query_params}"
+            rte_url = (
+                f"https://digital.iservices.rte-france.com/open_api/unavailability/v4/generation_unavailabilities"
+                f"?start_date={safe_start}&end_date={safe_end}&date_type=EVENT_DATE"
+            )
             
             data_req = urllib.request.Request(
                 rte_url,
@@ -64,7 +63,6 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(response_data.encode())
 
         except urllib.error.HTTPError as e:
-            # Capture du corps brut de la réponse d'erreur de RTE
             try:
                 error_body = e.read().decode('utf-8')
             except Exception:
