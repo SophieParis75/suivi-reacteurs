@@ -10,7 +10,7 @@ def get_rte_token():
     client_secret = os.environ.get("RTE_CLIENT_SECRET")
     
     if not client_id or not client_secret:
-        raise Exception("RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant dans les variables d'environnement Vercel.")
+        raise Exception("RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant dans les variables Vercel.")
 
     url = "https://digital.iservices.rte-france.com/token/oauth/"
     response = requests.post(
@@ -23,6 +23,22 @@ def get_rte_token():
     response.raise_for_status()
     return response.json().get("access_token")
 
+def parse_iso_date(date_str):
+    """ Parse la date de façon tolérante aux formats JS/ISO """
+    clean_str = date_str.replace('Z', '+00:00')
+    if '.' in clean_str:
+        # Supprime les millisecondes si présent pour éviter les erreurs de parsing
+        main_part, rest = clean_str.split('.', 1)
+        if '+' in rest:
+            tz_part = '+' + rest.split('+', 1)[1]
+        elif '-' in rest:
+            tz_part = '-' + rest.split('-', 1)[1]
+        else:
+            tz_part = ''
+        clean_str = main_part + tz_part
+
+    return datetime.fromisoformat(clean_str)
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
@@ -34,31 +50,24 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"error": "Missing start_date or end_date"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": "Paramètres start_date ou end_date manquants"}).encode('utf-8'))
                 return
 
-            # Fuseau horaire Paris été (+02:00) défini via timedelta standard
+            # Fuseau horaire Europe/Paris en été (+02:00)
             paris_tz = timezone(timedelta(hours=2))
 
-            # Conversion des dates d'entrée
-            start_dt = datetime.fromisoformat(start_date_raw.replace('Z', '+00:00')).astimezone(paris_tz)
-            end_dt = datetime.fromisoformat(end_date_raw.replace('Z', '+00:00')).astimezone(paris_tz)
+            # Parsing sécurisé et conversion vers le fuseau Paris
+            start_dt = parse_iso_date(start_date_raw).astimezone(paris_tz)
+            end_dt = parse_iso_date(end_date_raw).astimezone(paris_tz)
 
-            # Format ISO 8601 strict exigé par l'API RTE : YYYY-MM-DDTHH:mm:ss+02:00
-            rte_start = start_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
-            rte_end = end_dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+            # Formatage strict ISO 8601 pour RTE (ex: 2026-08-02T00:00:00+02:00)
+            rte_start = start_dt.strftime('%Y-%m-%dT%H:%M:%S+02:00')
+            rte_end = end_dt.strftime('%Y-%m-%dT%H:%M:%S+02:00')
 
-            # Formattage du décalage UTC avec les deux-points (+0200 -> +02:00)
-            if rte_start[-2:] != ':00' and (rte_start.endswith('+0200') or rte_start.endswith('+0100')):
-                rte_start = rte_start[:-2] + ':' + rte_start[-2:]
-            if rte_end[-2:] != ':00' and (rte_end.endswith('+0200') or rte_end.endswith('+0100')):
-                rte_end = rte_end[:-2] + ':' + rte_end[-2:]
-
-            # Token OAuth RTE
+            # Token et appel à RTE
             token = get_rte_token()
-
-            # Appel API RTE
             rte_url = "https://digital.iservices.rte-france.com/open_api/generation_unavailabilities/v4/generation_unavailabilities"
+            
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/json"
@@ -79,4 +88,5 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+            # Renvoie le détail exact de l'exception pour voir exactement ce qui plante en cas de souci
+            self.wfile.write(json.dumps({"error": str(e), "type": type(e).__name__}).encode('utf-8'))
