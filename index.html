@@ -2,76 +2,69 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nuclear Environmental Unavailability Tracking</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; background: #f8fafc; color: #0f172a; }
-    .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 600px; }
-    .filter-group { display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-end; }
-    .field { display: flex; flex-direction: column; gap: 0.25rem; }
-    label { font-size: 0.875rem; font-weight: 600; color: #475569; }
-    input[type="date"] { padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9rem; }
-    button { padding: 0.55rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
-    button:hover { background: #1d4ed8; }
-    .metric { margin-top: 1rem; font-size: 1.1rem; }
-    .val { font-weight: bold; color: #2563eb; }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .control-panel { margin-bottom: 20px; }
+    label { margin-right: 10px; }
+    input[type="datetime-local"] { margin-right: 15px; padding: 5px; }
+    button { padding: 5px 15px; cursor: pointer; }
+    .metric-card { background: #f4f4f4; padding: 15px; border-radius: 5px; margin-top: 10px; width: 300px; }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>Nuclear Environmental Unavailability Tracking</h2>
+  <h1>Nuclear Environmental Unavailability Tracking</h1>
 
-    <!-- Date selector -->
-    <div class="filter-group">
-      <div class="field">
-        <label for="startDate">Start Date</label>
-        <input type="date" id="startDate">
-      </div>
-      <div class="field">
-        <label for="endDate">End Date</label>
-        <input type="date" id="endDate">
-      </div>
-      <button onclick="fetchUnavailabilities()">Filter</button>
-    </div>
+  <div class="control-panel">
+    <label for="startDate">Start Date & Time:</label>
+    <input type="datetime-local" id="startDate">
 
-    <!-- Results display -->
-    <div id="results">
-      <div class="metric">Unique messages count: <span id="msgCount" class="val">-</span></div>
-      <div class="metric">Cumulative unavailable power: <span id="mwSum" class="val">-</span> MW</div>
-    </div>
+    <label for="endDate">End Date & Time:</label>
+    <input type="datetime-local" id="endDate">
+
+    <button onclick="fetchUnavailabilities()">Filter</button>
   </div>
 
- <script>
-    // Initialize default dates (August 4 & 5, 2026)
-    document.getElementById('startDate').value = '2026-08-04';
-    document.getElementById('endDate').value = '2026-08-05';
+  <div class="metric-card">
+    <p><strong>Unique messages count:</strong> <span id="msgCount">0</span></p>
+    <p><strong>Cumulative unavailable power:</strong> <span id="mwSum">0</span> MW</p>
+  </div>
+
+  <script>
+    // Set default dates with hours and minutes (August 4, 00:00 to August 5, 23:59)
+    document.getElementById('startDate').value = '2026-08-04T00:00';
+    document.getElementById('endDate').value = '2026-08-05T23:59';
 
     async function fetchUnavailabilities() {
       const startDateVal = document.getElementById('startDate').value;
       const endDateVal = document.getElementById('endDate').value;
 
       if (!startDateVal || !endDateVal) {
-        alert("Please select both start and end dates.");
+        alert("Please select both start and end date/time.");
         return;
       }
 
-      // Convert dates to ISO 8601 UTC strings
-      const isoStart = `${startDateVal}T00:00:00Z`;
-      const isoEnd = `${endDateVal}T23:59:59Z`;
+      // Convert local date-time strings to UTC ISO 8601 strings for RTE API
+      const isoStart = new Date(startDateVal).toISOString();
+      const isoEnd = new Date(endDateVal).toISOString();
 
       document.getElementById('msgCount').textContent = 'Loading...';
       document.getElementById('mwSum').textContent = 'Loading...';
 
       try {
-        const response = await fetch(`/api/rte?start_date=${isoStart}&end_date=${isoEnd}`);
+        const response = await fetch(`/api/rte?start_date=${encodeURIComponent(isoStart)}&end_date=${encodeURIComponent(isoEnd)}`);
         const data = await response.json();
+
+        console.log("RTE API Payload:", data);
 
         const events = data.generation_unavailabilities || [];
 
-        // 1. Filter using "nucl" for power plant type and root "environ" for reason
+        // 1. Filter: "nucl" for plant type and root "environ" for reason
         const filteredEvents = events.filter(item => {
-          const productionType = (item.production_type || '').toLowerCase();
-          const reason = (item.reason || '').toLowerCase();
+          const productionType = String(item.production_type || '').toLowerCase();
+          const reason = String(item.reason || item.reason_type || '').toLowerCase();
           return productionType.includes('nucl') && reason.includes('environ');
         });
 
@@ -79,18 +72,18 @@
         const latestVersions = {};
         filteredEvents.forEach(item => {
           const identifier = item.identifier;
-          if (!latestVersions[identifier] || item.version > latestVersions[identifier].version) {
+          if (!latestVersions[identifier] || Number(item.version) > Number(latestVersions[identifier].version)) {
             latestVersions[identifier] = item;
           }
         });
         const uniqueMessages = Object.values(latestVersions);
 
-        // 3. Deduplicate by reactor: retain maximum power loss per unit
+        // 3. Deduplicate by unit: retain maximum power loss per reactor on the selected window
         const maxLossPerUnit = {};
         uniqueMessages.forEach(item => {
           const unitKey = item.unit ? (item.unit.eic_code || item.unit.name) : item.identifier;
-          const nominalPower = item.nominal_power || 0;
-          const availableCapacity = item.available_capacity || 0;
+          const nominalPower = Number(item.nominal_power) || 0;
+          const availableCapacity = Number(item.available_capacity) || 0;
           const currentLoss = nominalPower - availableCapacity;
 
           if (!maxLossPerUnit[unitKey] || currentLoss > maxLossPerUnit[unitKey].loss) {
@@ -103,7 +96,7 @@
 
         const maxLossEvents = Object.values(maxLossPerUnit);
 
-        // 4. Calculate cumulative loss using maximum loss per reactor
+        // 4. Calculate total MW loss
         const totalMWLoss = maxLossEvents.reduce((accumulator, record) => {
           return accumulator + record.loss;
         }, 0);
@@ -113,7 +106,7 @@
         document.getElementById('mwSum').textContent = totalMWLoss.toLocaleString('en-US');
 
       } catch (error) {
-        console.error(error);
+        console.error("Fetch error:", error);
         document.getElementById('msgCount').textContent = 'Error';
         document.getElementById('mwSum').textContent = 'Error';
       }
