@@ -37,17 +37,17 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Horodatage au format ISO 8601 UTC avec 'Z'
+            # Dates ISO 8601 UTC avec 'Z'
             now_utc = datetime.now(timezone.utc)
             start_utc = now_utc - timedelta(days=1)
 
             start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_str = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-            # Paramètres conformes au schéma v7.0 de RTE
+            # Test 1 : Requête épurée sur start_date et end_date uniquement
+            # L'API v7 accepte la recherche par défaut sur la période sans forcer date_type
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            params = f"start_date={start_str}&end_date={end_str}&date_type=CreationDate&production_type=NUCLEAR"
-            full_url = f"{base_url}?{params}"
+            full_url = f"{base_url}?start_date={start_str}&end_date={end_str}"
 
             req_rte = urllib.request.Request(
                 full_url,
