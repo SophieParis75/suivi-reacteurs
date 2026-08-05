@@ -1,96 +1,126 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Suivi des indisponibilités nucléaires</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; }
-        .card { border: 1px solid #ccc; padding: 15px; border-radius: 8px; max-width: 500px; background: #f9f9f9; }
-        .highlight { color: #d9534f; font-weight: bold; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Nuclear Environmental Unavailability Tracking</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #f8fafc; color: #0f172a; }
+    .card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 600px; }
+    .filter-group { display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 0.25rem; }
+    label { font-size: 0.875rem; font-weight: 600; color: #475569; }
+    input[type="date"] { padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9rem; }
+    button { padding: 0.55rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+    button:hover { background: #1d4ed8; }
+    .metric { margin-top: 1rem; font-size: 1.1rem; }
+    .val { font-weight: bold; color: #2563eb; }
+  </style>
 </head>
 <body>
 
-    <h1>Suivi des indisponibilités nucléaires (Motif environnemental)</h1>
+  <div class="card">
+    <h2>Nuclear Environmental Unavailability Tracking</h2>
 
-    <div class="card">
-        <h2>Résultats du filtrage</h2>
-        <div id="status">Chargement des données RTE...</div>
-        <div id="results" style="display:none;">
-            <p>Nombre de messages uniques : <span id="message-count" class="highlight">0</span></p>
-            <p>Cumul de puissance indisponible : <span id="total-losses" class="highlight">0</span> MW</p>
-        </div>
+    <!-- Date selector -->
+    <div class="filter-group">
+      <div class="field">
+        <label for="startDate">Start Date</label>
+        <input type="date" id="startDate">
+      </div>
+      <div class="field">
+        <label for="endDate">End Date</label>
+        <input type="date" id="endDate">
+      </div>
+      <button onclick="fetchUnavailabilities()">Filter</button>
     </div>
 
-    <script>
-      // Filter events matching 'nucl' and 'environ' keywords, keeping only the latest version per message ID
-      function filterAndDeduplicateEvents(rteData) {
-        const eventsList = rteData.generation_unavailabilities || [];
-        const latestEventsMap = new Map();
+    <!-- Results display -->
+    <div id="results">
+      <div class="metric">Unique messages count: <span id="msgCount" class="val">-</span></div>
+      <div class="metric">Cumulative unavailable power: <span id="mwSum" class="val">-</span> MW</div>
+    </div>
+  </div>
 
-        eventsList.forEach(event => {
-          const rawText = JSON.stringify(event).toLowerCase();
+ <script>
+    // Initialize default dates (August 4 & 5, 2026)
+    document.getElementById('startDate').value = '2026-08-04';
+    document.getElementById('endDate').value = '2026-08-05';
 
-          // Apply root keyword matching for nuclear and environmental constraints
-          if (rawText.includes("nucl") && rawText.includes("environ")) {
-            const messageId = event.identifier;
-            const currentVersion = event.version || 1;
+    async function fetchUnavailabilities() {
+      const startDateVal = document.getElementById('startDate').value;
+      const endDateVal = document.getElementById('endDate').value;
 
-            // Retain the message if new or if the version is more recent
-            if (!latestEventsMap.has(messageId) || currentVersion > latestEventsMap.get(messageId).version) {
-              latestEventsMap.set(messageId, event);
-            }
+      if (!startDateVal || !endDateVal) {
+        alert("Please select both start and end dates.");
+        return;
+      }
+
+      // Convert dates to ISO 8601 UTC strings
+      const isoStart = `${startDateVal}T00:00:00Z`;
+      const isoEnd = `${endDateVal}T23:59:59Z`;
+
+      document.getElementById('msgCount').textContent = 'Loading...';
+      document.getElementById('mwSum').textContent = 'Loading...';
+
+      try {
+        const response = await fetch(`/api/rte?start_date=${isoStart}&end_date=${isoEnd}`);
+        const data = await response.json();
+
+        const events = data.generation_unavailabilities || [];
+
+        // 1. Filter using "nucl" for power plant type and root "environ" for reason
+        const filteredEvents = events.filter(item => {
+          const productionType = (item.production_type || '').toLowerCase();
+          const reason = (item.reason || '').toLowerCase();
+          return productionType.includes('nucl') && reason.includes('environ');
+        });
+
+        // 2. Deduplicate messages: retain highest version number per unique identifier
+        const latestVersions = {};
+        filteredEvents.forEach(item => {
+          const identifier = item.identifier;
+          if (!latestVersions[identifier] || item.version > latestVersions[identifier].version) {
+            latestVersions[identifier] = item;
+          }
+        });
+        const uniqueMessages = Object.values(latestVersions);
+
+        // 3. Deduplicate by reactor: retain maximum power loss per unit
+        const maxLossPerUnit = {};
+        uniqueMessages.forEach(item => {
+          const unitKey = item.unit ? (item.unit.eic_code || item.unit.name) : item.identifier;
+          const nominalPower = item.nominal_power || 0;
+          const availableCapacity = item.available_capacity || 0;
+          const currentLoss = nominalPower - availableCapacity;
+
+          if (!maxLossPerUnit[unitKey] || currentLoss > maxLossPerUnit[unitKey].loss) {
+            maxLossPerUnit[unitKey] = {
+              item: item,
+              loss: currentLoss
+            };
           }
         });
 
-        return Array.from(latestEventsMap.values());
+        const maxLossEvents = Object.values(maxLossPerUnit);
+
+        // 4. Calculate cumulative loss using maximum loss per reactor
+        const totalMWLoss = maxLossEvents.reduce((accumulator, record) => {
+          return accumulator + record.loss;
+        }, 0);
+
+        // Update UI
+        document.getElementById('msgCount').textContent = maxLossEvents.length;
+        document.getElementById('mwSum').textContent = totalMWLoss.toLocaleString('en-US');
+
+      } catch (error) {
+        console.error(error);
+        document.getElementById('msgCount').textContent = 'Error';
+        document.getElementById('mwSum').textContent = 'Error';
       }
+    }
 
-      // Calculate total capacity losses (nominal capacity minus available capacity)
-      function calculateTotalCapacityLoss(filteredEvents) {
-        let totalLossMW = 0;
-
-        filteredEvents.forEach(event => {
-          if (event.values && Array.isArray(event.values)) {
-            event.values.forEach(val => {
-              const nominalPower = val.nominal_power || 0;
-              const availableCapacity = val.available_capacity || 0;
-              totalLossMW += (nominalPower - availableCapacity);
-            });
-          }
-        });
-
-        return totalLossMW;
-      }
-
-      // Fetch data from Vercel backend API and update UI
-      async function fetchRteData() {
-        const statusElement = document.getElementById('status');
-        const resultsElement = document.getElementById('results');
-
-        try {
-          // Correct: leading slash ensures absolute path to Vercel serverless function
-const response = await fetch('/api/rte?start_date=2026-07-29T00:00:00Z&end_date=2026-08-05T00:00:00Z');
-          const data = await response.json();
-
-          const latestFilteredEvents = filterAndDeduplicateEvents(data);
-          const totalLossesMW = calculateTotalCapacityLoss(latestFilteredEvents);
-
-          statusElement.style.display = 'none';
-          resultsElement.style.display = 'block';
-
-          document.getElementById('message-count').textContent = latestFilteredEvents.length;
-          document.getElementById('total-losses').textContent = totalLossesMW.toLocaleString('fr-FR');
-
-        } catch (error) {
-          console.error("Data fetching error:", error);
-          statusElement.textContent = "Erreur lors de la récupération des données.";
-        }
-      }
-
-      // Execute on load
-      fetchRteData();
-    </script>
+    // Auto-fetch data on page load
+    fetchUnavailabilities();
+  </script>
 </body>
 </html>
