@@ -1,7 +1,6 @@
 import os
 import json
 import urllib.request
-import urllib.parse
 import urllib.error
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timedelta
@@ -33,19 +32,19 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant sur Vercel"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
 
-            # Dates au format ISO 8601 strict (YYYY-MM-DDTHH:mm:ss+02:00)
+            # Dates formatées selon le guide v7 avec %2B pour le signe '+'
             now = datetime.now()
             start_dt = now - timedelta(days=1)
             
-            start_str = start_dt.strftime('%Y-%m-%dT00:00:00+02:00')
-            end_str = now.strftime('%Y-%m-%dT23:59:59+02:00')
+            # Exemple conforme v7 : 2026-08-04T00:00:00%2B02:00
+            start_str = start_dt.strftime('%Y-%m-%dT00:00:00') + "%2B02:00"
+            end_str = now.strftime('%Y-%m-%dT23:59:59') + "%2B02:00"
 
-            # Construction brute sans encodage urllib qui transforme '+' en '%2B'
             rte_base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
             full_url = f"{rte_base_url}?start_date={start_str}&end_date={end_str}&date_type=created_date"
 
