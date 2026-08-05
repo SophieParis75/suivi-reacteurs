@@ -4,7 +4,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from http.server import BaseHTTPRequestHandler
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -33,23 +33,33 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "RTE_CLIENT_ID ou RTE_CLIENT_SECRET manquant sur Vercel"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
 
-            # Plage automatique de 24h jusqu'à maintenant en UTC ISO 8601 (ex: 2026-08-04T21:30:00Z)
-            now = datetime.now(timezone.utc)
-            start_dt = now - timedelta(hours=24)
+            # Dates sur 24h avec fuseau +02:00 tel que requis par RTE (API v7.0)
+            now = datetime.now()
+            start_dt = now - timedelta(days=1)
             
-            start_str = start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
-            end_str = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+            # Format ex: 2026-08-04T00:00:00+02:00
+            start_str = start_dt.strftime('%Y-%m-%dT00:00:00+02:00')
+            end_str = now.strftime('%Y-%m-%dT23:59:59+02:00')
 
-            # Construction manuelle pour éviter le sur-encodage des deux-points et du Z
-            rte_url = f"https://digital.iservices.rte-france.com/open_api/generation_unavailabilities/v4/generation_unavailabilities?start_date={start_str}&end_date={end_str}"
+            # URL V7 exacte selon la documentation officielle
+            rte_base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
+            
+            # Paramètres conformes V7
+            params = urllib.parse.urlencode({
+                "start_date": start_str,
+                "end_date": end_str,
+                "date_type": "created_date"
+            })
+
+            full_url = f"{rte_base_url}?{params}"
 
             req_rte = urllib.request.Request(
-                rte_url,
+                full_url,
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/json"
@@ -72,7 +82,7 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "status": "HTTPError",
                 "code": e.code,
-                "requested_url": rte_url if 'rte_url' in locals() else None,
+                "requested_url": full_url if 'full_url' in locals() else None,
                 "rte_response": error_body
             }).encode('utf-8'))
         except Exception as e:
