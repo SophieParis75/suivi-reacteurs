@@ -37,15 +37,13 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Dates ISO 8601 UTC avec 'Z'
+            # Plage temporelle : 24h glissantes
             now_utc = datetime.now(timezone.utc)
             start_utc = now_utc - timedelta(days=1)
 
             start_str = start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_str = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-            # Test 1 : Requête épurée sur start_date et end_date uniquement
-            # L'API v7 accepte la recherche par défaut sur la période sans forcer date_type
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
             full_url = f"{base_url}?start_date={start_str}&end_date={end_str}"
 
@@ -59,11 +57,74 @@ class handler(BaseHTTPRequestHandler):
             )
 
             with urllib.request.urlopen(req_rte, timeout=15) as resp:
-                body = resp.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(body)
+                raw_data = json.loads(resp.read().decode('utf-8'))
+
+            unavailabilities = raw_data.get("generation_unavailabilities", [])
+
+            # 1. Regroupement par identifier pour ne garder que la version la plus récente
+            latest_by_identifier = {}
+            for item in unavailabilities:
+                # Filtrage filière : recherche de la racine "nucl"
+                fuel_type = str(item.get("fuel_type", "")).lower()
+                if "nucl" not in fuel_type:
+                    continue
+
+                identifier = item.get("identifier")
+                version = int(item.get("version", 0))
+
+                if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
+                    latest_by_identifier[identifier] = item
+
+            # 2. Filtrage et structuration des données nettoyées
+            clean_list = []
+            total_env_loss_mw = 0
+
+            for item in latest_by_identifier.values():
+                remarks = str(item.get("remarks", "")).lower()
+                reason = str(item.get("reason", "")).lower()
+                
+                # Vérification de la contrainte environnementale (racine "environ")
+                is_environmental = "environ" in remarks or "environ" in reason
+
+                # Calcul des capacités
+                installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
+                values = item.get("values", [])
+                
+                available_cap = values[0].get("available_capacity", installed_cap) if values else installed_cap
+                unavailable_cap = values[0].get("unavailable_capacity", installed_cap - available_cap) if values else (installed_cap - available_cap)
+
+                if is_environmental:
+                    total_env_loss_mw += unavailable_cap
+
+                clean_list.append({
+                    "identifier": item.get("identifier"),
+                    "unit_name": item.get("affected_asset_or_unit_name"),
+                    "eic_code": item.get("affected_asset_or_unit_eic_code"),
+                    "version": item.get("version"),
+                    "event_status": item.get("event_status"),
+                    "unavailability_type": item.get("unavailability_type"),
+                    "start_date": item.get("start_date"),
+                    "end_date": item.get("end_date"),
+                    "installed_capacity_mw": installed_cap,
+                    "available_capacity_mw": available_cap,
+                    "unavailable_capacity_mw": unavailable_cap,
+                    "is_environmental": is_environmental,
+                    "remarks": item.get("remarks"),
+                    "reason": item.get("reason")
+                })
+
+            response_payload = {
+                "status": "success",
+                "count": len(clean_list),
+                "total_environmental_loss_mw": total_env_loss_mw,
+                "data": clean_list
+            }
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response_payload).encode('utf-8'))
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8', errors='ignore')
@@ -73,7 +134,6 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "status": "HTTPError",
                 "code": e.code,
-                "requested_url": full_url if 'full_url' in locals() else None,
                 "rte_response": error_body
             }).encode('utf-8'))
         except Exception as e:
@@ -82,6 +142,5 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({
                 "status": "Exception",
-                "message": str(e),
-                "type": type(e).__name__
+                "message": str(e)
             }).encode('utf-8'))
