@@ -32,12 +32,12 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "Variables d'environnement manquantes"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "Missing environment variables"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
 
-            # Plage temporelle : 24h glissantes
+            # Rolling 24-hour time range
             now_utc = datetime.now(timezone.utc)
             start_utc = now_utc - timedelta(days=1)
 
@@ -61,10 +61,10 @@ class handler(BaseHTTPRequestHandler):
 
             unavailabilities = raw_data.get("generation_unavailabilities", [])
 
-            # 1. Regroupement par identifier pour ne garder que la version la plus récente
+            # 1. Group by identifier to retain only the most recent version of each message
             latest_by_identifier = {}
             for item in unavailabilities:
-                # Filtrage filière : recherche de la racine "nucl"
+                # Filter fuel type matching "nucl"
                 fuel_type = str(item.get("fuel_type", "")).lower()
                 if "nucl" not in fuel_type:
                     continue
@@ -75,7 +75,7 @@ class handler(BaseHTTPRequestHandler):
                 if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                     latest_by_identifier[identifier] = item
 
-            # 2. Filtrage et structuration des données nettoyées
+            # 2. Filter environmental constraints and structure clean output
             clean_list = []
             total_env_loss_mw = 0
 
@@ -83,22 +83,23 @@ class handler(BaseHTTPRequestHandler):
                 remarks = str(item.get("remarks", "")).lower()
                 reason = str(item.get("reason", "")).lower()
                 
-                # Vérification de la contrainte environnementale (racine "environ")
+                # Check environmental constraint using root string "environ"
                 is_environmental = "environ" in remarks or "environ" in reason
 
-                # Calcul des capacités
+                # Capacity calculation across timeslots
                 installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
-               values = item.get("values", [])
-if values:
-    # On calcule la perte max parmi les tranches du message
-    unavailable_cap = max(
-        v.get("unavailable_capacity", installed_cap - v.get("available_capacity", installed_cap)) 
-        for v in values
-    )
-    available_cap = installed_cap - unavailable_cap
-else:
-    available_cap = installed_cap
-    unavailable_cap = 0
+                values = item.get("values", [])
+                
+                if values:
+                    # Compute maximum unavailable capacity among all values timeslots
+                    unavailable_cap = max(
+                        v.get("unavailable_capacity", installed_cap - v.get("available_capacity", installed_cap)) 
+                        for v in values
+                    )
+                    available_cap = installed_cap - unavailable_cap
+                else:
+                    available_cap = installed_cap
+                    unavailable_cap = 0
 
                 if is_environmental:
                     total_env_loss_mw += unavailable_cap
