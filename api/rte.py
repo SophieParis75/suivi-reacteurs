@@ -88,10 +88,17 @@ class handler(BaseHTTPRequestHandler):
 
                 # Calcul des capacités
                 installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
-                values = item.get("values", [])
-                
-                available_cap = values[0].get("available_capacity", installed_cap) if values else installed_cap
-                unavailable_cap = values[0].get("unavailable_capacity", installed_cap - available_cap) if values else (installed_cap - available_cap)
+               values = item.get("values", [])
+if values:
+    # On calcule la perte max parmi les tranches du message
+    unavailable_cap = max(
+        v.get("unavailable_capacity", installed_cap - v.get("available_capacity", installed_cap)) 
+        for v in values
+    )
+    available_cap = installed_cap - unavailable_cap
+else:
+    available_cap = installed_cap
+    unavailable_cap = 0
 
                 if is_environmental:
                     total_env_loss_mw += unavailable_cap
