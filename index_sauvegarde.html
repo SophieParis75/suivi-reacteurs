@@ -20,6 +20,7 @@
         .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
         .kpi { background: #0f172a; padding: 15px; border-radius: 6px; border-left: 4px solid #0284c7; }
         .kpi-val { font-size: 20px; font-weight: bold; color: #f43f5e; margin-top: 5px; }
+        .rules-info { color: #94a3b8; font-size: 14px; margin-bottom: 15px; line-height: 1.5; background: #0f172a; padding: 10px 15px; border-radius: 6px; border: 1px solid #334155; }
     </style>
 </head>
 <body>
@@ -55,19 +56,19 @@
 
         <!-- Summary of changes -->
         <div class="card">
-            <h2>Summary of changes between T1 and T2</h2>
+            <h2 id="title_summary_changes">Summary of changes</h2>
             <ul id="summary_list"></ul>
         </div>
 
         <!-- Table of changes -->
         <div class="card">
-            <h2>Changes between T1 and T2</h2>
+            <h2 id="title_table_changes">Changes</h2>
             <table>
                 <thead>
                     <tr>
                         <th>Reactor</th>
-                        <th>Status at T1</th>
-                        <th>Status at T2</th>
+                        <th id="th_status_t1">Status at T1</th>
+                        <th id="th_status_t2">Status at T2</th>
                         <th>Variation</th>
                         <th>Evolution Type</th>
                     </tr>
@@ -78,7 +79,7 @@
 
         <!-- T1 Reactors -->
         <div class="card">
-            <h2>Reactors selected for unavailability at T1</h2>
+            <h2 id="title_t1_reactors">Reactors selected for unavailability</h2>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -89,7 +90,7 @@
 
         <!-- T2 Reactors -->
         <div class="card">
-            <h2>Reactors selected for unavailability at T2</h2>
+            <h2 id="title_t2_reactors">Reactors selected for unavailability</h2>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -102,7 +103,7 @@
         <div class="card">
             <h2>Daily Maximum Totals</h2>
             
-            <h3>Maximum cumulative total for the day of T1</h3>
+            <h3 id="title_max_t1">Maximum cumulative total for the day</h3>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -110,7 +111,7 @@
                 <tbody id="max_t1_table_body"></tbody>
             </table>
 
-            <h3 style="margin-top: 25px;">Maximum cumulative total for the day of T2</h3>
+            <h3 id="title_max_t2" style="margin-top: 25px;">Maximum cumulative total for the day</h3>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -118,7 +119,7 @@
                 <tbody id="max_t2_table_body"></tbody>
             </table>
 
-            <h3 style="margin-top: 25px;">Maximum cumulative total for the day after T2</h3>
+            <h3 id="title_max_next_t2" style="margin-top: 25px;">Maximum cumulative total for the day after</h3>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -174,8 +175,8 @@
             btn.innerText = "Loading...";
 
             try {
-                const t1Raw = document.getElementById('t1_input').value;
-                const t2Raw = document.getElementById('t2_input').value;
+                const t1Raw = document.getElementById('t1_input').value.trim();
+                const t2Raw = document.getElementById('t2_input').value.trim();
 
                 const t1Iso = parseFrenchDateToISO(t1Raw);
                 const t2Iso = parseFrenchDateToISO(t2Raw);
@@ -193,25 +194,48 @@
                     return;
                 }
 
+                // Extract date-only parts for headings
+                const dateOnlyT1 = t1Raw.split(' ')[0];
+                const dateOnlyT2 = t2Raw.split(' ')[0];
+
+                // Dynamically update headings and table headers
+                document.getElementById('title_summary_changes').innerText = `Summary of changes between ${t1Raw} and ${t2Raw}`;
+                document.getElementById('title_table_changes').innerText = `Changes between ${t1Raw} and ${t2Raw}`;
+                document.getElementById('th_status_t1').innerText = `Status at ${t1Raw}`;
+                document.getElementById('th_status_t2').innerText = `Status at ${t2Raw}`;
+                document.getElementById('title_t1_reactors').innerText = `Reactors selected for unavailability at ${t1Raw}`;
+                document.getElementById('title_t2_reactors').innerText = `Reactors selected for unavailability at ${t2Raw}`;
+                document.getElementById('title_max_t1').innerText = `Maximum cumulative total for ${dateOnlyT1}`;
+                document.getElementById('title_max_t2').innerText = `Maximum cumulative total for ${dateOnlyT2}`;
+                document.getElementById('title_max_next_t2').innerText = `Maximum cumulative total for the day after ${dateOnlyT2}`;
+
                 document.getElementById('results').style.display = 'block';
 
                 // 1. KPI Summary
                 const s = data.summary;
                 document.getElementById('kpi_container').innerHTML = `
-                    <div class="kpi">
-                        <div>Unavailability at T1</div>
-                        <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}%)</div>
-                        <small>Day Max T1: ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
-                    </div>
-                    <div class="kpi">
-                        <div>Unavailability at T2</div>
-                        <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}%)</div>
-                        <small>Day Max T2: ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
-                    </div>
-                    <div class="kpi">
-                        <div>Max on Day After T2</div>
-                        <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}%)</div>
-                    </div>
+                  <div class="kpi">
+    <div>Unavailability at ${t1Raw}</div>
+    <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}% of fleet)</div>
+    <div>
+        Day Max:
+        <span class="kpi-val">${s.t1_day_max_mw} MW (${s.t1_day_max_percent}% of fleet)</span>
+    </div>
+</div>
+
+<div class="kpi">
+    <div>Unavailability at ${t2Raw}</div>
+    <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}% of fleet)</div>
+    <div>
+        Day Max:
+        <span class="kpi-val">${s.t2_day_max_mw} MW (${s.t2_day_max_percent}% of fleet)</span>
+    </div>
+</div>
+
+<div class="kpi">
+    <div>Max on Day After (${dateOnlyT2})</div>
+    <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}% of fleet)</div>
+</div>
                 `;
 
                 // 2. Changes Table & Summary
@@ -258,8 +282,8 @@
                     }
                 });
 
-                document.getElementById('changes_table_body').innerHTML = changesHtml || "<tr><td colspan='5'>No changes observed between T1 and T2.</td></tr>";
-                document.getElementById('summary_list').innerHTML = summaryHtml || "<li>No changes to report between T1 and T2.</li>";
+                document.getElementById('changes_table_body').innerHTML = changesHtml || `<tr><td colspan='5'>No changes observed between ${t1Raw} and ${t2Raw}.</td></tr>`;
+                document.getElementById('summary_list').innerHTML = summaryHtml || `<li>No changes to report between ${t1Raw} and ${t2Raw}.</li>`;
 
                 // 3. Render all tables
                 fillTable('t1_table_body', data.list_t1);
