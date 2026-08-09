@@ -234,7 +234,6 @@
 
                 document.getElementById('results').style.display = 'block';
 
-                // 1. KPI Summary
                 const s = data.summary;
                 document.getElementById('kpi_container').innerHTML = `
                     <div class="kpi">
@@ -261,15 +260,14 @@
                     </div>
                 `;
 
-                // 2. Changes Table & Summary (sorted alphabetically)
                 const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
                 const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
-                const sortedReactors = Array.from(new Set([...t1Map.keys(), ...t2Map.keys()])).sort((a, b) => a.localeCompare(b));
+                const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
 
                 let changesHtml = "";
                 let summaryHtml = "";
 
-                sortedReactors.forEach(reactor => {
+                allReactors.forEach(reactor => {
                     const mw1 = t1Map.get(reactor) || 0;
                     const mw2 = t2Map.get(reactor) || 0;
                     const diff = mw2 - mw1;
@@ -308,7 +306,6 @@
                 document.getElementById('changes_table_body').innerHTML = changesHtml || `<tr><td colspan='5'>No changes observed between ${t1Raw} and ${t2Raw}.</td></tr>`;
                 document.getElementById('summary_list').innerHTML = summaryHtml || `<li>No changes to report between ${t1Raw} and ${t2Raw}.</li>`;
 
-                // 3. Render all tables (sorted alphabetically)
                 fillTable('t1_table_body', data.list_t1);
                 fillTable('t2_table_body', data.list_t2);
                 fillTable('max_t1_table_body', data.list_max_day_t1);
@@ -329,11 +326,7 @@
                 document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
                 return;
             }
-            
-            // Sort list alphabetically by reactor name
-            const sortedList = [...list].sort((a, b) => a.reactor.localeCompare(b.reactor));
-
-            const html = sortedList.map(r => `
+            const html = list.map(r => `
                 <tr>
                     <td>${r.reactor}</td>
                     <td>${r.unavailability_mw} MW</td>
