@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Analyse des Indisponibilités Nucléaires Environnementales</title>
+    <title>Nuclear Environmental Unavailabilities Analysis</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
         h1, h2, h3 { color: #38bdf8; }
@@ -23,28 +23,28 @@
 </head>
 <body>
 
-    <h1>Analyse des Indisponibilités Nucléaires Environnementales</h1>
+    <h1>Nuclear Environmental Unavailabilities Analysis</h1>
 
     <div class="card">
         <div class="inputs">
             <div>
-                <label>Date et heure T1 (jj/mm/aaaa hh:mm) :</label><br>
+                <label>Date and Time T1 (dd/mm/yyyy hh:mm):</label><br>
                 <input type="text" id="t1_input" placeholder="15/08/2026 14:30">
             </div>
             <div>
-                <label>Date et heure T2 (jj/mm/aaaa hh:mm) :</label><br>
+                <label>Date and Time T2 (dd/mm/yyyy hh:mm):</label><br>
                 <input type="text" id="t2_input" placeholder="15/08/2026 18:00">
             </div>
             <div style="margin-top: auto;">
-                <button onclick="runAnalysis()">Analyse</button>
+                <button onclick="runAnalysis()">Analysis</button>
             </div>
         </div>
     </div>
 
     <div id="results" style="display: none;">
-        <!-- Synthèse globale -->
+        <!-- Global Summary -->
         <div class="card">
-            <h2>Synthèse des Cumuls d'Indisponibilité</h2>
+            <h2>Summary of Unavailability Totals</h2>
             <div class="kpi-grid" id="kpi_container"></div>
         </div>
 
@@ -54,7 +54,7 @@
             <ul id="summary_list"></ul>
         </div>
 
-        <!-- Tableau des changements -->
+        <!-- Table of changes -->
         <div class="card">
             <h2>Changes between T1 and T2</h2>
             <table>
@@ -71,9 +71,9 @@
             </table>
         </div>
 
-        <!-- Réacteurs T1 -->
+        <!-- T1 Reactors -->
         <div class="card">
-            <h2>Réacteurs retenus pour l'indisponibilité à T1</h2>
+            <h2>Reactors selected for unavailability at T1</h2>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -82,9 +82,9 @@
             </table>
         </div>
 
-        <!-- Réacteurs T2 -->
+        <!-- T2 Reactors -->
         <div class="card">
-            <h2>Réacteurs retenus pour l'indisponibilité à T2</h2>
+            <h2>Reactors selected for unavailability at T2</h2>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -93,11 +93,11 @@
             </table>
         </div>
 
-        <!-- Cumuls Maximums -->
+        <!-- Daily Maximums -->
         <div class="card">
-            <h2>Cumuls Maximums Journaliers</h2>
+            <h2>Daily Maximum Totals</h2>
             
-            <h3>Cumul maximum de la journée de T1</h3>
+            <h3>Maximum cumulative total for the day of T1</h3>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -105,7 +105,7 @@
                 <tbody id="max_t1_table_body"></tbody>
             </table>
 
-            <h3 style="margin-top: 25px;">Cumul maximum de la journée de T2</h3>
+            <h3 style="margin-top: 25px;">Maximum cumulative total for the day of T2</h3>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -113,7 +113,7 @@
                 <tbody id="max_t2_table_body"></tbody>
             </table>
 
-            <h3 style="margin-top: 25px;">Cumul maximum du lendemain de la journée de T2</h3>
+            <h3 style="margin-top: 25px;">Maximum cumulative total for the day after T2</h3>
             <table>
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
@@ -159,7 +159,7 @@
         function formatDate(dateStr) {
             if (!dateStr) return "-";
             const d = new Date(dateStr);
-            return d.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+            return d.toLocaleString('en-GB', { timeZone: 'Europe/Paris' });
         }
 
         async function runAnalysis() {
@@ -170,7 +170,7 @@
             const t2Iso = parseFrenchDateToISO(t2Raw);
 
             if (!t1Iso || !t2Iso) {
-                alert("Veuillez saisir les dates au format valide : jj/mm/aaaa hh:mm (ex: 15/08/2026 14:30)");
+                alert("Please enter dates in a valid format: dd/mm/yyyy hh:mm (e.g. 15/08/2026 14:30)");
                 return;
             }
 
@@ -178,7 +178,7 @@
             const data = await res.json();
 
             if (data.status !== "success") {
-                alert("Erreur lors de l'analyse API RTE : " + JSON.stringify(data));
+                alert("Error during RTE API analysis: " + JSON.stringify(data));
                 return;
             }
 
@@ -188,17 +188,17 @@
             const s = data.summary;
             document.getElementById('kpi_container').innerHTML = `
                 <div class="kpi">
-                    <div>Indisponibilité à T1</div>
+                    <div>Unavailability at T1</div>
                     <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}%)</div>
-                    <small>Max Jour T1 : ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
+                    <small>Day Max T1: ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
                 </div>
                 <div class="kpi">
-                    <div>Indisponibilité à T2</div>
+                    <div>Unavailability at T2</div>
                     <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}%)</div>
-                    <small>Max Jour T2 : ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
+                    <small>Day Max T2: ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
                 </div>
                 <div class="kpi">
-                    <div>Max Lendemain de T2</div>
+                    <div>Day After T2 Max</div>
                     <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}%)</div>
                 </div>
             `;
@@ -260,7 +260,7 @@
 
         function fillTable(tbodyId, list) {
             if (!list || list.length === 0) {
-                document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>Aucun réacteur concerné.</td></tr>";
+                document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
                 return;
             }
             const html = list.map(r => `
