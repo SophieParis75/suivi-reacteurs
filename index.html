@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Nuclear Environmental Unavailabilities Analysis</title>
+    <!-- SheetJS (XLSX) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
         h1, h2, h3 { color: #38bdf8; }
@@ -15,6 +17,8 @@
         button { padding: 10px 24px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 15px; }
         button:hover { background: #0369a1; }
         button:disabled { background: #475569; cursor: not-allowed; }
+        .btn-excel { background: #10b981; }
+        .btn-excel:hover { background: #059669; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #0f172a; }
         th, td { border: 1px solid #334155; padding: 10px; text-align: left; font-size: 14px; }
         th { background: #1e293b; color: #38bdf8; }
@@ -23,6 +27,7 @@
         .kpi { background: #0f172a; padding: 15px; border-radius: 6px; border-left: 4px solid #0284c7; }
         .kpi-val { font-size: 20px; font-weight: bold; color: #f43f5e; margin-top: 5px; }
         .rules-info { color: #94a3b8; font-size: 14px; margin-bottom: 15px; line-height: 1.5; background: #0f172a; padding: 10px 15px; border-radius: 6px; border: 1px solid #334155; }
+        .export-row { display: flex; justify-content: flex-end; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -123,7 +128,7 @@
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
                 </thead>
-                <tbody id="max_t2_table_body"></tbody>
+                <tbody id="max_next_t2_table_body"></tbody>
             </table>
 
             <h3 id="title_max_next_t2" style="margin-top: 25px;">Maximum cumulative total for the day after</h3>
@@ -131,12 +136,18 @@
                 <thead>
                     <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
                 </thead>
-                <tbody id="max_next_t2_table_body"></tbody>
+                <tbody id="max_next_t2_table_body_real"></tbody>
             </table>
+
+            <div class="export-row">
+                <button class="btn-excel" onclick="exportAnalysisToExcel()">📥 Download Analysis (.xlsx)</button>
+            </div>
         </div>
     </div>
 
     <script>
+        let lastAnalysisData = null;
+
         function setNowDefaults() {
             const now = new Date();
             const day = String(now.getDate()).padStart(2, '0');
@@ -218,6 +229,8 @@
                     return;
                 }
 
+                lastAnalysisData = { data, t1Raw, t2Raw };
+
                 const dateOnlyT1 = t1Raw.split(' ')[0];
                 const dateOnlyT2 = t2Raw.split(' ')[0];
                 const nextDayT2 = getNextDayFormatted(dateOnlyT2);
@@ -262,12 +275,12 @@
 
                 const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
                 const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
-                const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
+                const sortedReactors = Array.from(new Set([...t1Map.keys(), ...t2Map.keys()])).sort((a, b) => a.localeCompare(b));
 
                 let changesHtml = "";
                 let summaryHtml = "";
 
-                allReactors.forEach(reactor => {
+                sortedReactors.forEach(reactor => {
                     const mw1 = t1Map.get(reactor) || 0;
                     const mw2 = t2Map.get(reactor) || 0;
                     const diff = mw2 - mw1;
@@ -309,8 +322,8 @@
                 fillTable('t1_table_body', data.list_t1);
                 fillTable('t2_table_body', data.list_t2);
                 fillTable('max_t1_table_body', data.list_max_day_t1);
-                fillTable('max_t2_table_body', data.list_max_day_t2);
-                fillTable('max_next_t2_table_body', data.list_max_next_day_t2);
+                fillTable('max_next_t2_table_body', data.list_max_day_t2);
+                fillTable('max_next_t2_table_body_real', data.list_max_next_day_t2);
 
             } catch (err) {
                 alert("An unexpected error occurred: " + err.message);
@@ -326,7 +339,8 @@
                 document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
                 return;
             }
-            const html = list.map(r => `
+            const sortedList = [...list].sort((a, b) => a.reactor.localeCompare(b.reactor));
+            const html = sortedList.map(r => `
                 <tr>
                     <td>${r.reactor}</td>
                     <td>${r.unavailability_mw} MW</td>
@@ -335,6 +349,40 @@
                 </tr>
             `).join('');
             document.getElementById(tbodyId).innerHTML = html;
+        }
+
+        function exportAnalysisToExcel() {
+            if (!lastAnalysisData) {
+                alert("No analysis available to export.");
+                return;
+            }
+
+            const { data, t1Raw, t2Raw } = lastAnalysisData;
+            const wb = XLSX.utils.book_new();
+
+            // Sheet 1: Summary KPIs
+            const s = data.summary;
+            const kpiRows = [
+                { "Metric": `Unavailability at ${t1Raw}`, "Value (MW)": s.t1_unavailability_mw, "Fleet %": s.t1_percent },
+                { "Metric": `Day Max at ${t1Raw}`, "Value (MW)": s.t1_day_max_mw, "Fleet %": s.t1_day_max_percent },
+                { "Metric": `Unavailability at ${t2Raw}`, "Value (MW)": s.t2_unavailability_mw, "Fleet %": s.t2_percent },
+                { "Metric": `Day Max at ${t2Raw}`, "Value (MW)": s.t2_day_max_mw, "Fleet %": s.t2_day_max_percent },
+                { "Metric": `Next Day Max from ${t2Raw}`, "Value (MW)": s.t2_next_day_max_mw, "Fleet %": s.t2_next_day_max_percent }
+            ];
+            const wsKpi = XLSX.utils.json_to_sheet(kpiRows);
+            XLSX.utils.book_append_sheet(wb, wsKpi, "KPI Summary");
+
+            // Sheet 2: T1 List
+            const t1Rows = (data.list_t1 || []).map(r => ({ "Reactor": r.reactor, "Unavailability (MW)": r.unavailability_mw, "From": formatDate(r.from), "To": formatDate(r.to) }));
+            const wsT1 = XLSX.utils.json_to_sheet(t1Rows);
+            XLSX.utils.book_append_sheet(wb, wsT1, "Reactors T1");
+
+            // Sheet 3: T2 List
+            const t2Rows = (data.list_t2 || []).map(r => ({ "Reactor": r.reactor, "Unavailability (MW)": r.unavailability_mw, "From": formatDate(r.from), "To": formatDate(r.to) }));
+            const wsT2 = XLSX.utils.json_to_sheet(t2Rows);
+            XLSX.utils.book_append_sheet(wb, wsT2, "Reactors T2");
+
+            XLSX.writeFile(wb, `nuclear_analysis_${t1Raw.replace(/[/ :]/g, '_')}_to_${t2Raw.replace(/[/ :]/g, '_')}.xlsx`);
         }
 
         window.onload = setNowDefaults;
