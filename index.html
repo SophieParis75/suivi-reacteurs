@@ -109,7 +109,7 @@
         <!-- Daily Maximums -->
         <div class="card">
             <h2>Daily Maximum Totals</h2>
-            
+
             <h3 id="title_max_t1">Maximum cumulative total for the day</h3>
             <table>
                 <thead>
@@ -152,17 +152,17 @@
 
         function parseFrenchDateToISO(dateStr) {
             if (!dateStr || !dateStr.includes(' ')) return null;
-            
+
             const parts = dateStr.trim().split(' ');
             if (parts.length !== 2) return null;
 
             const dateComponents = parts[0].split('/');
             if (dateComponents.length !== 3) return null;
-            
+
             const day = dateComponents[0].padStart(2, '0');
             const month = dateComponents[1].padStart(2, '0');
             const year = dateComponents[2];
-            
+
             const timeComponents = parts[1].split(':');
             const hh = timeComponents[0].padStart(2, '0');
             const mm = (timeComponents[1] || "00").padStart(2, '0');
@@ -264,11 +264,13 @@
                 // 2. Changes Table & Summary (sorted alphabetically)
                 const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
                 const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
+                const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
                 const sortedReactors = Array.from(new Set([...t1Map.keys(), ...t2Map.keys()])).sort((a, b) => a.localeCompare(b));
 
                 let changesHtml = "";
                 let summaryHtml = "";
 
+                allReactors.forEach(reactor => {
                 sortedReactors.forEach(reactor => {
                     const mw1 = t1Map.get(reactor) || 0;
                     const mw2 = t2Map.get(reactor) || 0;
@@ -329,6 +331,7 @@
                 document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
                 return;
             }
+            const html = list.map(r => `
             
             // Sort list alphabetically by reactor name
             const sortedList = [...list].sort((a, b) => a.reactor.localeCompare(b.reactor));
