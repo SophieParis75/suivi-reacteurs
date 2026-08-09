@@ -26,9 +26,54 @@ def get_rte_token(client_id, client_secret):
         res_data = json.loads(resp.read().decode())
         return res_data.get("access_token")
 
-# ==============================================================================
-# CALCULATION RULES
-# ==============================================================================
+def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
+    """Appelle l'API EnergyQuantified pour les températures horaires."""
+    if not eq_api_key:
+        return {}
+
+    series_id = urllib.parse.quote("FR Consumption Temperature °C H Actual")
+    url = f"https://app.energyquantified.com/api/timeseries/{series_id}/?begin={start_date_str}&end={end_date_str}&frequency=PT1H"
+    
+    req = urllib.request.Request(
+        url,
+        headers={
+            "accept": "application/json",
+            "X-API-Key": eq_api_key
+        },
+        method="GET"
+    )
+    
+    daily_temps = {}
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            
+            # EnergyQuantified renvoie les points dans 'data' ou 'data.values'
+            values_list = data.get("data", []) or data.get("values", [])
+            
+            # Regroupement par jour YYYY-MM-DD
+            buckets = {}
+            for item in values_list:
+                # Le format de date de EQ est généralement ISO (ex: 2026-06-01T00:00:00Z)
+                d_str = item.get("date") or item.get("d")
+                val = item.get("value") or item.get("v")
+                if d_str and val is not None:
+                    dt = datetime.fromisoformat(d_str.replace("Z", "+00:00")).astimezone(PARIS_TZ)
+                    day_key = dt.strftime("%Y-%m-%d")
+                    if day_key not in buckets:
+                        buckets[day_key] = []
+                    buckets[day_key].append(float(val))
+            
+            # Calcul de la moyenne journalière
+            for day_key, vals in buckets.items():
+                if vals:
+                    daily_temps[day_key] = round(sum(vals) / len(vals), 1)
+                    
+    except Exception as e:
+        print(f"Error fetching EQ temperature data: {e}")
+        
+    return daily_temps
+
 def parse_iso_date(dt_str):
     if not dt_str:
         return None
@@ -93,9 +138,6 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 
     return 0, None, None
 
-# ==============================================================================
-# VERCEL SERVERLESS ENTRYPOINT
-# ==============================================================================
 def app(environ, start_response):
     try:
         query_string = environ.get('QUERY_STRING', '')
@@ -110,12 +152,13 @@ def app(environ, start_response):
 
         client_id = os.environ.get("RTE_CLIENT_ID")
         client_secret = os.environ.get("RTE_CLIENT_SECRET")
+        eq_api_key = os.environ.get("EQ_API_KEY")
 
         if not client_id or not client_secret:
             status = '500 Internal Server Error'
             headers = [('Content-Type', 'application/json')]
             start_response(status, headers)
-            return [json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET environment variables"}).encode('utf-8')]
+            return [json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET"}).encode('utf-8')]
 
         token = get_rte_token(client_id, client_secret)
 
@@ -130,6 +173,13 @@ def app(environ, start_response):
 
         start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        # Récupération optionnelle des températures
+        eq_daily_temps = get_eq_temperatures(
+            min_dt.strftime('%Y-%m-%d'),
+            (max_dt + timedelta(days=1)).strftime('%Y-%m-%d'),
+            eq_api_key
+        )
 
         base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
         full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
@@ -157,7 +207,6 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Conservations de la dernière version par identifiant unique
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -166,7 +215,6 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # 2. Filtrage strict : event_status ACTIVE + nucléaire + environnement
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
@@ -236,6 +284,9 @@ def app(environ, start_response):
                 sum_max_t2_next += u_max_t2_next
                 list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
 
+        # Extraction de la température moyenne de T1
+        temp_t1 = eq_daily_temps.get(day_t1.strftime('%Y-%m-%d'))
+
         payload = {
             "status": "success",
             "t1_iso": t1_dt.isoformat(),
@@ -245,6 +296,7 @@ def app(environ, start_response):
                 "t1_percent": round((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
                 "t1_day_max_mw": sum_max_t1,
                 "t1_day_max_percent": round((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t1_temperature_c": temp_t1,
                 "t2_unavailability_mw": sum_t2,
                 "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
                 "t2_day_max_mw": sum_max_t2,
