@@ -84,6 +84,7 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
                 "end_date": v.get("end_date")
             })
 
+    # Filter out entries lasting 30 minutes or less
     slots_over_30min = [s for s in eligible_slots if s["duration_minutes"] > 30]
 
     if slots_over_30min:
@@ -93,7 +94,7 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
     return 0, None, None
 
 # ==============================================================================
-# VERCEL SERVERLESS ENTRYPOINT (WSGI / HTTP APP)
+# VERCEL SERVERLESS ENTRYPOINT
 # ==============================================================================
 def app(environ, start_response):
     try:
@@ -121,6 +122,7 @@ def app(environ, start_response):
         min_dt = min(t1_dt, t2_dt)
         max_dt = max(t1_dt, t2_dt)
 
+        # Target range calculation in Paris time converted to UTC
         search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
         search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
 
@@ -130,19 +132,36 @@ def app(environ, start_response):
         start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
+        # Initial URL request with EVENT_DATE and last_version=true
         base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&last_version=true"
+        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
 
-        req_rte = urllib.request.Request(
-            full_url,
-            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            method="GET"
-        )
-        with urllib.request.urlopen(req_rte, timeout=20) as resp:
-            raw_data = json.loads(resp.read().decode('utf-8'))
+        unavailabilities = []
+        next_url = full_url
 
-        unavailabilities = raw_data.get("generation_unavailabilities", [])
+        # Pagination loop handling HTTP 206 Partial Content responses
+        while next_url:
+            req_rte = urllib.request.Request(
+                next_url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                method="GET"
+            )
 
+            with urllib.request.urlopen(req_rte, timeout=20) as resp:
+                raw_data = json.loads(resp.read().decode('utf-8'))
+
+            batch = raw_data.get("generation_unavailabilities", [])
+            unavailabilities.extend(batch)
+
+            # Check for continuation token across possible payload formats
+            continuation_token = raw_data.get("continuation_token") or raw_data.get("pagination", {}).get("continuation_token")
+
+            if continuation_token:
+                next_url = f"{full_url}&continuation_token={urllib.parse.quote(continuation_token)}"
+            else:
+                next_url = None
+
+        # Filter latest version per message identifier
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -151,6 +170,7 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
+        # Filter strictly by root word 'environ' and nuclear fuel 'nuc'
         filtered_items = []
         for item in latest_by_identifier.values():
             fuel_type = str(item.get("fuel_type") or "").lower()
@@ -259,5 +279,5 @@ def app(environ, start_response):
         start_response(status, headers)
         return [json.dumps({"status": "Exception", "message": str(e)}).encode('utf-8')]
 
-# Fallback alias for Vercel Entrypoint detection
+# Vercel entrypoint alias
 handler = app
