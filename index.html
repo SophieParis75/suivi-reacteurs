@@ -12,6 +12,7 @@
         input[type="text"] { padding: 8px 12px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 14px; width: 200px; }
         button { padding: 10px 24px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 15px; }
         button:hover { background: #0369a1; }
+        button:disabled { background: #475569; cursor: not-allowed; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #0f172a; }
         th, td { border: 1px solid #334155; padding: 10px; text-align: left; font-size: 14px; }
         th { background: #1e293b; color: #38bdf8; }
@@ -36,7 +37,7 @@
                 <input type="text" id="t2_input" placeholder="15/08/2026 18:00">
             </div>
             <div style="margin-top: auto;">
-                <button onclick="runAnalysis()">Analysis</button>
+                <button id="btn_analyse" onclick="runAnalysis()">Analysis</button>
             </div>
         </div>
     </div>
@@ -140,18 +141,19 @@
         function parseFrenchDateToISO(dateStr) {
             if (!dateStr || !dateStr.includes(' ')) return null;
             
-            const [datePart, timePart] = dateStr.trim().split(' ');
-            const dateComponents = datePart.split('/');
-            
+            const parts = dateStr.trim().split(' ');
+            if (parts.length !== 2) return null;
+
+            const dateComponents = parts[0].split('/');
             if (dateComponents.length !== 3) return null;
             
             const day = dateComponents[0].padStart(2, '0');
             const month = dateComponents[1].padStart(2, '0');
             const year = dateComponents[2];
             
-            const [hours, minutes] = timePart.split(':');
-            const hh = hours.padStart(2, '0');
-            const mm = (minutes || "00").padStart(2, '0');
+            const timeComponents = parts[1].split(':');
+            const hh = timeComponents[0].padStart(2, '0');
+            const mm = (timeComponents[1] || "00").padStart(2, '0');
 
             return `${year}-${month}-${day}T${hh}:${mm}:00`;
         }
@@ -163,99 +165,112 @@
         }
 
         async function runAnalysis() {
-            const t1Raw = document.getElementById('t1_input').value;
-            const t2Raw = document.getElementById('t2_input').value;
+            const btn = document.getElementById('btn_analyse');
+            btn.disabled = true;
+            btn.innerText = "Loading...";
 
-            const t1Iso = parseFrenchDateToISO(t1Raw);
-            const t2Iso = parseFrenchDateToISO(t2Raw);
+            try {
+                const t1Raw = document.getElementById('t1_input').value;
+                const t2Raw = document.getElementById('t2_input').value;
 
-            if (!t1Iso || !t2Iso) {
-                alert("Please enter dates in a valid format: dd/mm/yyyy hh:mm (e.g. 15/08/2026 14:30)");
-                return;
-            }
+                const t1Iso = parseFrenchDateToISO(t1Raw);
+                const t2Iso = parseFrenchDateToISO(t2Raw);
 
-            const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}`);
-            const data = await res.json();
-
-            if (data.status !== "success") {
-                alert("Error during RTE API analysis: " + JSON.stringify(data));
-                return;
-            }
-
-            document.getElementById('results').style.display = 'block';
-
-            // 1. KPI
-            const s = data.summary;
-            document.getElementById('kpi_container').innerHTML = `
-                <div class="kpi">
-                    <div>Unavailability at T1</div>
-                    <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}%)</div>
-                    <small>Day Max T1: ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
-                </div>
-                <div class="kpi">
-                    <div>Unavailability at T2</div>
-                    <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}%)</div>
-                    <small>Day Max T2: ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
-                </div>
-                <div class="kpi">
-                    <div>Day After T2 Max</div>
-                    <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}%)</div>
-                </div>
-            `;
-
-            // 2. Changes Table & Summary
-            const t1Map = new Map(data.list_t1.map(r => [r.reactor, r.unavailability_mw]));
-            const t2Map = new Map(data.list_t2.map(r => [r.reactor, r.unavailability_mw]));
-            const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
-
-            let changesHtml = "";
-            let summaryHtml = "";
-
-            allReactors.forEach(reactor => {
-                const mw1 = t1Map.get(reactor) || 0;
-                const mw2 = t2Map.get(reactor) || 0;
-                const diff = mw2 - mw1;
-
-                if (diff !== 0) {
-                    let evo = "";
-                    let summaryText = "";
-
-                    if (mw1 === 0 && mw2 > 0) {
-                        evo = "🚨 Increased restriction / New outage";
-                        summaryText = `<b>${reactor}</b>: New unavailability of ${mw2} MW.`;
-                    } else if (mw1 > 0 && mw2 === 0) {
-                        evo = "✅ Partial or full grid restoration";
-                        summaryText = `<b>${reactor}</b>: Unavailability of ${mw1} MW has ended.`;
-                    } else if (diff > 0) {
-                        evo = "🚨 Increased restriction / New outage";
-                        summaryText = `<b>${reactor}</b>: Unavailability increased by ${diff} MW (from ${mw1} MW to ${mw2} MW).`;
-                    } else {
-                        evo = "✅ Partial or full grid restoration";
-                        summaryText = `<b>${reactor}</b>: Unavailability decreased by ${Math.abs(diff)} MW (from ${mw1} MW to ${mw2} MW).`;
-                    }
-
-                    changesHtml += `
-                        <tr>
-                            <td>${reactor}</td>
-                            <td>${mw1} MW</td>
-                            <td>${mw2} MW</td>
-                            <td>${diff > 0 ? '+' : ''}${diff} MW</td>
-                            <td>${evo}</td>
-                        </tr>
-                    `;
-                    summaryHtml += `<li>${summaryText}</li>`;
+                if (!t1Iso || !t2Iso) {
+                    alert("Please enter dates in a valid format: dd/mm/yyyy hh:mm (e.g. 15/08/2026 14:30)");
+                    return;
                 }
-            });
 
-            document.getElementById('changes_table_body').innerHTML = changesHtml || "<tr><td colspan='5'>No changes observed between T1 and T2.</td></tr>";
-            document.getElementById('summary_list').innerHTML = summaryHtml || "<li>No changes to report between T1 and T2.</li>";
+                const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}`);
+                const data = await res.json();
 
-            // 3. Render all tables
-            fillTable('t1_table_body', data.list_t1);
-            fillTable('t2_table_body', data.list_t2);
-            fillTable('max_t1_table_body', data.list_max_day_t1);
-            fillTable('max_t2_table_body', data.list_max_day_t2);
-            fillTable('max_next_t2_table_body', data.list_max_next_day_t2);
+                if (data.status !== "success") {
+                    alert("Error during RTE API analysis: " + JSON.stringify(data));
+                    return;
+                }
+
+                document.getElementById('results').style.display = 'block';
+
+                // 1. KPI Summary
+                const s = data.summary;
+                document.getElementById('kpi_container').innerHTML = `
+                    <div class="kpi">
+                        <div>Unavailability at T1</div>
+                        <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}%)</div>
+                        <small>Day Max T1: ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
+                    </div>
+                    <div class="kpi">
+                        <div>Unavailability at T2</div>
+                        <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}%)</div>
+                        <small>Day Max T2: ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
+                    </div>
+                    <div class="kpi">
+                        <div>Day After T2 Max</div>
+                        <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}%)</div>
+                    </div>
+                `;
+
+                // 2. Changes Table & Summary
+                const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
+                const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
+                const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
+
+                let changesHtml = "";
+                let summaryHtml = "";
+
+                allReactors.forEach(reactor => {
+                    const mw1 = t1Map.get(reactor) || 0;
+                    const mw2 = t2Map.get(reactor) || 0;
+                    const diff = mw2 - mw1;
+
+                    if (diff !== 0) {
+                        let evo = "";
+                        let summaryText = "";
+
+                        if (mw1 === 0 && mw2 > 0) {
+                            evo = "🚨 Increased restriction / New outage";
+                            summaryText = `<b>${reactor}</b>: New unavailability of ${mw2} MW.`;
+                        } else if (mw1 > 0 && mw2 === 0) {
+                            evo = "✅ Partial or full grid restoration";
+                            summaryText = `<b>${reactor}</b>: Unavailability of ${mw1} MW has ended.`;
+                        } else if (diff > 0) {
+                            evo = "🚨 Increased restriction / New outage";
+                            summaryText = `<b>${reactor}</b>: Unavailability increased by ${diff} MW (from ${mw1} MW to ${mw2} MW).`;
+                        } else {
+                            evo = "✅ Partial or full grid restoration";
+                            summaryText = `<b>${reactor}</b>: Unavailability decreased by ${Math.abs(diff)} MW (from ${mw1} MW to ${mw2} MW).`;
+                        }
+
+                        changesHtml += `
+                            <tr>
+                                <td>${reactor}</td>
+                                <td>${mw1} MW</td>
+                                <td>${mw2} MW</td>
+                                <td>${diff > 0 ? '+' : ''}${diff} MW</td>
+                                <td>${evo}</td>
+                            </tr>
+                        `;
+                        summaryHtml += `<li>${summaryText}</li>`;
+                    }
+                });
+
+                document.getElementById('changes_table_body').innerHTML = changesHtml || "<tr><td colspan='5'>No changes observed between T1 and T2.</td></tr>";
+                document.getElementById('summary_list').innerHTML = summaryHtml || "<li>No changes to report between T1 and T2.</li>";
+
+                // 3. Render all tables
+                fillTable('t1_table_body', data.list_t1);
+                fillTable('t2_table_body', data.list_t2);
+                fillTable('max_t1_table_body', data.list_max_day_t1);
+                fillTable('max_t2_table_body', data.list_max_day_t2);
+                fillTable('max_next_t2_table_body', data.list_max_next_day_t2);
+
+            } catch (err) {
+                alert("An unexpected error occurred: " + err.message);
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Analysis";
+            }
         }
 
         function fillTable(tbodyId, list) {
