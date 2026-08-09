@@ -26,6 +26,9 @@ def get_rte_token(client_id, client_secret):
         res_data = json.loads(resp.read().decode())
         return res_data.get("access_token")
 
+# ==============================================================================
+# CALCULATION RULES
+# ==============================================================================
 def parse_iso_date(dt_str):
     if not dt_str:
         return None
@@ -90,6 +93,9 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 
     return 0, None, None
 
+# ==============================================================================
+# VERCEL SERVERLESS ENTRYPOINT
+# ==============================================================================
 def app(environ, start_response):
     try:
         query_string = environ.get('QUERY_STRING', '')
@@ -151,7 +157,7 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # Conserver la version la plus récente par identifiant
+        # 1. Conservations de la dernière version par identifiant unique
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -160,10 +166,11 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
+        # 2. Filtrage strict : event_status ACTIVE + nucléaire + environnement
         filtered_items = []
         for item in latest_by_identifier.values():
-            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
-            if any(term in msg_status for term in ["CANCEL", "DISCARD", "WITHDRAW", "INACTIVE", "DISMISSED"]):
+            event_status = str(item.get("event_status") or "").upper()
+            if event_status != "ACTIVE":
                 continue
 
             fuel_type = str(item.get("fuel_type") or "").lower()
