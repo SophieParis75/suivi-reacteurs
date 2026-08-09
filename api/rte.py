@@ -123,19 +123,23 @@ class handler(BaseHTTPRequestHandler):
             min_dt = min(t1_dt, t2_dt)
             max_dt = max(t1_dt, t2_dt)
 
-            # Conversion en heure UTC propre pour l'interrogation de l'API RTE
             search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
             search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
 
-            search_start_utc = search_start_paris.astimezone(timezone.utc)
+
+search_start_utc = search_start_paris.astimezone(timezone.utc)
             search_end_utc = search_end_paris.astimezone(timezone.utc)
 
-            # Format UTC ISO 8601 strict accepte par toutes les API RTE (ex: 2026-08-08T22:00:00Z)
+            # Strict ISO 8601 UTC format (e.g. 2026-08-08T22:00:00Z)
             start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
+            # safe=':-' preserves the colon ':' characters required by RTE's query parser
+            start_encoded = urllib.parse.quote(start_str, safe=':-')
+            end_encoded = urllib.parse.quote(end_str, safe=':-')
+
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            full_url = f"{base_url}?start_date={urllib.parse.quote(start_str)}&end_date={urllib.parse.quote(end_str)}"
+            full_url = f"{base_url}?start_date={start_encoded}&end_date={end_encoded}&date_type=APPLICATION_DATE"
 
             req_rte = urllib.request.Request(
                 full_url,
