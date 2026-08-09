@@ -163,6 +163,23 @@
             return `${year}-${month}-${day}T${hh}:${mm}:00`;
         }
 
+        function getNextDayFormatted(dateOnlyStr) {
+            const parts = dateOnlyStr.split('/');
+            if (parts.length !== 3) return dateOnlyStr;
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+
+            const dt = new Date(year, month, day);
+            dt.setDate(dt.getDate() + 1);
+
+            const nextDay = String(dt.getDate()).padStart(2, '0');
+            const nextMonth = String(dt.getMonth() + 1).padStart(2, '0');
+            const nextYear = dt.getFullYear();
+
+            return `${nextDay}/${nextMonth}/${nextYear}`;
+        }
+
         function formatDate(dateStr) {
             if (!dateStr) return "-";
             const d = new Date(dateStr);
@@ -197,6 +214,7 @@
                 // Extract date-only parts for headings
                 const dateOnlyT1 = t1Raw.split(' ')[0];
                 const dateOnlyT2 = t2Raw.split(' ')[0];
+                const nextDayT2 = getNextDayFormatted(dateOnlyT2);
 
                 // Dynamically update headings and table headers
                 document.getElementById('title_summary_changes').innerText = `Summary of changes between ${t1Raw} and ${t2Raw}`;
@@ -207,35 +225,35 @@
                 document.getElementById('title_t2_reactors').innerText = `Reactors selected for unavailability at ${t2Raw}`;
                 document.getElementById('title_max_t1').innerText = `Maximum cumulative total for ${dateOnlyT1}`;
                 document.getElementById('title_max_t2').innerText = `Maximum cumulative total for ${dateOnlyT2}`;
-                document.getElementById('title_max_next_t2').innerText = `Maximum cumulative total for the day after ${dateOnlyT2}`;
+                document.getElementById('title_max_next_t2').innerText = `Maximum cumulative total for ${nextDayT2}`;
 
                 document.getElementById('results').style.display = 'block';
 
                 // 1. KPI Summary
                 const s = data.summary;
                 document.getElementById('kpi_container').innerHTML = `
-                  <div class="kpi">
-    <div>Unavailability at ${t1Raw}</div>
-    <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}% of fleet)</div>
-    <div>
-        Day Max:
-        <span class="kpi-val">${s.t1_day_max_mw} MW (${s.t1_day_max_percent}% of fleet)</span>
-    </div>
-</div>
+                    <div class="kpi">
+                        <div>Unavailability at ${t1Raw}</div>
+                        <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}% of fleet)</div>
+                        <div>
+                            Day Max:
+                            <span class="kpi-val">${s.t1_day_max_mw} MW (${s.t1_day_max_percent}% of fleet)</span>
+                        </div>
+                    </div>
 
-<div class="kpi">
-    <div>Unavailability at ${t2Raw}</div>
-    <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}% of fleet)</div>
-    <div>
-        Day Max:
-        <span class="kpi-val">${s.t2_day_max_mw} MW (${s.t2_day_max_percent}% of fleet)</span>
-    </div>
-</div>
+                    <div class="kpi">
+                        <div>Unavailability at ${t2Raw}</div>
+                        <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}% of fleet)</div>
+                        <div>
+                            Day Max:
+                            <span class="kpi-val">${s.t2_day_max_mw} MW (${s.t2_day_max_percent}% of fleet)</span>
+                        </div>
+                    </div>
 
-<div class="kpi">
-    <div>Max on Day After (${dateOnlyT2})</div>
-    <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}% of fleet)</div>
-</div>
+                    <div class="kpi">
+                        <div>Max on ${nextDayT2}</div>
+                        <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}% of fleet)</div>
+                    </div>
                 `;
 
                 // 2. Changes Table & Summary
