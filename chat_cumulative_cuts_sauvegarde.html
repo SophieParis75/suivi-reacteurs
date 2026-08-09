@@ -8,6 +8,8 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
         h1, h2 { color: #38bdf8; }
+        .top-link-box a { color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; }
+        .top-link-box a:hover { text-decoration: underline; }
         .card { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155; }
         .controls { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; }
         button { padding: 10px 24px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 15px; }
@@ -23,9 +25,10 @@
     </style>
 </head>
 <body>
-<div class="card top-link-box">
+
+    <div class="card top-link-box">
         <h2 style="margin-top: 0; margin-bottom: 10px;">Nuclear Environmental Unavailabilities Analysis</h2>
-        <a href="https://suivi-reacteurs.vercel.app/" target="_blank">View CNuclear Environmental Unavailabilities Analysis →</a>
+        <a href="https://suivi-reacteurs.vercel.app/" target="_blank">View Nuclear Environmental Unavailabilities →</a>
     </div>
 
     <h1>Cumulative Nuclear Environmental Unavailabilities</h1>
@@ -58,15 +61,13 @@
     <script>
         let myChart = null;
         const CACHE_KEY = "rte_cumulative_cuts_cache_v1";
+        const TOTAL_FLEET_MW = 62990; // Capacité totale installée incluant Flamanville 3 (62 990 MW)
 
         function getDatesRange() {
             const now = new Date();
             const currentYear = now.getFullYear();
             
-            // Start: May 1st of current year at 12:00
             const startDate = new Date(currentYear, 4, 1);
-            
-            // End: Yesterday at 12:00
             const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
             
             const dates = [];
@@ -82,7 +83,7 @@
                     iso: `${year}-${month}-${day}T12:00:00`,
                     dt: new Date(cur),
                     year: year,
-                    month: cur.getMonth() // 0-indexed month
+                    month: cur.getMonth()
                 });
                 
                 cur.setDate(cur.getDate() + 1);
@@ -137,7 +138,7 @@
             const tenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10);
 
             let fetchCount = 0;
-            const fullResults = []; // Store raw results before filtering
+            const fullResults = [];
 
             for (let i = 0; i < dates.length; i++) {
                 const dateObj = dates[i];
@@ -173,19 +174,15 @@
                 }
             }
 
-            // Save updated cache
             saveCache(cache);
 
-            // Find the first day with an outage (val > 0)
             const firstOutageEntry = fullResults.find(item => item.val > 0);
-
             let filteredResults = fullResults;
 
             if (firstOutageEntry) {
                 const targetYear = firstOutageEntry.dateObj.year;
                 const targetMonth = firstOutageEntry.dateObj.month;
 
-                // Filter to keep entries starting from day 1 of that month
                 filteredResults = fullResults.filter(item => {
                     if (item.dateObj.year > targetYear) return true;
                     if (item.dateObj.year === targetYear && item.dateObj.month >= targetMonth) return true;
@@ -237,7 +234,9 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return ` Daily Max: ${context.parsed.y} MW`;
+                                    const mw = context.parsed.y || 0;
+                                    const percent = ((mw / TOTAL_FLEET_MW) * 100).toFixed(1);
+                                    return ` Daily Max: ${mw} MW (${percent}% of fleet)`;
                                 }
                             }
                         }
