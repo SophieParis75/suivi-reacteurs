@@ -5,11 +5,11 @@ import urllib.parse
 import urllib.error
 import base64
 from http.server import BaseHTTPRequestHandler
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
-TOTAL_PARC_CAPACITY_MW = 62990.0  # Total capacity of the French nuclear fleet in MW
+TOTAL_PARC_CAPACITY_MW = 62990.0
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -26,7 +26,6 @@ def get_rte_token(client_id, client_secret):
     with urllib.request.urlopen(req, timeout=10) as resp:
         res_data = json.loads(resp.read().decode())
         return res_data.get("access_token")
-
 
 # ==============================================================================
 # START OF CALCULATION RULE - NUCLEAR & ENVIRONMENTAL DEDUPLICATION RULES
@@ -97,7 +96,6 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 # END OF CALCULATION RULE
 # ==============================================================================
 
-
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
@@ -125,21 +123,22 @@ class handler(BaseHTTPRequestHandler):
             min_dt = min(t1_dt, t2_dt)
             max_dt = max(t1_dt, t2_dt)
 
-            search_start = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
-            search_end = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
+            # Conversion en heure UTC propre pour l'interrogation de l'API RTE
+            search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
+            search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
 
-            # Format ISO 8601 strict exigé par RTE (ex: 2026-08-09T00:00:00+02:00)
-            start_str = search_start.isoformat()
-            end_str = search_end.isoformat()
+            search_start_utc = search_start_paris.astimezone(timezone.utc)
+            search_end_utc = search_end_paris.astimezone(timezone.utc)
 
-            params = urllib.parse.urlencode({
-                "start_date": start_str,
-                "end_date": end_str
-            })
+            # Format UTC ISO 8601 strict accepte par toutes les API RTE (ex: 2026-08-08T22:00:00Z)
+            start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+            end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
+            full_url = f"{base_url}?start_date={urllib.parse.quote(start_str)}&end_date={urllib.parse.quote(end_str)}"
+
             req_rte = urllib.request.Request(
-                f"{base_url}?{params}",
+                full_url,
                 headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
                 method="GET"
             )
