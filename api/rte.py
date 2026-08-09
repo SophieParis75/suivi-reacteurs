@@ -31,17 +31,23 @@ def parse_iso_date(dt_str):
         return None
     return datetime.fromisoformat(dt_str).astimezone(PARIS_TZ)
 
+def compute_slot_unavailability(v, installed_cap):
+    unavail = v.get("unavailable_capacity")
+    if unavail is None:
+        avail = v.get("available_capacity")
+        if avail is not None:
+            unavail = installed_cap - avail
+        else:
+            unavail = 0
+    return max(0, float(unavail))
+
 def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
     active_slots = []
     for v in values:
         v_start = parse_iso_date(v.get("start_date"))
         v_end = parse_iso_date(v.get("end_date"))
         if v_start and v_end and (v_start <= target_dt < v_end):
-            unavail = v.get("unavailable_capacity")
-            if unavail is None:
-                avail = v.get("available_capacity", installed_cap)
-                unavail = installed_cap - avail
-            unavail = max(0, unavail)
+            unavail = compute_slot_unavailability(v, installed_cap)
             if unavail > 0:
                 active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
     
@@ -68,14 +74,9 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 
         if overlap_start < overlap_end:
             duration_minutes = (overlap_end - overlap_start).total_seconds() / 60.0
-            
-            unavail = v.get("unavailable_capacity")
-            if unavail is None:
-                avail = v.get("available_capacity", installed_cap)
-                unavail = installed_cap - avail
-            unavail = max(0, unavail)
+            unavail = compute_slot_unavailability(v, installed_cap)
 
-            if unavail > 0:
+            if unavail > 0 and duration_minutes > 30:
                 eligible_slots.append({
                     "unavail": unavail,
                     "duration_minutes": duration_minutes,
@@ -83,10 +84,8 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
                     "end_date": v.get("end_date")
                 })
 
-    slots_over_30min = [s for s in eligible_slots if s["duration_minutes"] > 30]
-
-    if slots_over_30min:
-        best_slot = max(slots_over_30min, key=lambda x: x["unavail"])
+    if eligible_slots:
+        best_slot = max(eligible_slots, key=lambda x: x["unavail"])
         return best_slot["unavail"], best_slot["start_date"], best_slot["end_date"]
 
     return 0, None, None
@@ -152,6 +151,7 @@ def app(environ, start_response):
             else:
                 next_url = None
 
+        # Conserver la version la plus récente par identifiant
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -162,11 +162,8 @@ def app(environ, start_response):
 
         filtered_items = []
         for item in latest_by_identifier.values():
-            msg_status = str(item.get("message_status") or "").upper()
-            status_field = str(item.get("status") or "").upper()
-            combined_status = f"{msg_status} {status_field}"
-
-            if any(term in combined_status for term in ["CANCEL", "DISCARD", "WITHDRAW", "INACTIVE", "DISMISSED"]):
+            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
+            if any(term in msg_status for term in ["CANCEL", "DISCARD", "WITHDRAW", "INACTIVE", "DISMISSED"]):
                 continue
 
             fuel_type = str(item.get("fuel_type") or "").lower()
