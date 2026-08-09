@@ -5,6 +5,8 @@
     <title>Cumulative Nuclear Environmental Unavailabilities</title>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS (XLSX) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
         h1, h2 { color: #38bdf8; }
@@ -17,11 +19,14 @@
         button:disabled { background: #475569; cursor: not-allowed; }
         .btn-clear { background: #64748b; margin-left: auto; }
         .btn-clear:hover { background: #475569; }
+        .btn-excel { background: #10b981; margin-top: 15px; }
+        .btn-excel:hover { background: #059669; }
         .progress-bar-bg { background: #0f172a; border-radius: 4px; height: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #334155; }
         .progress-bar-fill { background: #38bdf8; height: 100%; width: 0%; transition: width 0.2s; }
         .status-text { font-size: 14px; color: #94a3b8; margin-top: 5px; }
         .rules-info { color: #94a3b8; font-size: 14px; margin-bottom: 15px; line-height: 1.5; background: #0f172a; padding: 10px 15px; border-radius: 6px; border: 1px solid #334155; }
         .chart-container { position: relative; height: 480px; width: 100%; }
+        .export-row { display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; pt-10; border-top: 1px solid #334155; }
     </style>
 </head>
 <body>
@@ -56,11 +61,15 @@
         <div class="chart-container">
             <canvas id="cutsChart"></canvas>
         </div>
+        <div class="export-row">
+            <button class="btn-excel" onclick="exportToExcel()">📥 Download Chart Data (.xlsx)</button>
+        </div>
     </div>
 
     <script>
         let myChart = null;
-        const CACHE_KEY = "rte_cumulative_cuts_cache_v2"; // Clef mise à jour v2
+        let currentChartData = [];
+        const CACHE_KEY = "rte_cumulative_cuts_cache_v2";
         const TOTAL_FLEET_MW = 62990;
 
         function getDatesRange() {
@@ -81,6 +90,7 @@
 
                 dates.push({
                     display: isToday ? `${day}/${month}/${year} (Today)` : `${day}/${month}/${year}`,
+                    rawDate: `${day}/${month}/${year}`,
                     iso: `${year}-${month}-${day}T12:00:00`,
                     dt: new Date(cur),
                     year: year,
@@ -197,6 +207,8 @@
                 });
             }
 
+            currentChartData = filteredResults;
+
             const labels = filteredResults.map(item => item.dateObj.display);
             const dataPoints = filteredResults.map(item => item.val);
             const tempPoints = filteredResults.map(item => item.temp);
@@ -227,7 +239,7 @@
                         {
                             label: 'National Avg Temperature (°C)',
                             data: tempPoints,
-                            borderColor: '#38bdf8', // Cyan brillant
+                            borderColor: '#38bdf8',
                             backgroundColor: '#38bdf8',
                             borderWidth: 3,
                             fill: false,
@@ -235,7 +247,7 @@
                             pointRadius: 2,
                             pointHoverRadius: 6,
                             yAxisID: 'yTemp',
-                            order: 1 // S'affiche au-dessus de l'autre courbe
+                            order: 1
                         },
                         {
                             label: 'Daily Max Environmental Unavailability (MW)',
@@ -257,14 +269,9 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
+                    interaction: { mode: 'index', intersect: false },
                     plugins: {
-                        legend: {
-                            labels: { color: '#f8fafc', font: { size: 14 } }
-                        },
+                        legend: { labels: { color: '#f8fafc', font: { size: 14 } } },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -299,12 +306,45 @@
                             display: true,
                             position: 'right',
                             title: { display: true, text: 'Temperature (°C)', color: '#38bdf8' },
-                            grid: { drawOnChartArea: false }, // Évite de surcharger les lignes de grille
+                            grid: { drawOnChartArea: false },
                             ticks: { color: '#38bdf8', callback: function(v) { return v + ' °C'; } }
                         }
                     }
                 }
             });
+        }
+
+        function exportToExcel() {
+            if (!currentChartData || currentChartData.length === 0) {
+                alert("No data available to export. Please generate the chart first.");
+                return;
+            }
+
+            const rows = currentChartData.map(item => {
+                const mw = item.val || 0;
+                const percent = ((mw / TOTAL_FLEET_MW) * 100).toFixed(2);
+                return {
+                    "Date": item.dateObj.rawDate,
+                    "Daily Max Unavailability (MW)": mw,
+                    "Fleet Unavailability (%)": parseFloat(percent),
+                    "National Avg Temperature (°C)": item.temp !== null && item.temp !== undefined ? item.temp : ""
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Environmental Outages");
+
+            // Format column widths
+            worksheet['!cols'] = [
+                { wch: 15 },
+                { wch: 30 },
+                { wch: 25 },
+                { wch: 30 }
+            ];
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(workbook, `nuclear_environmental_cuts_${todayStr}.xlsx`);
         }
     </script>
 </body>
