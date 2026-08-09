@@ -130,18 +130,14 @@ def app(environ, start_response):
         start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        start_encoded = urllib.parse.quote(start_str, safe=':-')
-        end_encoded = urllib.parse.quote(end_str, safe=':-')
-
         base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-        full_url = f"{base_url}?start_date={start_encoded}&end_date={end_encoded}&date_type=APPLICATION_DATE"
+        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&last_version=true"
 
         req_rte = urllib.request.Request(
             full_url,
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             method="GET"
         )
-
         with urllib.request.urlopen(req_rte, timeout=20) as resp:
             raw_data = json.loads(resp.read().decode('utf-8'))
 
