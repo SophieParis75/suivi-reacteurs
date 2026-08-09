@@ -47,14 +47,10 @@ def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-            
-            # EnergyQuantified renvoie les points dans 'data' ou 'data.values'
             values_list = data.get("data", []) or data.get("values", [])
             
-            # Regroupement par jour YYYY-MM-DD
             buckets = {}
             for item in values_list:
-                # Le format de date de EQ est généralement ISO (ex: 2026-06-01T00:00:00Z)
                 d_str = item.get("date") or item.get("d")
                 val = item.get("value") or item.get("v")
                 if d_str and val is not None:
@@ -64,7 +60,6 @@ def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
                         buckets[day_key] = []
                     buckets[day_key].append(float(val))
             
-            # Calcul de la moyenne journalière
             for day_key, vals in buckets.items():
                 if vals:
                     daily_temps[day_key] = round(sum(vals) / len(vals), 1)
@@ -165,8 +160,9 @@ def app(environ, start_response):
         min_dt = min(t1_dt, t2_dt)
         max_dt = max(t1_dt, t2_dt)
 
+        # Plage élargie à +3 jours pour inclure sereinement le lendemain T2+1
         search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
-        search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
+        search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=3)
 
         search_start_utc = search_start_paris.astimezone(timezone.utc)
         search_end_utc = search_end_paris.astimezone(timezone.utc)
@@ -174,10 +170,9 @@ def app(environ, start_response):
         start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        # Récupération optionnelle des températures
         eq_daily_temps = get_eq_temperatures(
             min_dt.strftime('%Y-%m-%d'),
-            (max_dt + timedelta(days=1)).strftime('%Y-%m-%d'),
+            (max_dt + timedelta(days=2)).strftime('%Y-%m-%d'),
             eq_api_key
         )
 
@@ -207,6 +202,7 @@ def app(environ, start_response):
             else:
                 next_url = None
 
+        # 1. Conserver la dernière version par identifiant
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -215,10 +211,15 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
+        # 2. Filtrage robuste : Exclure uniquement les annulations explicites
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
-            if event_status != "ACTIVE":
+            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
+            combined_status = f"{event_status} {msg_status}"
+
+            # Ignorer les messages annulés / supprimés
+            if any(term in combined_status for term in ["CANCEL", "DISCARD", "WITHDRAW", "INACTIVE", "DISMISSED"]):
                 continue
 
             fuel_type = str(item.get("fuel_type") or "").lower()
@@ -284,7 +285,6 @@ def app(environ, start_response):
                 sum_max_t2_next += u_max_t2_next
                 list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
 
-        # Extraction de la température moyenne de T1
         temp_t1 = eq_daily_temps.get(day_t1.strftime('%Y-%m-%d'))
 
         payload = {
