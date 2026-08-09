@@ -45,7 +45,8 @@ def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
                 avail = v.get("available_capacity", installed_cap)
                 unavail = installed_cap - avail
             unavail = max(0, unavail)
-            active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
+            if unavail > 0:
+                active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
     
     if active_slots:
         return max(active_slots, key=lambda x: x[0])
@@ -77,12 +78,13 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
                 unavail = installed_cap - avail
             unavail = max(0, unavail)
 
-            eligible_slots.append({
-                "unavail": unavail,
-                "duration_minutes": duration_minutes,
-                "start_date": v.get("start_date"),
-                "end_date": v.get("end_date")
-            })
+            if unavail > 0:
+                eligible_slots.append({
+                    "unavail": unavail,
+                    "duration_minutes": duration_minutes,
+                    "start_date": v.get("start_date"),
+                    "end_date": v.get("end_date")
+                })
 
     # Filter out entries lasting 30 minutes or less
     slots_over_30min = [s for s in eligible_slots if s["duration_minutes"] > 30]
@@ -122,7 +124,6 @@ def app(environ, start_response):
         min_dt = min(t1_dt, t2_dt)
         max_dt = max(t1_dt, t2_dt)
 
-        # Target range calculation in Paris time converted to UTC
         search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
         search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
 
@@ -132,14 +133,12 @@ def app(environ, start_response):
         start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
         end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        # Initial URL request with EVENT_DATE and last_version=true
         base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
         full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
 
         unavailabilities = []
         next_url = full_url
 
-        # Pagination loop handling HTTP 206 Partial Content responses
         while next_url:
             req_rte = urllib.request.Request(
                 next_url,
@@ -153,7 +152,6 @@ def app(environ, start_response):
             batch = raw_data.get("generation_unavailabilities", [])
             unavailabilities.extend(batch)
 
-            # Check for continuation token across possible payload formats
             continuation_token = raw_data.get("continuation_token") or raw_data.get("pagination", {}).get("continuation_token")
 
             if continuation_token:
@@ -170,16 +168,13 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # Exclude cancelled / discarded message statuses
-        active_latest_items = []
+        # Filter strictly by root word 'environ', nuclear fuel 'nuc', AND exclude cancelled messages
+        filtered_items = []
         for item in latest_by_identifier.values():
             msg_status = str(item.get("message_status") or "").upper()
-            if "CANCEL" not in msg_status and "DISCARD" not in msg_status:
-                active_latest_items.append(item)
+            if "CANCEL" in msg_status or "DISCARD" in msg_status:
+                continue
 
-        # Filter strictly by root word 'environ' and nuclear fuel 'nuc'
-        filtered_items = []
-        for item in active_latest_items:
             fuel_type = str(item.get("fuel_type") or "").lower()
             remarks = str(item.get("remarks") or "").lower()
             reason = str(item.get("reason") or "").lower()
@@ -286,5 +281,4 @@ def app(environ, start_response):
         start_response(status, headers)
         return [json.dumps({"status": "Exception", "message": str(e)}).encode('utf-8')]
 
-# Vercel entrypoint alias
 handler = app
