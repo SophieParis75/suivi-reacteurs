@@ -4,7 +4,6 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import base64
-from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -28,7 +27,7 @@ def get_rte_token(client_id, client_secret):
         return res_data.get("access_token")
 
 # ==============================================================================
-# START OF CALCULATION RULE - NUCLEAR & ENVIRONMENTAL DEDUPLICATION RULES
+# CALCULATION RULES
 # ==============================================================================
 def parse_iso_date(dt_str):
     if not dt_str:
@@ -92,176 +91,177 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
         return best_slot["unavail"], best_slot["start_date"], best_slot["end_date"]
 
     return 0, None, None
+
 # ==============================================================================
-# END OF CALCULATION RULE
+# VERCEL SERVERLESS ENTRYPOINT (WSGI / HTTP APP)
 # ==============================================================================
+def app(environ, start_response):
+    try:
+        query_string = environ.get('QUERY_STRING', '')
+        query_components = urllib.parse.parse_qs(query_string)
+        
+        now_paris = datetime.now(PARIS_TZ)
+        t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
+        t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
 
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        try:
-            query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            
-            now_paris = datetime.now(PARIS_TZ)
-            t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
-            t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
+        t1_dt = datetime.fromisoformat(t1_str).astimezone(PARIS_TZ)
+        t2_dt = datetime.fromisoformat(t2_str).astimezone(PARIS_TZ)
 
-            t1_dt = datetime.fromisoformat(t1_str).astimezone(PARIS_TZ)
-            t2_dt = datetime.fromisoformat(t2_str).astimezone(PARIS_TZ)
+        client_id = os.environ.get("RTE_CLIENT_ID")
+        client_secret = os.environ.get("RTE_CLIENT_SECRET")
 
-            client_id = os.environ.get("RTE_CLIENT_ID")
-            client_secret = os.environ.get("RTE_CLIENT_SECRET")
+        if not client_id or not client_secret:
+            status = '500 Internal Server Error'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET environment variables"}).encode('utf-8')]
 
-            if not client_id or not client_secret:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET environment variables"}).encode('utf-8'))
-                return
+        token = get_rte_token(client_id, client_secret)
 
-            token = get_rte_token(client_id, client_secret)
+        min_dt = min(t1_dt, t2_dt)
+        max_dt = max(t1_dt, t2_dt)
 
-            min_dt = min(t1_dt, t2_dt)
-            max_dt = max(t1_dt, t2_dt)
+        search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
+        search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
 
-            search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
-            search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
+        search_start_utc = search_start_paris.astimezone(timezone.utc)
+        search_end_utc = search_end_paris.astimezone(timezone.utc)
 
+        start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-search_start_utc = search_start_paris.astimezone(timezone.utc)
-            search_end_utc = search_end_paris.astimezone(timezone.utc)
+        start_encoded = urllib.parse.quote(start_str, safe=':-')
+        end_encoded = urllib.parse.quote(end_str, safe=':-')
 
-            # Strict ISO 8601 UTC format (e.g. 2026-08-08T22:00:00Z)
-            start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-            end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
+        full_url = f"{base_url}?start_date={start_encoded}&end_date={end_encoded}&date_type=APPLICATION_DATE"
 
-            # safe=':-' preserves the colon ':' characters required by RTE's query parser
-            start_encoded = urllib.parse.quote(start_str, safe=':-')
-            end_encoded = urllib.parse.quote(end_str, safe=':-')
+        req_rte = urllib.request.Request(
+            full_url,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            method="GET"
+        )
 
-            base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-            full_url = f"{base_url}?start_date={start_encoded}&end_date={end_encoded}&date_type=APPLICATION_DATE"
+        with urllib.request.urlopen(req_rte, timeout=20) as resp:
+            raw_data = json.loads(resp.read().decode('utf-8'))
 
-            req_rte = urllib.request.Request(
-                full_url,
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                method="GET"
-            )
+        unavailabilities = raw_data.get("generation_unavailabilities", [])
 
-            with urllib.request.urlopen(req_rte, timeout=20) as resp:
-                raw_data = json.loads(resp.read().decode('utf-8'))
+        latest_by_identifier = {}
+        for item in unavailabilities:
+            identifier = item.get("identifier")
+            version = int(item.get("version", 0))
 
-            unavailabilities = raw_data.get("generation_unavailabilities", [])
+            if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
+                latest_by_identifier[identifier] = item
 
-            latest_by_identifier = {}
-            for item in unavailabilities:
-                identifier = item.get("identifier")
-                version = int(item.get("version", 0))
+        filtered_items = []
+        for item in latest_by_identifier.values():
+            fuel_type = str(item.get("fuel_type") or "").lower()
+            remarks = str(item.get("remarks") or "").lower()
+            reason = str(item.get("reason") or "").lower()
+            asset_name = str(item.get("affected_asset_or_unit_name") or "").lower()
 
-                if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
-                    latest_by_identifier[identifier] = item
+            has_nuc = "nuc" in fuel_type or "nuc" in remarks or "nuc" in reason or "nuc" in asset_name
+            has_env = "environ" in remarks or "environ" in reason
 
-            filtered_items = []
-            for item in latest_by_identifier.values():
-                fuel_type = str(item.get("fuel_type") or "").lower()
-                remarks = str(item.get("remarks") or "").lower()
-                reason = str(item.get("reason") or "").lower()
-                asset_name = str(item.get("affected_asset_or_unit_name") or "").lower()
+            if has_nuc and has_env:
+                filtered_items.append(item)
 
-                has_nuc = "nuc" in fuel_type or "nuc" in remarks or "nuc" in reason or "nuc" in asset_name
-                has_env = "environ" in remarks or "environ" in reason
+        reactors_data = {}
+        for item in filtered_items:
+            unit_name = item.get("affected_asset_or_unit_name", "Unknown")
+            installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
+            values = item.get("values", [])
 
-                if has_nuc and has_env:
-                    filtered_items.append(item)
+            if unit_name not in reactors_data:
+                reactors_data[unit_name] = {
+                    "installed_capacity": installed_cap,
+                    "values": []
+                }
+            reactors_data[unit_name]["values"].extend(values)
 
-            reactors_data = {}
-            for item in filtered_items:
-                unit_name = item.get("affected_asset_or_unit_name", "Unknown")
-                installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
-                values = item.get("values", [])
+        day_t1 = t1_dt.date()
+        day_t2 = t2_dt.date()
+        day_t2_next = day_t2 + timedelta(days=1)
 
-                if unit_name not in reactors_data:
-                    reactors_data[unit_name] = {
-                        "installed_capacity": installed_cap,
-                        "values": []
-                    }
-                reactors_data[unit_name]["values"].extend(values)
+        list_t1, list_t2 = [], []
+        list_max_t1, list_max_t2, list_max_t2_next = [], [], []
 
-            day_t1 = t1_dt.date()
-            day_t2 = t2_dt.date()
-            day_t2_next = day_t2 + timedelta(days=1)
+        sum_t1 = sum_t2 = 0
+        sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
 
-            list_t1, list_t2 = [], []
-            list_max_t1, list_max_t2, list_max_t2_next = [], [], []
+        for unit_name, r_info in reactors_data.items():
+            installed_cap = r_info["installed_capacity"]
+            values = r_info["values"]
 
-            sum_t1 = sum_t2 = 0
-            sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
+            unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
+            if unavail_t1 > 0:
+                sum_t1 += unavail_t1
+                list_t1.append({"reactor": unit_name, "unavailability_mw": unavail_t1, "from": f_t1, "to": t_t1})
 
-            for unit_name, r_info in reactors_data.items():
-                installed_cap = r_info["installed_capacity"]
-                values = r_info["values"]
+            unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap)
+            if unavail_t2 > 0:
+                sum_t2 += unavail_t2
+                list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
 
-                unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
-                if unavail_t1 > 0:
-                    sum_t1 += unavail_t1
-                    list_t1.append({"reactor": unit_name, "unavailability_mw": unavail_t1, "from": f_t1, "to": t_t1})
+            u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
+            if u_max_t1 > 0:
+                sum_max_t1 += u_max_t1
+                list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
 
-                unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap)
-                if unavail_t2 > 0:
-                    sum_t2 += unavail_t2
-                    list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
+            u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
+            if u_max_t2 > 0:
+                sum_max_t2 += u_max_t2
+                list_max_t2.append({"reactor": unit_name, "unavailability_mw": u_max_t2, "from": f_m_t2, "to": t_m_t2})
 
-                u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
-                if u_max_t1 > 0:
-                    sum_max_t1 += u_max_t1
-                    list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
+            u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap)
+            if u_max_t2_next > 0:
+                sum_max_t2_next += u_max_t2_next
+                list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
 
-                u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
-                if u_max_t2 > 0:
-                    sum_max_t2 += u_max_t2
-                    list_max_t2.append({"reactor": unit_name, "unavailability_mw": u_max_t2, "from": f_m_t2, "to": t_m_t2})
+        payload = {
+            "status": "success",
+            "t1_iso": t1_dt.isoformat(),
+            "t2_iso": t2_dt.isoformat(),
+            "summary": {
+                "t1_unavailability_mw": sum_t1,
+                "t1_percent": round((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t1_day_max_mw": sum_max_t1,
+                "t1_day_max_percent": round((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_unavailability_mw": sum_t2,
+                "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_day_max_mw": sum_max_t2,
+                "t2_day_max_percent": round((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_next_day_max_mw": sum_max_t2_next,
+                "t2_next_day_max_percent": round((sum_max_t2_next / TOTAL_PARC_CAPACITY_MW) * 100, 2)
+            },
+            "list_t1": list_t1,
+            "list_t2": list_t2,
+            "list_max_day_t1": list_max_t1,
+            "list_max_day_t2": list_max_t2,
+            "list_max_next_day_t2": list_max_t2_next
+        }
 
-                u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap)
-                if u_max_t2_next > 0:
-                    sum_max_t2_next += u_max_t2_next
-                    list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
+        status = '200 OK'
+        headers = [
+            ('Content-Type', 'application/json'),
+            ('Access-Control-Allow-Origin', '*')
+        ]
+        start_response(status, headers)
+        return [json.dumps(payload).encode('utf-8')]
 
-            payload = {
-                "status": "success",
-                "t1_iso": t1_dt.isoformat(),
-                "t2_iso": t2_dt.isoformat(),
-                "summary": {
-                    "t1_unavailability_mw": sum_t1,
-                    "t1_percent": round((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-                    "t1_day_max_mw": sum_max_t1,
-                    "t1_day_max_percent": round((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-                    "t2_unavailability_mw": sum_t2,
-                    "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-                    "t2_day_max_mw": sum_max_t2,
-                    "t2_day_max_percent": round((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-                    "t2_next_day_max_mw": sum_max_t2_next,
-                    "t2_next_day_max_percent": round((sum_max_t2_next / TOTAL_PARC_CAPACITY_MW) * 100, 2)
-                },
-                "list_t1": list_t1,
-                "list_t2": list_t2,
-                "list_max_day_t1": list_max_t1,
-                "list_max_day_t2": list_max_t2,
-                "list_max_next_day_t2": list_max_t2_next
-            }
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='ignore')
+        status = f'{e.code} HTTP Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+        return [json.dumps({"status": "HTTPError", "code": e.code, "message": error_body}).encode('utf-8')]
+    except Exception as e:
+        status = '500 Internal Server Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+        return [json.dumps({"status": "Exception", "message": str(e)}).encode('utf-8')]
 
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps(payload).encode('utf-8'))
-
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode('utf-8', errors='ignore')
-            self.send_response(e.code)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "HTTPError", "code": e.code, "message": error_body}).encode('utf-8'))
-        except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "Exception", "message": str(e)}).encode('utf-8'))
+# Fallback alias for Vercel Entrypoint detection
+handler = app
