@@ -226,7 +226,7 @@ def app(environ, start_response):
             reason = str(item.get("reason") or "").lower()
             asset_name = str(item.get("affected_asset_or_unit_name") or "").lower()
 
-            has_nuc = "nucl" in fuel_type or "nucl" in remarks or "nucl" in reason or "nucl" in asset_name
+            has_nuc = "nuc" in fuel_type or "nuc" in remarks or "nuc" in reason or "nuc" in asset_name
             has_env = "environ" in remarks or "environ" in reason
 
             if has_nuc and has_env:
