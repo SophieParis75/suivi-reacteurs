@@ -68,7 +68,6 @@ def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
 def parse_iso_date(dt_str):
     if not dt_str:
         return None
-    # Conversion explicite vers le fuseau Paris (Europe/Paris)
     dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
     return dt.astimezone(PARIS_TZ)
 
@@ -113,11 +112,11 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
         overlap_start = max(v_start, day_start)
         overlap_end = min(v_end, day_end)
 
-        if overlap_start < overlap_end:
+        if overlap_start <= overlap_end:
             duration_minutes = (overlap_end - overlap_start).total_seconds() / 60.0
             unavail = compute_slot_unavailability(v, installed_cap)
 
-            if unavail > 0 and duration_minutes > 30:
+            if unavail > 0 and duration_minutes >= 30:
                 eligible_slots.append({
                     "unavail": unavail,
                     "duration_minutes": duration_minutes,
@@ -199,7 +198,6 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Déduplication par identifiant pour garder la dernière version
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -208,7 +206,6 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # 2. FILTRAGE STRICT MESSAGE PAR MESSAGE
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
@@ -218,7 +215,6 @@ def app(environ, start_response):
             if any(term in combined_status for term in ["CANCEL", "DISCARD", "WITHDRAW", "INACTIVE", "DISMISSED"]):
                 continue
 
-            # Seuls les messages contenant 'environ' sont retenus
             full_item_text = json.dumps(item).lower()
             if "environ" in full_item_text:
                 filtered_items.append(item)
