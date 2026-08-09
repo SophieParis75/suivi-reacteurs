@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
-TOTAL_PARC_CAPACITY_MW = 62990.0
+TOTAL_PARC_CAPACITY_MW = 62990.0  # Total capacity of the French nuclear fleet in MW
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -27,8 +27,9 @@ def get_rte_token(client_id, client_secret):
         res_data = json.loads(resp.read().decode())
         return res_data.get("access_token")
 
+
 # ==============================================================================
-# START OF CALCULATION RULE - NUCLEAR & ENVIRONMENTAL 30-MINUTE RULE
+# START OF CALCULATION RULE - NUCLEAR & ENVIRONMENTAL DEDUPLICATION RULES
 # ==============================================================================
 def parse_iso_date(dt_str):
     if not dt_str:
@@ -96,6 +97,7 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 # END OF CALCULATION RULE
 # ==============================================================================
 
+
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
@@ -115,7 +117,7 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": "Missing environment variables"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET environment variables"}).encode('utf-8'))
                 return
 
             token = get_rte_token(client_id, client_secret)
@@ -126,9 +128,13 @@ class handler(BaseHTTPRequestHandler):
             search_start = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ)
             search_end = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=2)
 
+            # Format ISO 8601 strict exigé par RTE (ex: 2026-08-09T00:00:00+02:00)
+            start_str = search_start.isoformat()
+            end_str = search_end.isoformat()
+
             params = urllib.parse.urlencode({
-                "start_date": search_start.strftime('%Y-%m-%dT%H:%M:%S%z'),
-                "end_date": search_end.strftime('%Y-%m-%dT%H:%M:%S%z')
+                "start_date": start_str,
+                "end_date": end_str
             })
 
             base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
