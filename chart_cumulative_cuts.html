@@ -43,7 +43,7 @@
             • Only cuts &gt; 30 minutes are taken into account.<br>
             • For reactors with multiple outages on the same day, only the highest outage &gt; 30 minutes is considered.<br>
             • <b>Temperature curve:</b> Displays national average daily temperature (°C) overlaid on top.<br>
-            • <b>Fast loading:</b> Historical data older than 10 days is saved in local memory.
+            • <b>Fast loading:</b> Historical data older than 5 days is saved in local memory.
         </div>
         <div class="controls">
             <button id="btn_generate" onclick="generateChart()">Generate Chart</button>
@@ -147,7 +147,7 @@
 
             const cache = loadCache();
             const now = new Date();
-            const tenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10);
+            const fiveDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5);
 
             let fetchCount = 0;
             const fullResults = [];
@@ -158,10 +158,10 @@
                 
                 progressFill.style.width = `${pct}%`;
 
-                const isOlderThan10Days = dateObj.dt < tenDaysAgo;
+                const isOlderThan5Days = dateObj.dt < fiveDaysAgo;
                 const cachedValue = cache[dateObj.display];
 
-                if (isOlderThan10Days && cachedValue !== undefined && !dateObj.isToday) {
+                if (isOlderThan5Days && cachedValue !== undefined && !dateObj.isToday) {
                     fullResults.push({ dateObj, val: cachedValue.val, temp: cachedValue.temp });
                     statusText.innerText = `Loading from cache: ${dateObj.display}...`;
                 } else {
