@@ -29,66 +29,84 @@ def get_rte_token(client_id, client_secret):
 
 
 # ==============================================================================
-# START OF CALCULATION RULE - DEDUPLICATION & REACTOR AGGREGATION
+# START OF CALCULATION RULE - NUCLEAR & ENVIRONMENTAL DEDUPLICATION RULES
 # ==============================================================================
+def parse_iso_date(dt_str):
+    if not dt_str:
+        return None
+    return datetime.fromisoformat(dt_str).astimezone(PARIS_TZ)
 
-# 1. Regroupement de tous les créneaux par réacteur
-reactors_data = {}
-for item in filtered_items:
-    unit_name = item.get("affected_asset_or_unit_name", "Unknown")
-    installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
-    values = item.get("values", [])
+def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
+    """
+    Returns the maximum unavailable capacity (MW) and its corresponding time interval
+    for a specific timestamp (target_dt) across all values.
+    """
+    active_slots = []
+    for v in values:
+        v_start = parse_iso_date(v.get("start_date"))
+        v_end = parse_iso_date(v.get("end_date"))
+        if v_start and v_end and (v_start <= target_dt < v_end):
+            unavail = v.get("unavailable_capacity")
+            if unavail is None:
+                avail = v.get("available_capacity", installed_cap)
+                unavail = installed_cap - avail
+            unavail = max(0, unavail)
+            active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
+    
+    if active_slots:
+        # Deduplication: retain max unavailable capacity if multiple messages cover target_dt
+        return max(active_slots, key=lambda x: x[0])
+    
+    return 0, None, None
 
-    if unit_name not in reactors_data:
-        reactors_data[unit_name] = {
-            "installed_capacity": installed_cap,
-            "values": []
-        }
-    # On rassemble tous les créneaux horaire associés à ce réacteur
-    reactors_data[unit_name]["values"].extend(values)
+def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
+    """
+    Calculates the retained unavailability for a full day (day_date).
+    Rule applied:
+    Retains the largest unavailability among time slots that last
+    STRICTLY MORE THAN 30 MINUTES (> 30 min) during that day.
+    If no slot lasts strictly more than 30 minutes, returns 0 MW.
+    """
+    day_start = datetime(day_date.year, day_date.month, day_date.day, 0, 0, 0, tzinfo=PARIS_TZ)
+    day_end = day_start + timedelta(days=1)
 
+    eligible_slots = []
 
-# 2. Calcul des indisponibilités par réacteur (dédupliquées)
-list_t1, list_t2 = [], []
-list_max_t1, list_max_t2, list_max_t2_next = [], [], []
+    for v in values:
+        v_start = parse_iso_date(v.get("start_date"))
+        v_end = parse_iso_date(v.get("end_date"))
 
-sum_t1 = sum_t2 = 0
-sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
+        if not v_start or not v_end:
+            continue
 
-for unit_name, r_info in reactors_data.items():
-    installed_cap = r_info["installed_capacity"]
-    values = r_info["values"]
+        # Check overlap with target day
+        overlap_start = max(v_start, day_start)
+        overlap_end = min(v_end, day_end)
 
-    # Instant T1 : on prend le MAX parmi tous les messages couvrant T1 pour CE réacteur
-    unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
-    if unavail_t1 > 0:
-        sum_t1 += unavail_t1
-        list_t1.append({"reactor": unit_name, "unavailability_mw": unavail_t1, "from": f_t1, "to": t_t1})
+        if overlap_start < overlap_end:
+            duration_minutes = (overlap_end - overlap_start).total_seconds() / 60.0
+            
+            unavail = v.get("unavailable_capacity")
+            if unavail is None:
+                avail = v.get("available_capacity", installed_cap)
+                unavail = installed_cap - avail
+            unavail = max(0, unavail)
 
-    # Instant T2 : MAX pour CE réacteur à T2
-    unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap)
-    if unavail_t2 > 0:
-        sum_t2 += unavail_t2
-        list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
+            eligible_slots.append({
+                "unavail": unavail,
+                "duration_minutes": duration_minutes,
+                "start_date": v.get("start_date"),
+                "end_date": v.get("end_date")
+            })
 
-    # Max Jour T1 (> 30 min) pour CE réacteur
-    u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
-    if u_max_t1 > 0:
-        sum_max_t1 += u_max_t1
-        list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
+    # Filter: retain ONLY slots strictly greater than 30 minutes
+    slots_over_30min = [s for s in eligible_slots if s["duration_minutes"] > 30]
 
-    # Max Jour T2 (> 30 min) pour CE réacteur
-    u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
-    if u_max_t2 > 0:
-        sum_max_t2 += u_max_t2
-        list_max_t2.append({"reactor": unit_name, "unavailability_mw": u_max_t2, "from": f_m_t2, "to": t_m_t2})
+    if slots_over_30min:
+        best_slot = max(slots_over_30min, key=lambda x: x["unavail"])
+        return best_slot["unavail"], best_slot["start_date"], best_slot["end_date"]
 
-    # Max Lendemain T2 (> 30 min) pour CE réacteur
-    u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap)
-    if u_max_t2_next > 0:
-        sum_max_t2_next += u_max_t2_next
-        list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
-
+    return 0, None, None
 # ==============================================================================
 # END OF CALCULATION RULE
 # ==============================================================================
@@ -99,7 +117,6 @@ class handler(BaseHTTPRequestHandler):
         try:
             query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             
-            # Read t1 and t2 parameters sent by frontend (ISO format)
             now_paris = datetime.now(PARIS_TZ)
             t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
             t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
@@ -119,7 +136,6 @@ class handler(BaseHTTPRequestHandler):
 
             token = get_rte_token(client_id, client_secret)
 
-            # Query timeframe: from start of min(t1, t2) day to end of day after max(t1, t2)
             min_dt = min(t1_dt, t2_dt)
             max_dt = max(t1_dt, t2_dt)
 
@@ -166,7 +182,21 @@ class handler(BaseHTTPRequestHandler):
                 if has_nuc and has_env:
                     filtered_items.append(item)
 
-            # 3. Perform calculations for T1, T2, Day T1 Max, Day T2 Max, and Next Day T2 Max
+            # 3. Group all values by reactor (affected_asset_or_unit_name) to avoid duplicate additions
+            reactors_data = {}
+            for item in filtered_items:
+                unit_name = item.get("affected_asset_or_unit_name", "Unknown")
+                installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
+                values = item.get("values", [])
+
+                if unit_name not in reactors_data:
+                    reactors_data[unit_name] = {
+                        "installed_capacity": installed_cap,
+                        "values": []
+                    }
+                reactors_data[unit_name]["values"].extend(values)
+
+            # 4. Compute deduplicated values per reactor for T1, T2, Day T1 Max, Day T2 Max, Next Day T2 Max
             day_t1 = t1_dt.date()
             day_t2 = t2_dt.date()
             day_t2_next = day_t2 + timedelta(days=1)
@@ -177,10 +207,9 @@ class handler(BaseHTTPRequestHandler):
             sum_t1 = sum_t2 = 0
             sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
 
-            for item in filtered_items:
-                unit_name = item.get("affected_asset_or_unit_name", "Unknown")
-                installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
-                values = item.get("values", [])
+            for unit_name, r_info in reactors_data.items():
+                installed_cap = r_info["installed_capacity"]
+                values = r_info["values"]
 
                 # T1 Instant
                 unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
@@ -194,13 +223,13 @@ class handler(BaseHTTPRequestHandler):
                     sum_t2 += unavail_t2
                     list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
 
-                # T1 Day Max
+                # Day T1 Max
                 u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
                 if u_max_t1 > 0:
                     sum_max_t1 += u_max_t1
                     list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
 
-                # T2 Day Max
+                # Day T2 Max
                 u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
                 if u_max_t2 > 0:
                     sum_max_t2 += u_max_t2
