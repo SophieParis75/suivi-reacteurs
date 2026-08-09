@@ -170,9 +170,16 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
+        # Exclude cancelled / discarded message statuses
+        active_latest_items = []
+        for item in latest_by_identifier.values():
+            msg_status = str(item.get("message_status") or "").upper()
+            if "CANCEL" not in msg_status and "DISCARD" not in msg_status:
+                active_latest_items.append(item)
+
         # Filter strictly by root word 'environ' and nuclear fuel 'nuc'
         filtered_items = []
-        for item in latest_by_identifier.values():
+        for item in active_latest_items:
             fuel_type = str(item.get("fuel_type") or "").lower()
             remarks = str(item.get("remarks") or "").lower()
             reason = str(item.get("reason") or "").lower()
