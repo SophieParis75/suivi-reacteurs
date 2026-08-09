@@ -21,7 +21,7 @@
         .progress-bar-fill { background: #38bdf8; height: 100%; width: 0%; transition: width 0.2s; }
         .status-text { font-size: 14px; color: #94a3b8; margin-top: 5px; }
         .rules-info { color: #94a3b8; font-size: 14px; margin-bottom: 15px; line-height: 1.5; background: #0f172a; padding: 10px 15px; border-radius: 6px; border: 1px solid #334155; }
-        .chart-container { position: relative; height: 450px; width: 100%; }
+        .chart-container { position: relative; height: 480px; width: 100%; }
     </style>
 </head>
 <body>
@@ -37,7 +37,7 @@
         <div class="rules-info">
             • Only cuts &gt; 30 minutes are taken into account.<br>
             • For reactors with multiple outages on the same day, only the highest outage &gt; 30 minutes is considered.<br>
-            • <b>Dynamic display:</b> Starts on the 1st day of the first month featuring outages and includes current day's forecast/maximum.<br>
+            • <b>Temperature curve:</b> Displays national average daily temperature (°C) overlaid on top.<br>
             • <b>Fast loading:</b> Historical data older than 10 days is saved in local memory.
         </div>
         <div class="controls">
@@ -60,15 +60,14 @@
 
     <script>
         let myChart = null;
-        const CACHE_KEY = "rte_cumulative_cuts_cache_v1";
-        const TOTAL_FLEET_MW = 62990; // Capacité totale installée (62 990 MW)
+        const CACHE_KEY = "rte_cumulative_cuts_cache_v2"; // Clef mise à jour v2
+        const TOTAL_FLEET_MW = 62990;
 
         function getDatesRange() {
             const now = new Date();
             const currentYear = now.getFullYear();
             
             const startDate = new Date(currentYear, 4, 1);
-            // End date is NOW (current day included)
             const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             
             const dates = [];
@@ -78,7 +77,6 @@
                 const day = String(cur.getDate()).padStart(2, '0');
                 const month = String(cur.getMonth() + 1).padStart(2, '0');
                 const year = cur.getFullYear();
-                
                 const isToday = cur.toDateString() === now.toDateString();
 
                 dates.push({
@@ -150,12 +148,11 @@
                 
                 progressFill.style.width = `${pct}%`;
 
-                // Never cache "Today" as it evolves during the day
                 const isOlderThan10Days = dateObj.dt < tenDaysAgo;
                 const cachedValue = cache[dateObj.display];
 
                 if (isOlderThan10Days && cachedValue !== undefined && !dateObj.isToday) {
-                    fullResults.push({ dateObj, val: cachedValue });
+                    fullResults.push({ dateObj, val: cachedValue.val, temp: cachedValue.temp });
                     statusText.innerText = `Loading from cache: ${dateObj.display}...`;
                 } else {
                     fetchCount++;
@@ -166,19 +163,20 @@
                         const data = await res.json();
 
                         let val = 0;
+                        let temp = null;
                         if (data.status === "success") {
                             val = data.summary.t1_day_max_mw || 0;
+                            temp = data.summary.t1_temperature_c;
                         }
 
-                        fullResults.push({ dateObj, val });
+                        fullResults.push({ dateObj, val, temp });
                         
-                        // Don't save Today's value in persistent long-term cache
                         if (!dateObj.isToday) {
-                            cache[dateObj.display] = val;
+                            cache[dateObj.display] = { val, temp };
                         }
                     } catch (err) {
                         console.error("Error fetching date " + dateObj.display, err);
-                        fullResults.push({ dateObj, val: 0 });
+                        fullResults.push({ dateObj, val: 0, temp: null });
                     }
                 }
             }
@@ -201,20 +199,20 @@
 
             const labels = filteredResults.map(item => item.dateObj.display);
             const dataPoints = filteredResults.map(item => item.val);
+            const tempPoints = filteredResults.map(item => item.temp);
             
-            // Highlight the current day's point with a distinct yellow/amber color
             const pointColors = filteredResults.map(item => item.dateObj.isToday ? '#f59e0b' : '#f43f5e');
             const pointRadii = filteredResults.map(item => item.dateObj.isToday ? 6 : 3);
 
             statusText.innerText = "Rendering chart...";
-            renderChart(labels, dataPoints, pointColors, pointRadii);
+            renderChart(labels, dataPoints, tempPoints, pointColors, pointRadii);
             
             chartCard.style.display = 'block';
             btn.disabled = false;
             statusText.innerText = `Analysis complete! (${fetchCount} API calls made, ${dates.length - fetchCount} loaded from cache)`;
         }
 
-        function renderChart(labels, dataPoints, pointColors, pointRadii) {
+        function renderChart(labels, dataPoints, tempPoints, pointColors, pointRadii) {
             const ctx = document.getElementById('cutsChart').getContext('2d');
 
             if (myChart) {
@@ -225,23 +223,44 @@
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Daily Max Environmental Unavailability (MW)',
-                        data: dataPoints,
-                        borderColor: '#f43f5e',
-                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.2,
-                        pointBackgroundColor: pointColors,
-                        pointBorderColor: pointColors,
-                        pointRadius: pointRadii,
-                        pointHoverRadius: 7
-                    }]
+                    datasets: [
+                        {
+                            label: 'National Avg Temperature (°C)',
+                            data: tempPoints,
+                            borderColor: '#38bdf8', // Cyan brillant
+                            backgroundColor: '#38bdf8',
+                            borderWidth: 3,
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 6,
+                            yAxisID: 'yTemp',
+                            order: 1 // S'affiche au-dessus de l'autre courbe
+                        },
+                        {
+                            label: 'Daily Max Environmental Unavailability (MW)',
+                            data: dataPoints,
+                            borderColor: '#f43f5e',
+                            backgroundColor: 'rgba(244, 63, 94, 0.15)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.2,
+                            pointBackgroundColor: pointColors,
+                            pointBorderColor: pointColors,
+                            pointRadius: pointRadii,
+                            pointHoverRadius: 7,
+                            yAxisID: 'y',
+                            order: 2
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             labels: { color: '#f8fafc', font: { size: 14 } }
@@ -249,10 +268,13 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
+                                    if (context.dataset.yAxisID === 'yTemp') {
+                                        return ` Temperature: ${context.parsed.y !== null ? context.parsed.y + ' °C' : 'N/A'}`;
+                                    }
                                     const mw = context.parsed.y || 0;
                                     const percent = ((mw / TOTAL_FLEET_MW) * 100).toFixed(1);
                                     const isToday = context.label.includes('(Today)');
-                                    const prefix = isToday ? ' Today Max (Ongoing/Forecast)' : ' Daily Max';
+                                    const prefix = isToday ? ' Today Max (Ongoing)' : ' Daily Max';
                                     return `${prefix}: ${mw} MW (${percent}% of fleet)`;
                                 }
                             }
@@ -264,12 +286,21 @@
                             ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 }
                         },
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
+                            title: { display: true, text: 'Unavailability (MW)', color: '#f43f5e' },
                             grid: { color: '#334155' },
-                            ticks: { 
-                                color: '#94a3b8',
-                                callback: function(value) { return value + ' MW'; }
-                            }
+                            ticks: { color: '#94a3b8', callback: function(v) { return v + ' MW'; } }
+                        },
+                        yTemp: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Temperature (°C)', color: '#38bdf8' },
+                            grid: { drawOnChartArea: false }, // Évite de surcharger les lignes de grille
+                            ticks: { color: '#38bdf8', callback: function(v) { return v + ' °C'; } }
                         }
                     }
                 }
