@@ -1,14 +1,5 @@
 {
-  "builds": [
-    {
-      "src": "api/rte.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/rte",
-      "dest": "api/rte.py"
-    }
+  "rewrites": [
+    { "source": "/api/rte", "destination": "/api/rte.py" }
   ]
 }
