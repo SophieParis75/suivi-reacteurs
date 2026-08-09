@@ -6,6 +6,8 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
         h1, h2, h3 { color: #38bdf8; }
+        .top-link-box a { color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; }
+        .top-link-box a:hover { text-decoration: underline; }
         .card { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155; }
         .inputs { display: flex; gap: 20px; align-items: center; margin-bottom: 15px; }
         label { font-weight: bold; }
@@ -24,10 +26,12 @@
     </style>
 </head>
 <body>
-<div class="card top-link-box">
+
+    <div class="card top-link-box">
         <h2 style="margin-top: 0; margin-bottom: 10px;">Cumulative Cuts Chart</h2>
         <a href="chart_cumulative_cuts.html" target="_blank">📊 View Cumulative Chart →</a>
     </div>
+
     <h1>Nuclear Environmental Unavailabilities Analysis</h1>
 
     <div class="card">
@@ -214,12 +218,10 @@
                     return;
                 }
 
-                // Extract date-only parts for headings
                 const dateOnlyT1 = t1Raw.split(' ')[0];
                 const dateOnlyT2 = t2Raw.split(' ')[0];
                 const nextDayT2 = getNextDayFormatted(dateOnlyT2);
 
-                // Dynamically update headings and table headers
                 document.getElementById('title_summary_changes').innerText = `Summary of changes between ${t1Raw} and ${t2Raw}`;
                 document.getElementById('title_table_changes').innerText = `Changes between ${t1Raw} and ${t2Raw}`;
                 document.getElementById('th_status_t1').innerText = `Status at ${t1Raw}`;
@@ -232,7 +234,6 @@
 
                 document.getElementById('results').style.display = 'block';
 
-                // 1. KPI Summary
                 const s = data.summary;
                 document.getElementById('kpi_container').innerHTML = `
                     <div class="kpi">
@@ -259,7 +260,6 @@
                     </div>
                 `;
 
-                // 2. Changes Table & Summary
                 const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
                 const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
                 const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
@@ -306,7 +306,6 @@
                 document.getElementById('changes_table_body').innerHTML = changesHtml || `<tr><td colspan='5'>No changes observed between ${t1Raw} and ${t2Raw}.</td></tr>`;
                 document.getElementById('summary_list').innerHTML = summaryHtml || `<li>No changes to report between ${t1Raw} and ${t2Raw}.</li>`;
 
-                // 3. Render all tables
                 fillTable('t1_table_body', data.list_t1);
                 fillTable('t2_table_body', data.list_t2);
                 fillTable('max_t1_table_body', data.list_max_day_t1);
