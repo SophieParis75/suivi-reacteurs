@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/rte", "destination": "/api/rte.py" }
+  ]
+}
