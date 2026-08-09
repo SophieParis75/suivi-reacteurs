@@ -30,7 +30,8 @@
         <div class="rules-info">
             • Only cuts &gt; 30 minutes are taken into account.<br>
             • For reactors with multiple outages on the same day, only the highest outage &gt; 30 minutes is considered.<br>
-            • <b>Fast loading enabled:</b> Historical data older than 10 days is stored in local memory.
+            • <b>Dynamic display:</b> The chart starts on the 1st day of the first month featuring outages.<br>
+            • <b>Fast loading:</b> Historical data older than 10 days is saved in local memory.
         </div>
         <div class="controls">
             <button id="btn_generate" onclick="generateChart()">Generate Chart</button>
@@ -75,7 +76,9 @@
                 dates.push({
                     display: `${day}/${month}/${year}`,
                     iso: `${year}-${month}-${day}T12:00:00`,
-                    dt: new Date(cur)
+                    dt: new Date(cur),
+                    year: year,
+                    month: cur.getMonth() // 0-indexed month
                 });
                 
                 cur.setDate(cur.getDate() + 1);
@@ -119,9 +122,6 @@
             chartCard.style.display = 'none';
 
             const dates = getDatesRange();
-            const labels = [];
-            const dataPoints = [];
-
             if (dates.length === 0) {
                 alert("Current date is before May 1st. No analysis range available yet.");
                 btn.disabled = false;
@@ -133,24 +133,21 @@
             const tenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10);
 
             let fetchCount = 0;
+            const fullResults = []; // Store raw results before filtering
 
             for (let i = 0; i < dates.length; i++) {
                 const dateObj = dates[i];
                 const pct = Math.round(((i + 1) / dates.length) * 100);
                 
                 progressFill.style.width = `${pct}%`;
-                labels.push(dateObj.display);
 
-                // Check if date is in cache and older than 10 days ago
                 const isOlderThan10Days = dateObj.dt < tenDaysAgo;
                 const cachedValue = cache[dateObj.display];
 
                 if (isOlderThan10Days && cachedValue !== undefined) {
-                    // Use cached value instantly without network call
-                    dataPoints.push(cachedValue);
+                    fullResults.push({ dateObj, val: cachedValue });
                     statusText.innerText = `Loading from cache: ${dateObj.display}...`;
                 } else {
-                    // Re-fetch data for the last 10 days or missing dates
                     fetchCount++;
                     statusText.innerText = `Fetching API for ${dateObj.display} (${i + 1}/${dates.length})...`;
 
@@ -163,17 +160,37 @@
                             val = data.summary.t1_day_max_mw || 0;
                         }
 
-                        dataPoints.push(val);
-                        cache[dateObj.display] = val; // Store result in cache
+                        fullResults.push({ dateObj, val });
+                        cache[dateObj.display] = val;
                     } catch (err) {
                         console.error("Error fetching date " + dateObj.display, err);
-                        dataPoints.push(0);
+                        fullResults.push({ dateObj, val: 0 });
                     }
                 }
             }
 
             // Save updated cache
             saveCache(cache);
+
+            // Find the first day with an outage (val > 0)
+            const firstOutageEntry = fullResults.find(item => item.val > 0);
+
+            let filteredResults = fullResults;
+
+            if (firstOutageEntry) {
+                const targetYear = firstOutageEntry.dateObj.year;
+                const targetMonth = firstOutageEntry.dateObj.month;
+
+                // Filter to keep entries starting from day 1 of that month
+                filteredResults = fullResults.filter(item => {
+                    if (item.dateObj.year > targetYear) return true;
+                    if (item.dateObj.year === targetYear && item.dateObj.month >= targetMonth) return true;
+                    return false;
+                });
+            }
+
+            const labels = filteredResults.map(item => item.dateObj.display);
+            const dataPoints = filteredResults.map(item => item.val);
 
             statusText.innerText = "Rendering chart...";
             renderChart(labels, dataPoints);
