@@ -2,27 +2,279 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Test Connexion RTE</title>
+    <title>Analyse des Indisponibilités Nucléaires Environnementales</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
+        h1, h2, h3 { color: #38bdf8; }
+        .card { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155; }
+        .inputs { display: flex; gap: 20px; align-items: center; margin-bottom: 15px; }
+        label { font-weight: bold; }
+        input[type="text"] { padding: 8px 12px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 14px; width: 200px; }
+        button { padding: 10px 24px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 15px; }
+        button:hover { background: #0369a1; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #0f172a; }
+        th, td { border: 1px solid #334155; padding: 10px; text-align: left; font-size: 14px; }
+        th { background: #1e293b; color: #38bdf8; }
+        ul { line-height: 1.6; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
+        .kpi { background: #0f172a; padding: 15px; border-radius: 6px; border-left: 4px solid #0284c7; }
+        .kpi-val { font-size: 20px; font-weight: bold; color: #f43f5e; margin-top: 5px; }
+    </style>
 </head>
-<body style="font-family: monospace; padding: 20px; background: #121212; color: #00ff66;">
-    <h1>Test Connexion API RTE</h1>
-    <button onclick="testRTE()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Lancer le test API</button>
-    
-    <h2>Résultat brut de l'API :</h2>
-    <pre id="output" style="background: #000; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-break: break-all;">Cliquer sur le bouton pour tester...</pre>
+<body>
+
+    <h1>Analyse des Indisponibilités Nucléaires Environnementales</h1>
+
+    <div class="card">
+        <div class="inputs">
+            <div>
+                <label>Date et heure T1 (jj/mm/aaaa hh:mm) :</label><br>
+                <input type="text" id="t1_input" placeholder="15/08/2026 14:30">
+            </div>
+            <div>
+                <label>Date et heure T2 (jj/mm/aaaa hh:mm) :</label><br>
+                <input type="text" id="t2_input" placeholder="15/08/2026 18:00">
+            </div>
+            <div style="margin-top: auto;">
+                <button onclick="runAnalysis()">Analyse</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="results" style="display: none;">
+        <!-- Synthèse globale -->
+        <div class="card">
+            <h2>Synthèse des Cumuls d'Indisponibilité</h2>
+            <div class="kpi-grid" id="kpi_container"></div>
+        </div>
+
+        <!-- Summary of changes -->
+        <div class="card">
+            <h2>Summary of changes between T1 and T2</h2>
+            <ul id="summary_list"></ul>
+        </div>
+
+        <!-- Tableau des changements -->
+        <div class="card">
+            <h2>Changes between T1 and T2</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Reactor</th>
+                        <th>Status at T1</th>
+                        <th>Status at T2</th>
+                        <th>Variation</th>
+                        <th>Evolution Type</th>
+                    </tr>
+                </thead>
+                <tbody id="changes_table_body"></tbody>
+            </table>
+        </div>
+
+        <!-- Réacteurs T1 -->
+        <div class="card">
+            <h2>Réacteurs retenus pour l'indisponibilité à T1</h2>
+            <table>
+                <thead>
+                    <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
+                </thead>
+                <tbody id="t1_table_body"></tbody>
+            </table>
+        </div>
+
+        <!-- Réacteurs T2 -->
+        <div class="card">
+            <h2>Réacteurs retenus pour l'indisponibilité à T2</h2>
+            <table>
+                <thead>
+                    <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
+                </thead>
+                <tbody id="t2_table_body"></tbody>
+            </table>
+        </div>
+
+        <!-- Cumuls Maximums -->
+        <div class="card">
+            <h2>Cumuls Maximums Journaliers</h2>
+            
+            <h3>Cumul maximum de la journée de T1</h3>
+            <table>
+                <thead>
+                    <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
+                </thead>
+                <tbody id="max_t1_table_body"></tbody>
+            </table>
+
+            <h3 style="margin-top: 25px;">Cumul maximum de la journée de T2</h3>
+            <table>
+                <thead>
+                    <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
+                </thead>
+                <tbody id="max_t2_table_body"></tbody>
+            </table>
+
+            <h3 style="margin-top: 25px;">Cumul maximum du lendemain de la journée de T2</h3>
+            <table>
+                <thead>
+                    <tr><th>Reactor</th><th>Unavailability (MW)</th><th>From (Date / Time)</th><th>To (Date / Time)</th></tr>
+                </thead>
+                <tbody id="max_next_t2_table_body"></tbody>
+            </table>
+        </div>
+    </div>
 
     <script>
-        async function testRTE() {
-            const out = document.getElementById('output');
-            out.textContent = "Appel à /api/rte en cours...";
-            try {
-                const res = await fetch('/api/rte');
-                const data = await res.json();
-                out.textContent = JSON.stringify(data, null, 2);
-            } catch (err) {
-                out.textContent = "Erreur de requête client : " + err.message;
-            }
+        function setNowDefaults() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+
+            const formattedNow = `${day}/${month}/${year} ${hours}:${minutes}`;
+            document.getElementById('t1_input').value = formattedNow;
+            document.getElementById('t2_input').value = formattedNow;
         }
+
+        function parseFrenchDateToISO(dateStr) {
+            if (!dateStr || !dateStr.includes(' ')) return null;
+            
+            const [datePart, timePart] = dateStr.trim().split(' ');
+            const dateComponents = datePart.split('/');
+            
+            if (dateComponents.length !== 3) return null;
+            
+            const day = dateComponents[0].padStart(2, '0');
+            const month = dateComponents[1].padStart(2, '0');
+            const year = dateComponents[2];
+            
+            const [hours, minutes] = timePart.split(':');
+            const hh = hours.padStart(2, '0');
+            const mm = (minutes || "00").padStart(2, '0');
+
+            return `${year}-${month}-${day}T${hh}:${mm}:00`;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return "-";
+            const d = new Date(dateStr);
+            return d.toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+        }
+
+        async function runAnalysis() {
+            const t1Raw = document.getElementById('t1_input').value;
+            const t2Raw = document.getElementById('t2_input').value;
+
+            const t1Iso = parseFrenchDateToISO(t1Raw);
+            const t2Iso = parseFrenchDateToISO(t2Raw);
+
+            if (!t1Iso || !t2Iso) {
+                alert("Veuillez saisir les dates au format valide : jj/mm/aaaa hh:mm (ex: 15/08/2026 14:30)");
+                return;
+            }
+
+            const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}`);
+            const data = await res.json();
+
+            if (data.status !== "success") {
+                alert("Erreur lors de l'analyse API RTE : " + JSON.stringify(data));
+                return;
+            }
+
+            document.getElementById('results').style.display = 'block';
+
+            // 1. KPI
+            const s = data.summary;
+            document.getElementById('kpi_container').innerHTML = `
+                <div class="kpi">
+                    <div>Indisponibilité à T1</div>
+                    <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}%)</div>
+                    <small>Max Jour T1 : ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
+                </div>
+                <div class="kpi">
+                    <div>Indisponibilité à T2</div>
+                    <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}%)</div>
+                    <small>Max Jour T2 : ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
+                </div>
+                <div class="kpi">
+                    <div>Max Lendemain de T2</div>
+                    <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}%)</div>
+                </div>
+            `;
+
+            // 2. Changes Table & Summary
+            const t1Map = new Map(data.list_t1.map(r => [r.reactor, r.unavailability_mw]));
+            const t2Map = new Map(data.list_t2.map(r => [r.reactor, r.unavailability_mw]));
+            const allReactors = new Set([...t1Map.keys(), ...t2Map.keys()]);
+
+            let changesHtml = "";
+            let summaryHtml = "";
+
+            allReactors.forEach(reactor => {
+                const mw1 = t1Map.get(reactor) || 0;
+                const mw2 = t2Map.get(reactor) || 0;
+                const diff = mw2 - mw1;
+
+                if (diff !== 0) {
+                    let evo = "";
+                    let summaryText = "";
+
+                    if (mw1 === 0 && mw2 > 0) {
+                        evo = "🚨 Increased restriction / New outage";
+                        summaryText = `<b>${reactor}</b>: New unavailability of ${mw2} MW.`;
+                    } else if (mw1 > 0 && mw2 === 0) {
+                        evo = "✅ Partial or full grid restoration";
+                        summaryText = `<b>${reactor}</b>: Unavailability of ${mw1} MW has ended.`;
+                    } else if (diff > 0) {
+                        evo = "🚨 Increased restriction / New outage";
+                        summaryText = `<b>${reactor}</b>: Unavailability increased by ${diff} MW (from ${mw1} MW to ${mw2} MW).`;
+                    } else {
+                        evo = "✅ Partial or full grid restoration";
+                        summaryText = `<b>${reactor}</b>: Unavailability decreased by ${Math.abs(diff)} MW (from ${mw1} MW to ${mw2} MW).`;
+                    }
+
+                    changesHtml += `
+                        <tr>
+                            <td>${reactor}</td>
+                            <td>${mw1} MW</td>
+                            <td>${mw2} MW</td>
+                            <td>${diff > 0 ? '+' : ''}${diff} MW</td>
+                            <td>${evo}</td>
+                        </tr>
+                    `;
+                    summaryHtml += `<li>${summaryText}</li>`;
+                }
+            });
+
+            document.getElementById('changes_table_body').innerHTML = changesHtml || "<tr><td colspan='5'>No changes observed between T1 and T2.</td></tr>";
+            document.getElementById('summary_list').innerHTML = summaryHtml || "<li>No changes to report between T1 and T2.</li>";
+
+            // 3. Render all tables
+            fillTable('t1_table_body', data.list_t1);
+            fillTable('t2_table_body', data.list_t2);
+            fillTable('max_t1_table_body', data.list_max_day_t1);
+            fillTable('max_t2_table_body', data.list_max_day_t2);
+            fillTable('max_next_t2_table_body', data.list_max_next_day_t2);
+        }
+
+        function fillTable(tbodyId, list) {
+            if (!list || list.length === 0) {
+                document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>Aucun réacteur concerné.</td></tr>";
+                return;
+            }
+            const html = list.map(r => `
+                <tr>
+                    <td>${r.reactor}</td>
+                    <td>${r.unavailability_mw} MW</td>
+                    <td>${formatDate(r.from)}</td>
+                    <td>${formatDate(r.to)}</td>
+                </tr>
+            `).join('');
+            document.getElementById(tbodyId).innerHTML = html;
+        }
+
+        window.onload = setNowDefaults;
     </script>
 </body>
 </html>
