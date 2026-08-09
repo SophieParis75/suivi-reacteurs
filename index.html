@@ -214,20 +214,28 @@
                 // 1. KPI Summary
                 const s = data.summary;
                 document.getElementById('kpi_container').innerHTML = `
-                    <div class="kpi">
-                        <div>Unavailability at ${t1Raw}</div>
-                        <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}%)</div>
-                        <small>Day Max (${dateOnlyT1}): ${s.t1_day_max_mw} MW (${s.t1_day_max_percent}%)</small>
-                    </div>
-                    <div class="kpi">
-                        <div>Unavailability at ${t2Raw}</div>
-                        <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}%)</div>
-                        <small>Day Max (${dateOnlyT2}): ${s.t2_day_max_mw} MW (${s.t2_day_max_percent}%)</small>
-                    </div>
-                    <div class="kpi">
-                        <div>Day After Max (${dateOnlyT2})</div>
-                        <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}%)</div>
-                    </div>
+                  <div class="kpi">
+    <div>Unavailability at ${t1Raw}</div>
+    <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}% of fleet)</div>
+    <div>
+        Day Max:
+        <span class="kpi-val">${s.t1_day_max_mw} MW (${s.t1_day_max_percent}% of fleet)</span>
+    </div>
+</div>
+
+<div class="kpi">
+    <div>Unavailability at ${t2Raw}</div>
+    <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}% of fleet)</div>
+    <div>
+        Day Max:
+        <span class="kpi-val">${s.t2_day_max_mw} MW (${s.t2_day_max_percent}% of fleet)</span>
+    </div>
+</div>
+
+<div class="kpi">
+    <div>Max on Day After (${dateOnlyT2})</div>
+    <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}% of fleet)</div>
+</div>
                 `;
 
                 // 2. Changes Table & Summary
