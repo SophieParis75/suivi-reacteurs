@@ -13,6 +13,8 @@
         button { padding: 10px 24px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 15px; }
         button:hover { background: #0369a1; }
         button:disabled { background: #475569; cursor: not-allowed; }
+        .btn-clear { background: #64748b; margin-left: auto; }
+        .btn-clear:hover { background: #475569; }
         .progress-bar-bg { background: #0f172a; border-radius: 4px; height: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #334155; }
         .progress-bar-fill { background: #38bdf8; height: 100%; width: 0%; transition: width 0.2s; }
         .status-text { font-size: 14px; color: #94a3b8; margin-top: 5px; }
@@ -21,16 +23,23 @@
     </style>
 </head>
 <body>
+<div class="card top-link-box">
+        <h2 style="margin-top: 0; margin-bottom: 10px;">Nuclear Environmental Unavailabilities Analysis</h2>
+        <a href="https://suivi-reacteurs.vercel.app/" target="_blank">View CNuclear Environmental Unavailabilities Analysis →</a>
+    </div>
 
     <h1>Cumulative Nuclear Environmental Unavailabilities</h1>
 
     <div class="card">
         <div class="rules-info">
             • Only cuts &gt; 30 minutes are taken into account.<br>
-            • For reactors with multiple outages on the same day, only the highest outage &gt; 30 minutes is considered.
+            • For reactors with multiple outages on the same day, only the highest outage &gt; 30 minutes is considered.<br>
+            • <b>Dynamic display:</b> The chart starts on the 1st day of the first month featuring outages.<br>
+            • <b>Fast loading:</b> Historical data older than 10 days is saved in local memory.
         </div>
         <div class="controls">
             <button id="btn_generate" onclick="generateChart()">Generate Chart</button>
+            <button class="btn-clear" onclick="clearCache()">Clear Cache</button>
         </div>
         <div id="progress_container" style="display: none;">
             <div class="status-text" id="status_text">Preparing analysis...</div>
@@ -48,13 +57,14 @@
 
     <script>
         let myChart = null;
+        const CACHE_KEY = "rte_cumulative_cuts_cache_v1";
 
         function getDatesRange() {
             const now = new Date();
             const currentYear = now.getFullYear();
             
             // Start: May 1st of current year at 12:00
-            const startDate = new Date(currentYear, 4, 1); // Month 4 is May
+            const startDate = new Date(currentYear, 4, 1);
             
             // End: Yesterday at 12:00
             const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -67,16 +77,41 @@
                 const month = String(cur.getMonth() + 1).padStart(2, '0');
                 const year = cur.getFullYear();
                 
-                // Format dd/mm/yyyy 12:00
                 dates.push({
                     display: `${day}/${month}/${year}`,
-                    iso: `${year}-${month}-${day}T12:00:00`
+                    iso: `${year}-${month}-${day}T12:00:00`,
+                    dt: new Date(cur),
+                    year: year,
+                    month: cur.getMonth() // 0-indexed month
                 });
                 
                 cur.setDate(cur.getDate() + 1);
             }
 
             return dates;
+        }
+
+        function loadCache() {
+            try {
+                const raw = localStorage.getItem(CACHE_KEY);
+                return raw ? JSON.parse(raw) : {};
+            } catch (e) {
+                console.error("Cache read error", e);
+                return {};
+            }
+        }
+
+        function saveCache(cacheData) {
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+            } catch (e) {
+                console.error("Cache write error", e);
+            }
+        }
+
+        function clearCache() {
+            localStorage.removeItem(CACHE_KEY);
+            alert("Local cache cleared. The next execution will re-fetch all historical data.");
         }
 
         async function generateChart() {
@@ -91,48 +126,82 @@
             chartCard.style.display = 'none';
 
             const dates = getDatesRange();
-            const labels = [];
-            const dataPoints = [];
-
             if (dates.length === 0) {
                 alert("Current date is before May 1st. No analysis range available yet.");
                 btn.disabled = false;
                 return;
             }
 
+            const cache = loadCache();
+            const now = new Date();
+            const tenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10);
+
+            let fetchCount = 0;
+            const fullResults = []; // Store raw results before filtering
+
             for (let i = 0; i < dates.length; i++) {
                 const dateObj = dates[i];
                 const pct = Math.round(((i + 1) / dates.length) * 100);
                 
                 progressFill.style.width = `${pct}%`;
-                statusText.innerText = `Fetching data for ${dateObj.display} (${i + 1}/${dates.length})...`;
 
-                try {
-                    // Call api/rte setting T1 = T2 = date at 12:00
-                    const res = await fetch(`/api/rte?t1=${encodeURIComponent(dateObj.iso)}&t2=${encodeURIComponent(dateObj.iso)}`);
-                    const data = await res.json();
+                const isOlderThan10Days = dateObj.dt < tenDaysAgo;
+                const cachedValue = cache[dateObj.display];
 
-                    labels.push(dateObj.display);
+                if (isOlderThan10Days && cachedValue !== undefined) {
+                    fullResults.push({ dateObj, val: cachedValue });
+                    statusText.innerText = `Loading from cache: ${dateObj.display}...`;
+                } else {
+                    fetchCount++;
+                    statusText.innerText = `Fetching API for ${dateObj.display} (${i + 1}/${dates.length})...`;
 
-                    if (data.status === "success") {
-                        // Takes the daily cumulative maximum in MW (> 30 min and highest per reactor)
-                        dataPoints.push(data.summary.t1_day_max_mw || 0);
-                    } else {
-                        dataPoints.push(0);
+                    try {
+                        const res = await fetch(`/api/rte?t1=${encodeURIComponent(dateObj.iso)}&t2=${encodeURIComponent(dateObj.iso)}`);
+                        const data = await res.json();
+
+                        let val = 0;
+                        if (data.status === "success") {
+                            val = data.summary.t1_day_max_mw || 0;
+                        }
+
+                        fullResults.push({ dateObj, val });
+                        cache[dateObj.display] = val;
+                    } catch (err) {
+                        console.error("Error fetching date " + dateObj.display, err);
+                        fullResults.push({ dateObj, val: 0 });
                     }
-                } catch (err) {
-                    console.error("Error fetching date " + dateObj.display, err);
-                    labels.push(dateObj.display);
-                    dataPoints.push(0);
                 }
             }
+
+            // Save updated cache
+            saveCache(cache);
+
+            // Find the first day with an outage (val > 0)
+            const firstOutageEntry = fullResults.find(item => item.val > 0);
+
+            let filteredResults = fullResults;
+
+            if (firstOutageEntry) {
+                const targetYear = firstOutageEntry.dateObj.year;
+                const targetMonth = firstOutageEntry.dateObj.month;
+
+                // Filter to keep entries starting from day 1 of that month
+                filteredResults = fullResults.filter(item => {
+                    if (item.dateObj.year > targetYear) return true;
+                    if (item.dateObj.year === targetYear && item.dateObj.month >= targetMonth) return true;
+                    return false;
+                });
+            }
+
+            const labels = filteredResults.map(item => item.dateObj.display);
+            const dataPoints = filteredResults.map(item => item.val);
 
             statusText.innerText = "Rendering chart...";
             renderChart(labels, dataPoints);
             
             chartCard.style.display = 'block';
             btn.disabled = false;
-            statusText.innerText = "Analysis complete!";
+            statusText.innerText = `Analysis complete! (${fetchCount} API calls made, ${dates.length - fetchCount} loaded from cache)`;
         }
 
         function renderChart(labels, dataPoints) {
