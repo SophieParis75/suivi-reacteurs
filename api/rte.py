@@ -82,14 +82,16 @@ def compute_slot_unavailability(v, installed_cap):
     return max(0, float(unavail))
 
 def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
+    target_ts = target_dt.timestamp()
     active_slots = []
     for v in values:
         v_start = parse_iso_date(v.get("start_date"))
         v_end = parse_iso_date(v.get("end_date"))
-        if v_start and v_end and (v_start <= target_dt < v_end):
-            unavail = compute_slot_unavailability(v, installed_cap)
-            if unavail > 0:
-                active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
+        if v_start and v_end:
+            if v_start.timestamp() <= target_ts < v_end.timestamp():
+                unavail = compute_slot_unavailability(v, installed_cap)
+                if unavail > 0:
+                    active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
     
     if active_slots:
         return max(active_slots, key=lambda x: x[0])
@@ -100,6 +102,9 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
     day_start = datetime(day_date.year, day_date.month, day_date.day, 0, 0, 0, tzinfo=PARIS_TZ)
     day_end = day_start + timedelta(days=1)
 
+    start_ts = day_start.timestamp()
+    end_ts = day_end.timestamp()
+
     eligible_slots = []
 
     for v in values:
@@ -109,17 +114,21 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
         if not v_start or not v_end:
             continue
 
-        overlap_start = max(v_start, day_start)
-        overlap_end = min(v_end, day_end)
+        v_start_ts = v_start.timestamp()
+        v_end_ts = v_end.timestamp()
 
-        if overlap_start <= overlap_end:
-            duration_minutes = (overlap_end - overlap_start).total_seconds() / 60.0
+        # Chevauchement en secondes via horodatages Unix
+        o_start = max(v_start_ts, start_ts)
+        o_end = min(v_end_ts, end_ts)
+
+        overlap_seconds = o_end - o_start
+
+        if overlap_seconds >= 1800: # Plus de 30 minutes (1800 sec)
             unavail = compute_slot_unavailability(v, installed_cap)
-
-            if unavail > 0 and duration_minutes >= 30:
+            if unavail > 0:
                 eligible_slots.append({
                     "unavail": unavail,
-                    "duration_minutes": duration_minutes,
+                    "overlap_seconds": overlap_seconds,
                     "start_date": v.get("start_date"),
                     "end_date": v.get("end_date")
                 })
@@ -198,6 +207,7 @@ def app(environ, start_response):
             else:
                 next_url = None
 
+        # 1. Déduplication par identifiant unique
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -206,6 +216,7 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
+        # 2. Filtrage strict : Exclure les annulations et garder uniquement les messages avec 'environ'
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
