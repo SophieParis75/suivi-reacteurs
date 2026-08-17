@@ -10,13 +10,38 @@
             font-family: 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f8f9fa;
+            background-color: #E6EAEB;
             color: #333;
             max-width: 1200px;
             margin: 20px auto;
         }
+        
+        /* Navigation / Navigation bar */
+        .nav-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .nav-btn {
+            background-color: #ffffff;
+            color: #01796E;
+            border: 1px solid #01796E;
+            padding: 8px 14px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .nav-btn:hover {
+            background-color: #01796E;
+            color: white;
+        }
+
         h2 {
-            color: #2c3e50;
+            color: #01796E;
             font-size: 1.25rem;
             margin-bottom: 20px;
             text-align: left;
@@ -27,7 +52,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             margin-bottom: 25px;
-            border-left: 5px solid #0056b3;
+            border-left: 5px solid #01796E;
         }
         .step {
             margin-bottom: 15px;
@@ -51,7 +76,7 @@
             font-size: 14px;
         }
         .url-link {
-            color: #0056b3;
+            color: #01796E;
             font-family: monospace;
             font-size: 14px;
             word-break: break-all;
@@ -59,12 +84,12 @@
             margin-top: 5px;
         }
         .url-link:hover {
-            color: #003d7a;
+            color: #016D63;
             text-decoration: underline;
         }
         button {
             padding: 10px 20px;
-            background: #0056b3;
+            background: #01796E;
             color: white;
             border: none;
             border-radius: 4px;
@@ -74,10 +99,10 @@
             margin-top: 10px;
         }
         button:hover {
-            background: #003d7a;
+            background: #016D63;
         }
         .container {
-            background: #fff;
+            background: #E6EAEB;
             padding: 25px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             border-radius: 8px;
@@ -87,11 +112,12 @@
             height: 550px;
             width: 100%;
             margin-top: 20px;
+            background-color: #E6EAEB;
         }
         .status {
             margin-top: 15px;
             font-family: monospace;
-            background: #f1f3f5;
+            background: #ffffff;
             padding: 10px;
             border-radius: 4px;
             color: #d9534f;
@@ -102,12 +128,18 @@
 </head>
 <body>
 
+    <!-- Barre de retour vers l'index et l'autre graphique -->
+    <div class="nav-bar">
+        <a href="index.html" class="nav-btn">← Back to Dashboard</a>
+        <a href="chart_cumulative_cuts.html" class="nav-btn">📊 Cumulative Cuts Chart</a>
+    </div>
+
     <div class="container">
         <h2>Climate outages: history of cumulative losses</h2>
 
         <div class="config-box">
             <div class="step">
-                <label>1. Download full EDF CSV file from this address (the file must be over 110 Mo):</label>
+                <label>1. Download full EDF CSV file from this address (the file must be over 110 MB):</label>
                 <a href="https://doaat.edf.fr/en/doaat/export/full/csv" target="_blank" class="url-link">https://doaat.edf.fr/en/doaat/export/full/csv</a>
             </div>
             
@@ -222,7 +254,7 @@
                 const fullLine = cols.join(' ').toLowerCase();
 
                 const isNuclear = fullLine.includes('nucl');
-                const isEnvironmental = fullLine.includes('environ') || fullLine.includes('climat') || fullLine.includes('temperature') || fullLine.includes('chaleur') || fullLine.includes('externes');
+                const isEnvironmental = fullLine.includes('environ');
 
                 if (isNuclear && isEnvironmental && startStr && stopStr) {
                     let startDate = parseDateEDF(startStr);
@@ -326,8 +358,8 @@
                 datasets.push({
                     label: year,
                     data: cumulativeData,
-                    borderColor: isCurrentYear ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
-                    backgroundColor: isCurrentYear ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
+                    borderColor: isCurrentYear ? '#FFA824' : '#016D63',
+                    backgroundColor: isCurrentYear ? '#FFA824' : '#016D63',
                     borderWidth: isCurrentYear ? 3 : 1.5,
                     pointRadius: 0,
                     tension: 0.2,
@@ -352,17 +384,23 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            title: { display: true, text: 'Date', font: { style: 'italic' } },
+                            title: { 
+                                display: true, 
+                                text: 'Date', 
+                                color: '#01796E', 
+                                font: { style: 'italic' } 
+                            },
                             grid: {
                                 color: function(context) {
                                     let label = context.chart.data.labels[context.index];
                                     if (label && label.startsWith('1/')) {
-                                        return '#e0e0e0';
+                                        return '#01796E22';
                                     }
                                     return 'transparent';
                                 }
                             },
                             ticks: {
+                                color: '#01796E',
                                 autoSkip: false,
                                 callback: function(val) {
                                     let lbl = this.getLabelForValue(val);
@@ -372,10 +410,16 @@
                             }
                         },
                         y: {
-                            title: { display: true, text: 'Cumulative losses (GWh)', font: { style: 'italic' } },
+                            title: { 
+                                display: true, 
+                                text: 'Cumulative losses (GWh)', 
+                                color: '#01796E', 
+                                font: { style: 'italic' } 
+                            },
                             beginAtZero: true,
-                            grid: { color: '#e0e0e0' },
+                            grid: { color: '#01796E22' },
                             ticks: {
+                                color: '#01796E',
                                 stepSize: 1000
                             }
                         }
@@ -410,6 +454,7 @@
                             position: 'top',
                             align: 'start',
                             labels: {
+                                color: '#01796E',
                                 boxWidth: 25,
                                 boxHeight: 12,
                                 filter: function(item, chartData) {
@@ -422,16 +467,16 @@
                                     return [
                                         {
                                             text: 'History',
-                                            fillStyle: 'rgba(180, 180, 180, 0.7)',
-                                            strokeStyle: 'rgba(180, 180, 180, 0.7)',
+                                            fillStyle: '#016D63',
+                                            strokeStyle: '#016D63',
                                             lineWidth: 3,
                                             hidden: false,
                                             datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'history')
                                         },
                                         {
                                             text: 'Current year',
-                                            fillStyle: '#ff0000',
-                                            strokeStyle: '#ff0000',
+                                            fillStyle: '#FFA824',
+                                            strokeStyle: '#FFA824',
                                             lineWidth: 3,
                                             hidden: false,
                                             datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'current')
