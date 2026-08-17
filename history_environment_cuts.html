@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Historique - Pertes Climatiques Cumulées</title>
+    <title>History - Cumulative Climate Outages</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -50,19 +50,17 @@
             border-radius: 4px;
             font-size: 14px;
         }
-        .btn-link {
-            background: #6c757d;
-            color: white;
-            text-decoration: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: bold;
+        .url-link {
+            color: #0056b3;
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
             display: inline-block;
             margin-top: 5px;
         }
-        .btn-link:hover {
-            background: #5a6268;
+        .url-link:hover {
+            color: #003d7a;
+            text-decoration: underline;
         }
         button {
             padding: 10px 20px;
@@ -105,20 +103,20 @@
 <body>
 
     <div class="container">
-        <h2>Indisponibilités climatiques : historique des pertes cumulées</h2>
+        <h2>Climate outages: history of cumulative losses</h2>
 
         <div class="config-box">
             <div class="step">
-                <label>1. Télécharger le fichier CSV complet d'EDF :</label>
-                <a href="https://doaat.edf.fr/en/doaat/export/full/csv?t=1784616949" target="_blank" class="btn-link">⬇️ Télécharger le CSV (Clic droit ; Enregistrer le lien sous...)</a>
+                <label>1. Download full EDF CSV file from this address (the file must be over 110 Mo):</label>
+                <a href="https://doaat.edf.fr/en/doaat/export/full/csv" target="_blank" class="url-link">https://doaat.edf.fr/en/doaat/export/full/csv</a>
             </div>
             
             <div class="step">
-                <label for="fichierCsv">2. Charger le fichier CSV téléchargé :</label>
-                <input type="file" id="fichierCsv" accept=".csv">
-                <button onclick="chargerCsvHistorique()">Générer le graphique comparatif</button>
+                <label for="csvFile">2. Load downloaded CSV file:</label>
+                <input type="file" id="csvFile" accept=".csv">
+                <button onclick="loadCsvHistory()">Generate comparison chart</button>
             </div>
-            <div id="status" class="status">En attente du chargement du fichier CSV...</div>
+            <div id="status" class="status">Waiting for CSV file upload...</div>
         </div>
 
         <div class="chart-container">
@@ -129,49 +127,49 @@
     <script>
         let myChartInstance = null;
 
-        function chargerCsvHistorique() {
-            const fileInput = document.getElementById('fichierCsv');
+        function loadCsvHistory() {
+            const fileInput = document.getElementById('csvFile');
             const statusEl = document.getElementById('status');
 
             if (fileInput.files.length === 0) {
-                alert("Veuillez sélectionner le fichier CSV d'EDF.");
+                alert("Please select the EDF CSV file.");
                 return;
             }
 
             statusEl.style.color = "#333";
-            statusEl.textContent = "Lecture et analyse du fichier en cours...";
+            statusEl.textContent = "Reading and analyzing file...";
             
             const file = fileInput.files[0];
             const reader = new FileReader();
 
             reader.onload = function(e) {
                 try {
-                    analyserEtTracerCumul(e.target.result);
+                    analyzeAndPlotCumulative(e.target.result);
                     statusEl.style.color = "#28a745";
-                    statusEl.textContent = "Succès : Graphique généré avec succès.";
+                    statusEl.textContent = "Success: Chart successfully generated.";
                 } catch (err) {
                     statusEl.style.color = "#d9534f";
-                    statusEl.textContent = "Erreur détectée :\n" + err.message;
+                    statusEl.textContent = "Error detected:\n" + err.message;
                     console.error(err);
                 }
             };
             reader.readAsText(file, 'ISO-8859-1');
         }
 
-        function analyserEtTracerCumul(csvText) {
-            const textePropre = csvText.replace(/^\uFEFF/, '');
-            const lignes = textePropre.split(/\r\n|\n/).filter(l => l.trim() !== '');
+        function analyzeAndPlotCumulative(csvText) {
+            const cleanText = csvText.replace(/^\uFEFF/, '');
+            const lines = cleanText.split(/\r\n|\n/).filter(l => l.trim() !== '');
             
-            if (lignes.length < 3) throw new Error("Le fichier CSV est trop court ou vide.");
+            if (lines.length < 3) throw new Error("CSV file is too short or empty.");
 
-            const indexLigneEntetes = 1;
-            const idxStatus = 0;     // Colonne Statut ("Active", "Cancelled", etc.)
-            const idxIdMsg = 1;      // Colonne Id Message
-            const idxVersion = 2;    // Colonne Version
-            const idxStart = 5;      // Colonne Date début
-            const idxStop = 6;       // Colonne Date fin
-            const idxPMax = 10;      // Colonne Pmax
-            const idxPDispo = 11;    // Colonne Pdispo
+            const headerRowIndex = 1;
+            const idxStatus = 0;     // Status column ("Active", "Cancelled", etc.)
+            const idxIdMsg = 1;      // Message ID column
+            const idxVersion = 2;    // Version column
+            const idxStart = 5;      // Start date column
+            const idxStop = 6;       // End date column
+            const idxPMax = 10;      // Pmax column
+            const idxPDispo = 11;    // Pdispo column
 
             let parseDateEDF = (str) => {
                 let parts = str.split(' ');
@@ -185,12 +183,12 @@
             };
 
             // =========================================================================
-            // ÉTAPE 1 : IDENTIFIER LA DERNIÈRE VERSION DE CHAQUE MESSAGE REMIT
+            // STEP 1: IDENTIFY LATEST VERSION OF EACH REMIT MESSAGE
             // =========================================================================
-            let mapDerniereVersion = new Map();
+            let latestVersionMap = new Map();
 
-            for (let i = indexLigneEntetes + 1; i < lignes.length; i++) {
-                const cols = lignes[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
+            for (let i = headerRowIndex + 1; i < lines.length; i++) {
+                const cols = lines[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
                 if (cols.length <= idxStop) continue;
 
                 const startStr = cols[idxStart] || '';
@@ -198,8 +196,8 @@
                 const msgId = (cols[idxIdMsg] && cols[idxIdMsg].length > 3) ? cols[idxIdMsg] : `${cols[3] || 'UNIT'}_${startStr}_${stopStr}`;
                 const version = parseInt(cols[idxVersion]) || 1;
 
-                if (!mapDerniereVersion.has(msgId) || version > mapDerniereVersion.get(msgId).version) {
-                    mapDerniereVersion.set(msgId, {
+                if (!latestVersionMap.has(msgId) || version > latestVersionMap.get(msgId).version) {
+                    latestVersionMap.set(msgId, {
                         version: version,
                         cols: cols
                     });
@@ -207,11 +205,11 @@
             }
 
             // =========================================================================
-            // ÉTAPE 2 : FILTRER UNIQUEMENT LES DERNIÈRES VERSIONS ACTIVES & ENVIRONNEMENTALES
+            // STEP 2: FILTER ONLY LATEST ACTIVE & ENVIRONMENTAL VERSIONS
             // =========================================================================
-            let evenementsEnv = [];
+            let envEvents = [];
 
-            for (let item of mapDerniereVersion.values()) {
+            for (let item of latestVersionMap.values()) {
                 const cols = item.cols;
                 const statusStr = (cols[idxStatus] || '').toLowerCase();
 
@@ -221,16 +219,16 @@
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
-                const ligneComplete = cols.join(' ').toLowerCase();
+                const fullLine = cols.join(' ').toLowerCase();
 
-                const estNucleaire = ligneComplete.includes('nucl');
-                const estEnvironnement = ligneComplete.includes('environ') || ligneComplete.includes('climat') || ligneComplete.includes('temperature') || ligneComplete.includes('chaleur') || ligneComplete.includes('externes');
+                const isNuclear = fullLine.includes('nucl');
+                const isEnvironmental = fullLine.includes('environ') || fullLine.includes('climat') || fullLine.includes('temperature') || fullLine.includes('chaleur') || fullLine.includes('externes');
 
-                if (estNucleaire && estEnvironnement && startStr && stopStr) {
-                    let dDebut = parseDateEDF(startStr);
-                    let dFin = parseDateEDF(stopStr);
+                if (isNuclear && isEnvironmental && startStr && stopStr) {
+                    let startDate = parseDateEDF(startStr);
+                    let endDate = parseDateEDF(stopStr);
 
-                    if (!isNaN(dDebut) && !isNaN(dFin) && dFin > dDebut) {
+                    if (!isNaN(startDate) && !isNaN(endDate) && endDate > startDate) {
                         let pMax = parseFloat((cols[idxPMax] || '').replace(',', '.')) || 0;
                         let pDispo = parseFloat((cols[idxPDispo] || '').replace(',', '.')) || 0;
                         let unavailMW = pMax - pDispo;
@@ -239,45 +237,45 @@
                             unavailMW = 900;
                         }
 
-                        evenementsEnv.push({
-                            dateDebut: dDebut,
-                            dateFin: dFin,
+                        envEvents.push({
+                            dateStart: startDate,
+                            dateEnd: endDate,
                             unavailableMW: unavailMW
                         });
                     }
                 }
             }
 
-            if (evenementsEnv.length === 0) {
-                throw new Error("Aucun événement actif 'nucl' lié à l'environnement n'a été isolé.");
+            if (envEvents.length === 0) {
+                throw new Error("No active 'nuclear' environmental event found.");
             }
 
             // =========================================================================
-            // ÉTAPE 3 : CALCUL HEURE PAR HEURE & GRILLE TEMPORELLE
+            // STEP 3: HOURLY CALCULATION & TIME GRID
             // =========================================================================
-            let labelsJours = [];
+            let dayLabels = [];
             let displayLabels = [];
-            let refDate = new Date(2024, 4, 1);   // 1er Mai
-            let endDate = new Date(2024, 10, 15); // 15 Novembre
+            let refDate = new Date(2024, 4, 1);   // May 1st
+            let maxDate = new Date(2024, 10, 15); // November 15th
 
-            let mapJourIndex = {};
+            let dayIndexMap = {};
             let idxCounter = 0;
-            while (refDate <= endDate) {
+            while (refDate <= maxDate) {
                 let m = refDate.getMonth() + 1;
                 let d = refDate.getDate();
                 let mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                labelsJours.push(mmdd);
+                dayLabels.push(mmdd);
                 displayLabels.push(`${d}/${m}`);
-                mapJourIndex[mmdd] = idxCounter++;
+                dayIndexMap[mmdd] = idxCounter++;
                 refDate.setDate(refDate.getDate() + 1);
             }
 
-            let dataParAnnee = {};
-            const anneeEnCours = new Date().getFullYear().toString();
+            let dataByYear = {};
+            const currentYear = new Date().getFullYear().toString();
 
-            evenementsEnv.forEach(ev => {
-                let start = new Date(ev.dateDebut);
-                let stop = new Date(ev.dateFin);
+            envEvents.forEach(ev => {
+                let start = new Date(ev.dateStart);
+                let stop = new Date(ev.dateEnd);
 
                 let currDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
                 let lastDay = new Date(stop.getFullYear(), stop.getMonth(), stop.getDate());
@@ -288,7 +286,7 @@
                     let d = String(currDay.getDate()).padStart(2, '0');
                     let mmdd = `${m}-${d}`;
 
-                    if (mapJourIndex[mmdd] !== undefined) {
+                    if (dayIndexMap[mmdd] !== undefined) {
                         let dayStart = new Date(currDay.getFullYear(), currDay.getMonth(), currDay.getDate(), 0, 0, 0);
                         let dayEnd = new Date(currDay.getFullYear(), currDay.getMonth(), currDay.getDate() + 1, 0, 0, 0);
 
@@ -298,12 +296,12 @@
                         if (actualEnd > actualStart) {
                             let durationHours = (actualEnd - actualStart) / (1000 * 60 * 60);
 
-                            if (!dataParAnnee[y]) {
-                                dataParAnnee[y] = new Array(labelsJours.length).fill(0);
+                            if (!dataByYear[y]) {
+                                dataByYear[y] = new Array(dayLabels.length).fill(0);
                             }
 
-                            let energieGWh = (ev.unavailableMW * durationHours) / 1000;
-                            dataParAnnee[y][mapJourIndex[mmdd]] += energieGWh;
+                            let energyGWh = (ev.unavailableMW * durationHours) / 1000;
+                            dataByYear[y][dayIndexMap[mmdd]] += energyGWh;
                         }
                     }
                     currDay.setDate(currDay.getDate() + 1);
@@ -311,30 +309,30 @@
             });
 
             // =========================================================================
-            // ÉTAPE 4 : PRÉPARATION DES SÉRIES POUR CHART.JS
+            // STEP 4: PREPARE SERIES FOR CHART.JS
             // =========================================================================
             let datasets = [];
-            let anneesDisponibles = Object.keys(dataParAnnee).sort();
+            let availableYears = Object.keys(dataByYear).sort();
 
-            anneesDisponibles.forEach(annee => {
+            availableYears.forEach(year => {
                 let cumul = 0;
-                let dataCumulee = dataParAnnee[annee].map(val => {
+                let cumulativeData = dataByYear[year].map(val => {
                     cumul += val;
                     return Number(cumul.toFixed(1));
                 });
 
-                let estAnneeEnCours = (annee === anneeEnCours);
+                let isCurrentYear = (year === currentYear);
 
                 datasets.push({
-                    label: annee,
-                    data: dataCumulee,
-                    borderColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
-                    backgroundColor: estAnneeEnCours ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
-                    borderWidth: estAnneeEnCours ? 3 : 1.5,
+                    label: year,
+                    data: cumulativeData,
+                    borderColor: isCurrentYear ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
+                    backgroundColor: isCurrentYear ? '#ff0000' : 'rgba(180, 180, 180, 0.7)',
+                    borderWidth: isCurrentYear ? 3 : 1.5,
                     pointRadius: 0,
                     tension: 0.2,
-                    legendGroup: estAnneeEnCours ? 'current' : 'history',
-                    order: estAnneeEnCours ? 1 : 2
+                    legendGroup: isCurrentYear ? 'current' : 'history',
+                    order: isCurrentYear ? 1 : 2
                 });
             });
 
@@ -374,7 +372,7 @@
                             }
                         },
                         y: {
-                            title: { display: true, text: 'Pertes cumulées (GWh)', font: { style: 'italic' } },
+                            title: { display: true, text: 'Cumulative losses (GWh)', font: { style: 'italic' } },
                             beginAtZero: true,
                             grid: { color: '#e0e0e0' },
                             ticks: {
@@ -386,14 +384,13 @@
                         tooltip: {
                             mode: 'index',
                             intersect: false,
-                            // TRI DÉCROISSANT DES ANNÉES DANS L'INFO-BULLE (ex: 2026, 2025, 2024...)
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
                             callbacks: {
                                 title: function(tooltipItems) {
                                     if (tooltipItems.length > 0) {
-                                        return `Situation au ${tooltipItems[0].label}`;
+                                        return `Status as of ${tooltipItems[0].label}`;
                                     }
                                     return '';
                                 },
@@ -424,7 +421,7 @@
                                 generateLabels: function(chart) {
                                     return [
                                         {
-                                            text: 'Historique',
+                                            text: 'History',
                                             fillStyle: 'rgba(180, 180, 180, 0.7)',
                                             strokeStyle: 'rgba(180, 180, 180, 0.7)',
                                             lineWidth: 3,
@@ -432,7 +429,7 @@
                                             datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'history')
                                         },
                                         {
-                                            text: 'Année en cours',
+                                            text: 'Current year',
                                             fillStyle: '#ff0000',
                                             strokeStyle: '#ff0000',
                                             lineWidth: 3,
