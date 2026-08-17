@@ -104,7 +104,7 @@
         .container {
             background: #E6EAEB;
             padding: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             border-radius: 8px;
         }
         .chart-container {
@@ -112,6 +112,9 @@
             height: 550px;
             width: 100%;
             margin-top: 20px;
+            background-color: #E6EAEB;
+        }
+        canvas#envChart {
             background-color: #E6EAEB;
         }
         .status {
@@ -158,6 +161,19 @@
 
     <script>
         let myChartInstance = null;
+
+        // Plugin Canvas pour appliquer le fond #E6EAEB
+        const backgroundColorPlugin = {
+            id: 'customCanvasBackgroundColor',
+            beforeDraw: (chart) => {
+                const {ctx} = chart;
+                ctx.save();
+                ctx.globalCompositeOperation = 'destination-over';
+                ctx.fillStyle = '#E6EAEB';
+                ctx.fillRect(0, 0, chart.width, chart.height);
+                ctx.restore();
+            }
+        };
 
         function loadCsvHistory() {
             const fileInput = document.getElementById('csvFile');
@@ -353,7 +369,7 @@
                     return Number(cumul.toFixed(1));
                 });
 
-                let isCurrentYear = (year === currentYear);
+                let isCurrentYear = (year === currentYear || year === '2026');
 
                 datasets.push({
                     label: year,
@@ -379,6 +395,7 @@
                     labels: displayLabels,
                     datasets: datasets
                 },
+                plugins: [backgroundColorPlugin],
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -388,13 +405,13 @@
                                 display: true, 
                                 text: 'Date', 
                                 color: '#01796E', 
-                                font: { style: 'italic' } 
+                                font: { style: 'italic', weight: 'bold' } 
                             },
                             grid: {
                                 color: function(context) {
                                     let label = context.chart.data.labels[context.index];
                                     if (label && label.startsWith('1/')) {
-                                        return '#01796E22';
+                                        return '#01796E33';
                                     }
                                     return 'transparent';
                                 }
@@ -414,10 +431,10 @@
                                 display: true, 
                                 text: 'Cumulative losses (GWh)', 
                                 color: '#01796E', 
-                                font: { style: 'italic' } 
+                                font: { style: 'italic', weight: 'bold' } 
                             },
                             beginAtZero: true,
-                            grid: { color: '#01796E22' },
+                            grid: { color: '#01796E33' },
                             ticks: {
                                 color: '#01796E',
                                 stepSize: 1000
@@ -455,20 +472,16 @@
                             align: 'start',
                             labels: {
                                 color: '#01796E',
+                                font: { weight: 'bold' },
                                 boxWidth: 25,
                                 boxHeight: 12,
-                                filter: function(item, chartData) {
-                                    if (item.datasetIndex === 0) return true;
-                                    let currentGroup = chartData.datasets[item.datasetIndex].legendGroup;
-                                    let firstIndexOfGroup = chartData.datasets.findIndex(d => d.legendGroup === currentGroup);
-                                    return item.datasetIndex === firstIndexOfGroup;
-                                },
                                 generateLabels: function(chart) {
                                     return [
                                         {
                                             text: 'History',
                                             fillStyle: '#016D63',
                                             strokeStyle: '#016D63',
+                                            fontColor: '#01796E',
                                             lineWidth: 3,
                                             hidden: false,
                                             datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'history')
@@ -477,6 +490,7 @@
                                             text: 'Current year',
                                             fillStyle: '#FFA824',
                                             strokeStyle: '#FFA824',
+                                            fontColor: '#01796E',
                                             lineWidth: 3,
                                             hidden: false,
                                             datasetIndex: chart.data.datasets.findIndex(d => d.legendGroup === 'current')
