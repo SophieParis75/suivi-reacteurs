@@ -456,8 +456,9 @@
                         tooltip: {
                             mode: 'index',
                             intersect: false,
-                            yAlign: 'bottom',      /* Positionne le tableau AU-DESSUS du point/curseur */
-                            caretPadding: 6,       /* Espace entre la flèche du tableau et le point */
+                            xAlign: 'left',        /* Positionne l'info-bulle À DROITE du point survolé */
+                            yAlign: 'center',      /* Centre l'info-bulle verticalement */
+                            caretPadding: 10,      /* Espace entre le point et l'info-bulle */
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
