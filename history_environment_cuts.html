@@ -414,14 +414,14 @@
 
             // Construction du tableau de données pour l'exportation Excel
             lastExportData = displayLabels.map((dateStr, idx) => {
-                let rowObj = { "Date": dateStr };
+                let rowObj = { "Date": dateStr }; // "Date" est définie en première clé
                 availableYears.forEach(year => {
                     let ds = datasets.find(d => d.label === year);
                     rowObj[year] = ds ? ds.data[idx] : 0;
                 });
                 return rowObj;
             });
-
+            
             // Afficher le bouton de téléchargement Excel
             document.getElementById('excelBtn').style.display = 'inline-block';
 
