@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>History - Cumulative Climate Outages</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Librairie SheetJS pour l'exportation Excel -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
@@ -99,18 +97,9 @@
             font-weight: bold;
             font-size: 14px;
             margin-top: 10px;
-            transition: background 0.2s ease;
         }
         button:hover {
             background: #016D63;
-        }
-        .btn-excel {
-            background: #107C41;
-            margin-left: 10px;
-            display: none;
-        }
-        .btn-excel:hover {
-            background: #0B5C30;
         }
         .container {
             background: #E6EAEB;
@@ -168,9 +157,7 @@
             <div class="step">
                 <label for="csvFile">2. Load downloaded CSV file:</label>
                 <input type="file" id="csvFile" accept=".csv">
-                <br>
                 <button onclick="loadCsvHistory()">Generate comparison chart</button>
-                <button id="excelBtn" class="btn-excel" onclick="exportToExcel()">📥 Export Excel (.xlsx)</button>
             </div>
             <div id="status" class="status">Waiting for CSV file upload...</div>
         </div>
@@ -183,8 +170,6 @@
 
     <script>
         let myChartInstance = null;
-        let lastExportData = [];
-        let exportYears = [];
 
         // Plugin Canvas pour appliquer le fond #E6EAEB
         const backgroundColorPlugin = {
@@ -386,12 +371,12 @@
             });
 
             // =========================================================================
-            // STEP 4: PREPARE SERIES FOR CHART.JS & EXPORT DATA
+            // STEP 4: PREPARE SERIES FOR CHART.JS
             // =========================================================================
             let datasets = [];
-            exportYears = Object.keys(dataByYear).sort();
+            let availableYears = Object.keys(dataByYear).sort();
 
-            exportYears.forEach(year => {
+            availableYears.forEach(year => {
                 let cumul = 0;
                 let cumulativeData = dataByYear[year].map(val => {
                     cumul += val;
@@ -413,18 +398,6 @@
                 });
             });
 
-            // Construction de la structure de données pour Excel
-            lastExportData = displayLabels.map((dateStr, idx) => {
-                let rowObj = { "Date": dateStr };
-                exportYears.forEach(year => {
-                    let ds = datasets.find(d => d.label === year);
-                    rowObj[year] = ds ? ds.data[idx] : 0;
-                });
-                return rowObj;
-            });
-
-            document.getElementById('excelBtn').style.display = 'inline-block';
-
             const ctx = document.getElementById('envChart').getContext('2d');
             if (myChartInstance) {
                 myChartInstance.destroy();
@@ -442,7 +415,9 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: {
-                            title: { display: false },
+                            title: { 
+                                display: false 
+                            },
                             grid: {
                                 color: function(context) {
                                     let label = context.chart.data.labels[context.index];
@@ -481,12 +456,10 @@
                         tooltip: {
                             mode: 'index',
                             intersect: false,
-                            position: 'nearest',
-                            yAlign: 'bottom',
-                            xAlign: 'left',
-                            caretSize: 0,           /* Supprime la flèche/dépassement sous le cadre */
-                            caretPadding: 12,        /* Décale le cadre par rapport au point */
-                            cornerRadius: 6,        /* Arrondit proprement les coins */
+                            position: 'nearest',   /* Calfe la position de l'info-bulle sur la courbe survolée */
+                            yAlign: 'bottom',      /* Positionne le tableau AU-DESSUS du point */
+                            xAlign: 'left',        /* Positionne le tableau À DROITE du point */
+                            caretPadding: 12,      /* Décale la boîte plus haut pour libérer le champ de vision */
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
@@ -544,22 +517,6 @@
                     }
                 }
             });
-        }
-
-        // Fonction d'exportation vers Excel (.xlsx) avec ordre explicite des colonnes
-        function exportToExcel() {
-            if (!lastExportData || lastExportData.length === 0) {
-                alert("Please generate the chart before downloading.");
-                return;
-            }
-
-            const headers = ["Date", ...exportYears];
-
-            const worksheet = XLSX.utils.json_to_sheet(lastExportData, { header: headers });
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Cumulative Losses");
-
-            XLSX.writeFile(workbook, "climate_cumulative_losses_history.xlsx");
         }
     </script>
 </body>
