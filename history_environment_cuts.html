@@ -118,6 +118,7 @@
             background-color: #E6EAEB;
         }
         .source-credit {
+            font-style: italic;
             font-weight: bold;
             color: #01796E;
             font-size: 13px;
@@ -455,6 +456,8 @@
                         tooltip: {
                             mode: 'index',
                             intersect: false,
+                            yAlign: 'bottom',      /* Positionne le tableau AU-DESSUS du point/curseur */
+                            caretPadding: 6,       /* Espace entre la flèche du tableau et le point */
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
