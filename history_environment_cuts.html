@@ -146,6 +146,51 @@
             white-space: pre-wrap;
             font-size: 13px;
         }
+
+        /* Style du tableau récapitulatif des pics */
+        .summary-container {
+            margin-top: 30px;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-top: 4px solid #01796E;
+            display: none; /* Affiché uniquement après chargement */
+        }
+        .summary-container h3 {
+            margin-top: 0;
+            color: #01796E;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+        }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+        .summary-table th {
+            background-color: #01796E;
+            color: #ffffff;
+            padding: 10px 12px;
+            font-weight: bold;
+        }
+        .summary-table th:first-child { border-top-left-radius: 6px; }
+        .summary-table th:last-child { border-top-right-radius: 6px; }
+        .summary-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #E6EAEB;
+        }
+        .summary-table tr:hover {
+            background-color: #f1f5f5;
+        }
+        .summary-table tr.highlight-2026 {
+            background-color: #FFF4E5;
+            font-weight: bold;
+        }
+        .summary-table tr.highlight-2026 td {
+            color: #B36B00;
+        }
     </style>
 </head>
 <body>
@@ -179,6 +224,22 @@
             <canvas id="envChart"></canvas>
         </div>
         <div class="source-credit">Source: EDF/Montel</div>
+
+        <!-- Tableau récapitulatif de la journée avec la plus forte indisponibilité -->
+        <div id="summaryBox" class="summary-container">
+            <h3>Peak Daily Outage & Cumulative Total by Year</h3>
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Year</th>
+                        <th>Peak Outage Date</th>
+                        <th>Max Daily Loss (GWh)</th>
+                        <th>Season Total (GWh)</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryTableBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -423,7 +484,11 @@
                 return rowObj;
             });
 
+            // Calcul du pic journalier pour chaque année
+            populateSummaryTable(dataByYear, displayLabels);
+
             document.getElementById('excelBtn').style.display = 'inline-block';
+            document.getElementById('summaryBox').style.display = 'block';
 
             const ctx = document.getElementById('envChart').getContext('2d');
             if (myChartInstance) {
@@ -484,9 +549,9 @@
                             position: 'nearest',
                             yAlign: 'bottom',
                             xAlign: 'left',
-                            caretSize: 0,           /* Supprime la flèche/dépassement sous le cadre */
-                            caretPadding: 12,        /* Décale le cadre par rapport au point */
-                            cornerRadius: 6,        /* Arrondit proprement les coins */
+                            caretSize: 0,
+                            caretPadding: 12,
+                            cornerRadius: 6,
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
@@ -546,7 +611,45 @@
             });
         }
 
-        // Fonction d'exportation vers Excel (.xlsx) avec ordre explicite des colonnes
+        // Module de calcul du jour avec la plus forte perte journalière
+        function populateSummaryTable(dataByYear, displayLabels) {
+            const tbody = document.getElementById('summaryTableBody');
+            tbody.innerHTML = '';
+
+            let sortedYears = Object.keys(dataByYear).sort((a, b) => b - a); // Tri décroissant (ex: 2026 à 2015)
+
+            sortedYears.forEach(year => {
+                let dailyArray = dataByYear[year];
+                let maxDailyVal = 0;
+                let maxIdx = 0;
+
+                dailyArray.forEach((val, idx) => {
+                    if (val > maxDailyVal) {
+                        maxDailyVal = val;
+                        maxIdx = idx;
+                    }
+                });
+
+                let totalCumul = dailyArray.reduce((acc, curr) => acc + curr, 0);
+
+                let tr = document.createElement('tr');
+                if (year === '2026') {
+                    tr.classList.add('highlight-2026');
+                }
+
+                let peakDateStr = (maxDailyVal > 0) ? displayLabels[maxIdx] : 'N/A (0 GWh)';
+                
+                tr.innerHTML = `
+                    <td>${year}</td>
+                    <td>${peakDateStr}</td>
+                    <td>${maxDailyVal.toFixed(1)} GWh</td>
+                    <td>${totalCumul.toFixed(1)} GWh</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Fonction d'exportation vers Excel (.xlsx)
         function exportToExcel() {
             if (!lastExportData || lastExportData.length === 0) {
                 alert("Please generate the chart before downloading.");
