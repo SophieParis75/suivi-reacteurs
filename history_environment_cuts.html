@@ -155,7 +155,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             border-top: 4px solid #01796E;
-            display: none; /* Affiché uniquement après chargement */
+            display: none;
         }
         .summary-container h3 {
             margin-top: 0;
@@ -233,7 +233,7 @@
                     <tr>
                         <th>Year</th>
                         <th>Peak Outage Date</th>
-                        <th>Max Capacity Unavailable (MW)</th>
+                        <th>Max Daily Unavailable Capacity (MW)</th>
                         <th>Season Total (GWh)</th>
                     </tr>
                 </thead>
@@ -409,7 +409,7 @@
             }
 
             let dataByYear = {};
-            let dataByYearMW = {}; // Stocke la capacité indisponible heure par heure
+            let dataByYearMW = {}; // Accumule directement la puissance indisponible (MW) journalière
             const currentYear = new Date().getFullYear().toString();
 
             envEvents.forEach(ev => {
@@ -438,18 +438,15 @@
 
                             if (!dataByYear[y]) {
                                 dataByYear[y] = new Array(dayLabels.length).fill(0);
-                                dataByYearMW[y] = Array.from({length: dayLabels.length}, () => new Array(24).fill(0));
+                                dataByYearMW[y] = new Array(dayLabels.length).fill(0);
                             }
 
+                            // 1. Energie journalière (GWh) pour le graphique
                             let energyGWh = (ev.unavailableMW * durationHours) / 1000;
                             dataByYear[y][dayIdx] += energyGWh;
 
-                            // Profil horaire MW de la journée
-                            let startHour = actualStart.getHours();
-                            let endHour = (actualEnd.getTime() === dayEnd.getTime()) ? 24 : actualEnd.getHours();
-                            for (let h = startHour; h < endHour; h++) {
-                                dataByYearMW[y][dayIdx][h] += ev.unavailableMW;
-                            }
+                            // 2. Puissance indisponible cumulée (MW) sur la journée
+                            dataByYearMW[y][dayIdx] += ev.unavailableMW;
                         }
                     }
                     currDay.setDate(currDay.getDate() + 1);
@@ -484,7 +481,7 @@
                 });
             });
 
-            // Construction de la structure de données pour Excel
+            // Structure de données pour Excel
             lastExportData = displayLabels.map((dateStr, idx) => {
                 let rowObj = { "Date": dateStr };
                 exportYears.forEach(year => {
@@ -494,7 +491,7 @@
                 return rowObj;
             });
 
-            // Calcul de la capacité indisponible max en MW et affichage du tableau récapitulatif
+            // Population du tableau récapitulatif
             populateSummaryTable(dataByYear, dataByYearMW, displayLabels);
 
             document.getElementById('excelBtn').style.display = 'inline-block';
@@ -621,7 +618,7 @@
             });
         }
 
-        // Population du tableau récapitulatif (Capacité indisponible max en MW et date au format jj/mm)
+        // Recherche du jour max en MW pour chaque année
         function populateSummaryTable(dataByYear, dataByYearMW, displayLabels) {
             const tbody = document.getElementById('summaryTableBody');
             tbody.innerHTML = '';
@@ -635,18 +632,17 @@
                 let maxDailyMW = 0;
                 let maxIdx = 0;
 
-                dailyMWArray.forEach((dayHours, idx) => {
-                    let peakHourMW = Math.max(...dayHours);
-                    if (peakHourMW > maxDailyMW) {
-                        maxDailyMW = peakHourMW;
+                dailyMWArray.forEach((mwVal, idx) => {
+                    if (mwVal > maxDailyMW) {
+                        maxDailyMW = mwVal;
                         maxIdx = idx;
                     }
                 });
 
-                let totalCumul = dailyGWhArray.reduce((acc, curr) => acc + curr, 0);
+                let totalCumulGWh = dailyGWhArray.reduce((acc, curr) => acc + curr, 0);
 
                 let fullDate = displayLabels[maxIdx] || '';
-                // Conserver uniquement jj/mm (ex: 09/08)
+                // Extraire jj/mm (ex: 09/08)
                 let peakDateStr = (maxDailyMW > 0 && fullDate.length >= 5) ? fullDate.substring(0, 5) : 'N/A';
 
                 let tr = document.createElement('tr');
@@ -658,7 +654,7 @@
                     <td>${year}</td>
                     <td>${peakDateStr}</td>
                     <td>${Math.round(maxDailyMW).toLocaleString('fr-FR')} MW</td>
-                    <td>${totalCumul.toFixed(1).toLocaleString('fr-FR')} GWh</td>
+                    <td>${totalCumulGWh.toFixed(1).toLocaleString('fr-FR')} GWh</td>
                 `;
                 tbody.appendChild(tr);
             });
