@@ -484,7 +484,9 @@
                             position: 'nearest',
                             yAlign: 'bottom',
                             xAlign: 'left',
-                            caretPadding: 12,
+                            caretSize: 0,           /* Supprime la flèche/dépassement sous le cadre */
+                            caretPadding: 12,        /* Décale le cadre par rapport au point */
+                            cornerRadius: 6,        /* Arrondit proprement les coins */
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
@@ -551,7 +553,6 @@
                 return;
             }
 
-            // Forcer l'ordre explicite des en-têtes : "Date" en premier (colonne A)
             const headers = ["Date", ...exportYears];
 
             const worksheet = XLSX.utils.json_to_sheet(lastExportData, { header: headers });
