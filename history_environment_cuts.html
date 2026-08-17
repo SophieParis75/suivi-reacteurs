@@ -146,6 +146,51 @@
             white-space: pre-wrap;
             font-size: 13px;
         }
+
+        /* Style du tableau récapitulatif des pics */
+        .summary-container {
+            margin-top: 30px;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-top: 4px solid #01796E;
+            display: none; /* Affiché uniquement après chargement */
+        }
+        .summary-container h3 {
+            margin-top: 0;
+            color: #01796E;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+        }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+        .summary-table th {
+            background-color: #01796E;
+            color: #ffffff;
+            padding: 10px 12px;
+            font-weight: bold;
+        }
+        .summary-table th:first-child { border-top-left-radius: 6px; }
+        .summary-table th:last-child { border-top-right-radius: 6px; }
+        .summary-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #E6EAEB;
+        }
+        .summary-table tr:hover {
+            background-color: #f1f5f5;
+        }
+        .summary-table tr.highlight-2026 {
+            background-color: #FFF4E5;
+            font-weight: bold;
+        }
+        .summary-table tr.highlight-2026 td {
+            color: #B36B00;
+        }
     </style>
 </head>
 <body>
@@ -179,6 +224,22 @@
             <canvas id="envChart"></canvas>
         </div>
         <div class="source-credit">Source: EDF/Montel</div>
+
+        <!-- Tableau récapitulatif de la capacité indisponible max -->
+        <div id="summaryBox" class="summary-container">
+            <h3>Peak Daily Outage Capacity & Season Cumulative Total</h3>
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Year</th>
+                        <th>Peak Outage Date</th>
+                        <th>Max Capacity Unavailable (MW)</th>
+                        <th>Season Total (GWh)</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryTableBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -348,6 +409,7 @@
             }
 
             let dataByYear = {};
+            let dataByYearMW = {}; // Stocke la capacité indisponible heure par heure
             const currentYear = new Date().getFullYear().toString();
 
             envEvents.forEach(ev => {
@@ -364,6 +426,7 @@
                     let mmdd = `${m}-${d}`;
 
                     if (dayIndexMap[mmdd] !== undefined) {
+                        let dayIdx = dayIndexMap[mmdd];
                         let dayStart = new Date(currDay.getFullYear(), currDay.getMonth(), currDay.getDate(), 0, 0, 0);
                         let dayEnd = new Date(currDay.getFullYear(), currDay.getMonth(), currDay.getDate() + 1, 0, 0, 0);
 
@@ -375,10 +438,18 @@
 
                             if (!dataByYear[y]) {
                                 dataByYear[y] = new Array(dayLabels.length).fill(0);
+                                dataByYearMW[y] = Array.from({length: dayLabels.length}, () => new Array(24).fill(0));
                             }
 
                             let energyGWh = (ev.unavailableMW * durationHours) / 1000;
-                            dataByYear[y][dayIndexMap[mmdd]] += energyGWh;
+                            dataByYear[y][dayIdx] += energyGWh;
+
+                            // Profil horaire MW de la journée
+                            let startHour = actualStart.getHours();
+                            let endHour = (actualEnd.getTime() === dayEnd.getTime()) ? 24 : actualEnd.getHours();
+                            for (let h = startHour; h < endHour; h++) {
+                                dataByYearMW[y][dayIdx][h] += ev.unavailableMW;
+                            }
                         }
                     }
                     currDay.setDate(currDay.getDate() + 1);
@@ -423,7 +494,11 @@
                 return rowObj;
             });
 
+            // Calcul de la capacité indisponible max en MW et affichage du tableau récapitulatif
+            populateSummaryTable(dataByYear, dataByYearMW, displayLabels);
+
             document.getElementById('excelBtn').style.display = 'inline-block';
+            document.getElementById('summaryBox').style.display = 'block';
 
             const ctx = document.getElementById('envChart').getContext('2d');
             if (myChartInstance) {
@@ -484,9 +559,9 @@
                             position: 'nearest',
                             yAlign: 'bottom',
                             xAlign: 'left',
-                            caretSize: 0,           /* Supprime la flèche/dépassement sous le cadre */
-                            caretPadding: 12,        /* Décale le cadre par rapport au point */
-                            cornerRadius: 6,        /* Arrondit proprement les coins */
+                            caretSize: 0,
+                            caretPadding: 12,
+                            cornerRadius: 6,
                             itemSort: function(a, b) {
                                 return parseInt(b.dataset.label) - parseInt(a.dataset.label);
                             },
@@ -546,7 +621,50 @@
             });
         }
 
-        // Fonction d'exportation vers Excel (.xlsx) avec ordre explicite des colonnes
+        // Population du tableau récapitulatif (Capacité indisponible max en MW et date au format jj/mm)
+        function populateSummaryTable(dataByYear, dataByYearMW, displayLabels) {
+            const tbody = document.getElementById('summaryTableBody');
+            tbody.innerHTML = '';
+
+            let sortedYears = Object.keys(dataByYear).sort((a, b) => b - a);
+
+            sortedYears.forEach(year => {
+                let dailyGWhArray = dataByYear[year];
+                let dailyMWArray = dataByYearMW[year] || [];
+
+                let maxDailyMW = 0;
+                let maxIdx = 0;
+
+                dailyMWArray.forEach((dayHours, idx) => {
+                    let peakHourMW = Math.max(...dayHours);
+                    if (peakHourMW > maxDailyMW) {
+                        maxDailyMW = peakHourMW;
+                        maxIdx = idx;
+                    }
+                });
+
+                let totalCumul = dailyGWhArray.reduce((acc, curr) => acc + curr, 0);
+
+                let fullDate = displayLabels[maxIdx] || '';
+                // Conserver uniquement jj/mm (ex: 09/08)
+                let peakDateStr = (maxDailyMW > 0 && fullDate.length >= 5) ? fullDate.substring(0, 5) : 'N/A';
+
+                let tr = document.createElement('tr');
+                if (year === '2026') {
+                    tr.classList.add('highlight-2026');
+                }
+
+                tr.innerHTML = `
+                    <td>${year}</td>
+                    <td>${peakDateStr}</td>
+                    <td>${Math.round(maxDailyMW).toLocaleString('fr-FR')} MW</td>
+                    <td>${totalCumul.toFixed(1).toLocaleString('fr-FR')} GWh</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Fonction d'exportation vers Excel (.xlsx)
         function exportToExcel() {
             if (!lastExportData || lastExportData.length === 0) {
                 alert("Please generate the chart before downloading.");
