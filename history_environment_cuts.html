@@ -117,6 +117,13 @@
         canvas#envChart {
             background-color: #E6EAEB;
         }
+        .source-credit {
+            font-style: italic;
+            color: #01796E;
+            font-size: 13px;
+            margin-top: 12px;
+            text-align: left;
+        }
         .status {
             margin-top: 15px;
             font-family: monospace;
@@ -157,6 +164,7 @@
         <div class="chart-container">
             <canvas id="envChart"></canvas>
         </div>
+        <div class="source-credit">Source: EDF/Montel</div>
     </div>
 
     <script>
@@ -303,17 +311,22 @@
             // =========================================================================
             let dayLabels = [];
             let displayLabels = [];
-            let refDate = new Date(2024, 4, 1);   // May 1st
-            let maxDate = new Date(2024, 10, 15); // November 15th
+            let refDate = new Date(2026, 4, 1);   // May 1st
+            let maxDate = new Date(2026, 10, 15); // November 15th
 
             let dayIndexMap = {};
             let idxCounter = 0;
             while (refDate <= maxDate) {
                 let m = refDate.getMonth() + 1;
                 let d = refDate.getDate();
+                let y = refDate.getFullYear();
                 let mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                
+                // Format jj/mm/aaaa
+                let dateFormatted = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+                
                 dayLabels.push(mmdd);
-                displayLabels.push(`${d}/${m}`);
+                displayLabels.push(dateFormatted);
                 dayIndexMap[mmdd] = idxCounter++;
                 refDate.setDate(refDate.getDate() + 1);
             }
@@ -402,15 +415,12 @@
                     scales: {
                         x: {
                             title: { 
-                                display: true, 
-                                text: 'Date', 
-                                color: '#01796E', 
-                                font: { style: 'italic', weight: 'bold' } 
+                                display: false 
                             },
                             grid: {
                                 color: function(context) {
                                     let label = context.chart.data.labels[context.index];
-                                    if (label && label.startsWith('1/')) {
+                                    if (label && label.startsWith('01/')) {
                                         return '#01796E33';
                                     }
                                     return 'transparent';
@@ -421,7 +431,7 @@
                                 autoSkip: false,
                                 callback: function(val) {
                                     let lbl = this.getLabelForValue(val);
-                                    if (lbl && lbl.startsWith('1/')) return lbl;
+                                    if (lbl && lbl.startsWith('01/')) return lbl;
                                     return '';
                                 }
                             }
@@ -468,8 +478,8 @@
                             }
                         },
                         legend: {
-                            position: 'top',
-                            align: 'start',
+                            position: 'bottom',
+                            align: 'center',
                             labels: {
                                 color: '#01796E',
                                 font: { weight: 'bold' },
