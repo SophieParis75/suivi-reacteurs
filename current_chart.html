@@ -46,57 +46,32 @@
             "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
         };
 
-        const API_URL = 'https://suivi-reacteurs.vercel.app/api/unavailabilities';
+        // L'URL exacte de ton fichier Python api/rte.py sur Vercel
+        const API_URL = '/api/rte';
 
         async function chargerDonneesEtAfficher() {
-            let rawData = null;
-            let t2Stockee = localStorage.getItem('dateT2') || new Date().toISOString();
+            let rawData = [];
+            let t2Iso = new Date().toISOString();
 
             try {
                 const response = await fetch(API_URL);
                 if (response.ok) {
                     const json = await response.json();
-                    rawData = json.data || json;
-                    if (json.dateT2) t2Stockee = json.dateT2;
+                    // On extrait la liste t2 ou max renvoyée par ton script Python
+                    rawData = json.list_max_day_t2 || json.list_t2 || [];
+                    if (json.t2_iso) t2Iso = json.t2_iso;
                 }
             } catch (err) {
-                console.warn("Échec de la récupération API, bascule sur localStorage :", err);
-            }
-
-            if (!rawData) {
-                const dataJson = localStorage.getItem('graphData');
-                if (dataJson) rawData = JSON.parse(dataJson);
+                console.error("Erreur lors de l'appel de /api/rte :", err);
             }
 
             if (!rawData || rawData.length === 0) {
-                document.body.innerHTML = "<h2>Aucune donnée disponible.</h2>";
+                document.body.innerHTML = "<h2>Aucune donnée disponible de l'API.</h2>";
                 return;
             }
 
-            // Étape 1 : Dédoublonnage pour conserver uniquement la plus récente version de chaque message
-            const latestMessagesMap = new Map();
-            rawData.forEach(item => {
-                const id = item.messageId || item.identifier || item.id;
-                if (!id) {
-                    latestMessagesMap.set(Symbol(), item);
-                    return;
-                }
-                const existing = latestMessagesMap.get(id);
-                if (!existing) {
-                    latestMessagesMap.set(id, item);
-                } else {
-                    const currentVersion = Number(item.version || item.versionNumber || 0);
-                    const existingVersion = Number(existing.version || existing.versionNumber || 0);
-                    if (currentVersion > existingVersion) {
-                        latestMessagesMap.set(id, item);
-                    }
-                }
-            });
-
-            const cleanedData = Array.from(latestMessagesMap.values());
-
-            // Calcul de la plage de 22 jours
-            const datePart = t2Stockee.split('T')[0];
+            // Génération des 22 jours à partir de T2 - 1 jour
+            const datePart = t2Iso.split('T')[0];
             let dateRef = new Date(datePart);
             let dateDepart = new Date(dateRef);
             dateDepart.setDate(dateRef.getDate() - 1);
@@ -110,7 +85,7 @@
 
             const reacteurs = Object.keys(configReacteurs);
 
-            // Étape 2 : Création des datasets filtrés selon les règles de durée, d'horaires et de statut
+            // Construction des séries avec tes critères de filtrage
             const datasets = reacteurs.map(r => {
                 const nomRecherche = r.toUpperCase().trim();
                 const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
@@ -126,37 +101,31 @@
                     data: dates.map(d => {
                         let jourEnCours = new Date(d);
 
-                        return cleanedData
+                        return rawData
                             .filter(i => {
-                                // 1. Exclusion des messages Dismissed
-                                const isDismissed = i.dismissed === true || 
-                                                    i.status === 'Dismissed' || 
-                                                    i.status === 'DISMISSED';
-                                if (isDismissed) return false;
-
-                                // Vérification du nom du réacteur
-                                let assetName = (i.asset || i.unit || i.affected_asset_or_unit_name || "").toUpperCase().trim();
+                                let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
                                 if (assetName !== nomRecherche) return false;
 
-                                let debut = new Date(i.dateDebut || i.start_date);
-                                let fin = new Date(i.dateFin || i.end_date);
+                                if (!i.from || !i.to) return true; // Si pas de dates précises, on garde la valeur brute
 
-                                // 2. Durée minimale d'au moins 60 minutes
+                                let debut = new Date(i.from);
+                                let fin = new Date(i.to);
+
+                                // 1. Durée d'au moins 60 minutes
                                 const dureeMinutes = (fin - debut) / (1000 * 60);
                                 if (dureeMinutes < 60) return false;
 
-                                // 3. Début APRÈS 00:59 (soit >= 01:00)
+                                // 2. Début après 00:59 (>= 01:00)
                                 const minutesDebut = debut.getHours() * 60 + debut.getMinutes();
                                 if (minutesDebut <= 59) return false;
 
-                                // 4. Fin AVANT 23:01 (soit <= 23:00)
+                                // 3. Fin avant 23:01 (<= 23:00)
                                 const minutesFin = fin.getHours() * 60 + fin.getMinutes();
                                 if (minutesFin >= 1381) return false;
 
-                                // 5. Présence sur le jour analysé
                                 return jourEnCours >= debut && jourEnCours <= fin;
                             })
-                            .reduce((s, i) => s + (i.unavailable || i.value || i.unavailable_capacity || 0), 0);
+                            .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
                     })
                 };
             });
