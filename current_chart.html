@@ -69,11 +69,9 @@
             <thead>
                 <tr id="tableHeader">
                     <th class="reactor-col">Réacteur</th>
-                    <!-- Les dates seront injectées ici -->
                 </tr>
             </thead>
             <tbody id="tableBody">
-                <!-- Les lignes de réacteurs seront injectées ici -->
             </tbody>
         </table>
     </div>
@@ -134,7 +132,6 @@
                 return;
             }
 
-            // Génération des 22 jours à partir de T2 - 1 jour
             const datePart = t2Iso.split('T')[0];
             let dateRef = new Date(datePart);
             let dateDepart = new Date(dateRef);
@@ -149,7 +146,6 @@
 
             const reacteurs = Object.keys(configReacteurs);
 
-            // Construction des datasets et collecte des valeurs filtrées
             const datasets = reacteurs.map(r => {
                 const nomRecherche = r.toUpperCase().trim();
                 const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
@@ -160,35 +156,35 @@
                 }
 
                 const dataPerDate = dates.map(d => {
-                    let jourEnCours = new Date(d);
-
                     return rawData
-               .filter(i => {
-    let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
-    if (assetName !== nomRecherche) return false;
+                        .filter(i => {
+                            let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
+                            if (assetName !== nomRecherche) return false;
 
-    if (!i.from || !i.to) return true;
+                            if (!i.from || !i.to) return true;
 
-    let debut = new Date(i.from);
-    let fin = new Date(i.to);
+                            let debut = new Date(i.from);
+                            let fin = new Date(i.to);
 
-    // 1. Durée d'au moins 60 minutes
-    const dureeMinutes = (fin - debut) / (1000 * 60);
-    if (dureeMinutes < 60) return false;
+                            // 1. Durée d'au moins 60 minutes
+                            const dureeMinutes = (fin - debut) / (1000 * 60);
+                            if (dureeMinutes < 60) return false;
 
-    // 2. Début après 00:59 UTC (>= 01:00 UTC)
-    const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
-    if (minutesDebut <= 59) return false;
+                            // 2. Début après 00:59 UTC (>= 01:00 UTC)
+                            const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
+                            if (minutesDebut <= 59) return false;
 
-    // 3. Fin avant 23:01 UTC (<= 23:00 UTC)
-    const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
-    if (minutesFin > 1380) return false;
+                            // 3. Fin avant 23:01 UTC (<= 23:00 UTC)
+                            const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
+                            if (minutesFin > 1380) return false;
 
-    // 4. Comparaison stricte sur la date (YYYY-MM-DD en UTC)
-    const isoDebut = debut.toISOString().split('T')[0];
-    const isoFin = fin.toISOString().split('T')[0];
-    return d >= isoDebut && d <= isoFin;
-})
+                            // 4. Inscription dans la journée (en chaîne ISO YYYY-MM-DD UTC)
+                            const isoDebut = debut.toISOString().split('T')[0];
+                            const isoFin = fin.toISOString().split('T')[0];
+                            return d >= isoDebut && d <= isoFin;
+                        })
+                        .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
+                });
 
                 return {
                     label: r,
@@ -197,7 +193,6 @@
                 };
             });
 
-            // Affichage du graphique
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
@@ -211,7 +206,6 @@
                 }
             });
 
-            // Remplissage du tableau sous le graphique
             genererTableau(dates, datasets);
         }
 
@@ -219,21 +213,17 @@
             const tableHeader = document.getElementById('tableHeader');
             const tableBody = document.getElementById('tableBody');
 
-            // Nettoyage au cas où
             tableHeader.innerHTML = '<th class="reactor-col">Réacteur</th>';
             tableBody.innerHTML = '';
 
-            // En-têtes : Ajout des dates en horizontal
             dates.forEach(d => {
                 const th = document.createElement('th');
-                // Formatage lisible MM-DD
                 const parts = d.split('-');
                 th.innerText = `${parts[2]}/${parts[1]}`;
                 th.title = d;
                 tableHeader.appendChild(th);
             });
 
-            // Lignes : Ajout des réacteurs en vertical
             datasets.forEach(ds => {
                 const tr = document.createElement('tr');
 
