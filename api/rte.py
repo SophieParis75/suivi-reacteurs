@@ -129,7 +129,6 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 
         overlap_seconds = o_end - o_start
 
-        # Suppression du seuil minimal : tout chevauchement est éligible
         if overlap_seconds > 0:
             unavail = compute_slot_unavailability(v, installed_cap)
             if unavail > 0:
@@ -223,15 +222,16 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # 2. Filtering: Exclude messages marked as DISMISSED or CANCELED/ANNULE, keep those containing 'environ'
+        # 2. Filtering: Exclude messages marked as DISMISSED, INACTIVE, CANCEL/ANNULE, keep those containing 'environ'
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
             msg_status = str(item.get("message_status") or item.get("status") or "").upper()
             combined_status = remove_accents(f"{event_status} {msg_status}")
 
-            # Strict exclusion for DISMISSED, CANCEL, CANCELLED, and French ANNULE
-            if any(term in combined_status for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]):
+            # Exclusions strictes pour DISMISSED, INACTIVE, INACTIF, CANCEL/CANCELLED et ANNULE
+            exclusion_terms = ["DISMISSED", "INACTIVE", "INACTIF", "CANCEL", "CANCELLED", "ANNULE"]
+            if any(term in combined_status for term in exclusion_terms):
                 continue
 
             full_item_text = json.dumps(item).lower()
