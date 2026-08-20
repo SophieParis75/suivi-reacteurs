@@ -129,7 +129,8 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 
         overlap_seconds = o_end - o_start
 
-        if overlap_seconds >= 1800: # Over 30 minutes (1800 sec)
+        # Suppression du seuil minimal : tout chevauchement est éligible
+        if overlap_seconds > 0:
             unavail = compute_slot_unavailability(v, installed_cap)
             if unavail > 0:
                 eligible_slots.append({
