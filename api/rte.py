@@ -4,11 +4,17 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import base64
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
 TOTAL_PARC_CAPACITY_MW = 62990.0
+
+def remove_accents(input_str):
+    """Normalize string to remove accents (e.g., 'ANNULÉ' -> 'ANNULE')"""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 def get_rte_token(client_id, client_secret):
     url = "https://digital.iservices.rte-france.com/token/oauth/"
@@ -117,13 +123,13 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
         v_start_ts = v_start.timestamp()
         v_end_ts = v_end.timestamp()
 
-        # Chevauchement en secondes via horodatages Unix
+        # Overlap in seconds via Unix timestamps
         o_start = max(v_start_ts, start_ts)
         o_end = min(v_end_ts, end_ts)
 
         overlap_seconds = o_end - o_start
 
-        if overlap_seconds >= 1800: # Plus de 30 minutes (1800 sec)
+        if overlap_seconds >= 1800: # Over 30 minutes (1800 sec)
             unavail = compute_slot_unavailability(v, installed_cap)
             if unavail > 0:
                 eligible_slots.append({
@@ -207,7 +213,7 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Déduplication par identifiant unique
+        # 1. Deduplication by unique identifier
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -216,14 +222,15 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # 2. Filtrage strict : Exclure les annulations et garder uniquement les messages avec 'environ'
+        # 2. Filtering: Exclude messages marked as DISMISSED or CANCELED/ANNULE, keep those containing 'environ'
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
             msg_status = str(item.get("message_status") or item.get("status") or "").upper()
-            combined_status = f"{event_status} {msg_status}"
+            combined_status = remove_accents(f"{event_status} {msg_status}")
 
-            if any(term in combined_status for term in ["CANCEL", "DISCARD", "WITHDRAW", "INACTIVE", "DISMISSED"]):
+            # Strict exclusion for DISMISSED, CANCEL, CANCELLED, and French ANNULE
+            if any(term in combined_status for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]):
                 continue
 
             full_item_text = json.dumps(item).lower()
