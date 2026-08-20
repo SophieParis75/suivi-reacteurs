@@ -176,13 +176,13 @@
                             const dureeMinutes = (fin - debut) / (1000 * 60);
                             if (dureeMinutes < 60) return false;
 
-                            // 2. Début après 00:59 (>= 01:00)
-                            const minutesDebut = debut.getHours() * 60 + debut.getMinutes();
-                            if (minutesDebut <= 59) return false;
+                            // 2. Début après 00:59 UTC (>= 01:00 UTC)
+const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
+if (minutesDebut <= 59) return false;
 
-                            // 3. Fin avant 23:01 (<= 23:00)
-                            const minutesFin = fin.getHours() * 60 + fin.getMinutes();
-                            if (minutesFin >= 1381) return false;
+// 3. Fin avant 23:01 UTC (<= 23:00 UTC)
+const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
+if (minutesFin > 1380) return false;
 
                             return jourEnCours >= debut && jourEnCours <= fin;
                         })
