@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Graphique des Indisponibilités</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
+</head>
+<body>
+    <h2>Indisponibilités nucléaires cumulées par jour</h2>
+    <div style="width: 90%; margin: auto; height: 500px;">
+        <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+        const configReacteurs = {
+            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
+            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
+            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
+            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
+            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
+            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
+            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
+            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
+            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
+            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
+            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
+            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
+            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
+            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
+            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
+            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
+            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
+            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
+            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
+            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
+            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
+            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
+            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
+            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
+            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
+            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
+            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
+            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
+            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
+            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
+        };
+
+        const API_URL = 'https://suivi-reacteurs.vercel.app/api/unavailabilities';
+
+        async function chargerDonneesEtAfficher() {
+            let rawData = null;
+            let t2Stockee = localStorage.getItem('dateT2') || new Date().toISOString();
+
+            try {
+                const response = await fetch(API_URL);
+                if (response.ok) {
+                    const json = await response.json();
+                    rawData = json.data || json;
+                    if (json.dateT2) t2Stockee = json.dateT2;
+                }
+            } catch (err) {
+                console.warn("Échec de la récupération API, bascule sur localStorage :", err);
+            }
+
+            if (!rawData) {
+                const dataJson = localStorage.getItem('graphData');
+                if (dataJson) rawData = JSON.parse(dataJson);
+            }
+
+            if (!rawData || rawData.length === 0) {
+                document.body.innerHTML = "<h2>Aucune donnée disponible.</h2>";
+                return;
+            }
+
+            // Étape 1 : Dédoublonnage pour conserver uniquement la plus récente version de chaque message
+            const latestMessagesMap = new Map();
+            rawData.forEach(item => {
+                const id = item.messageId || item.identifier || item.id;
+                if (!id) {
+                    latestMessagesMap.set(Symbol(), item);
+                    return;
+                }
+                const existing = latestMessagesMap.get(id);
+                if (!existing) {
+                    latestMessagesMap.set(id, item);
+                } else {
+                    const currentVersion = Number(item.version || item.versionNumber || 0);
+                    const existingVersion = Number(existing.version || existing.versionNumber || 0);
+                    if (currentVersion > existingVersion) {
+                        latestMessagesMap.set(id, item);
+                    }
+                }
+            });
+
+            const cleanedData = Array.from(latestMessagesMap.values());
+
+            // Calcul de la plage de 22 jours
+            const datePart = t2Stockee.split('T')[0];
+            let dateRef = new Date(datePart);
+            let dateDepart = new Date(dateRef);
+            dateDepart.setDate(dateRef.getDate() - 1);
+
+            let dates = [];
+            for (let i = 0; i < 22; i++) {
+                let d = new Date(dateDepart);
+                d.setDate(dateDepart.getDate() + i);
+                dates.push(d.toISOString().split('T')[0]);
+            }
+
+            const reacteurs = Object.keys(configReacteurs);
+
+            // Étape 2 : Création des datasets filtrés selon les règles de durée, d'horaires et de statut
+            const datasets = reacteurs.map(r => {
+                const nomRecherche = r.toUpperCase().trim();
+                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+
+                let bg = cfg.color;
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch (e) { }
+                }
+
+                return {
+                    label: r,
+                    backgroundColor: bg,
+                    data: dates.map(d => {
+                        let jourEnCours = new Date(d);
+
+                        return cleanedData
+                            .filter(i => {
+                                // 1. Exclusion des messages Dismissed
+                                const isDismissed = i.dismissed === true || 
+                                                    i.status === 'Dismissed' || 
+                                                    i.status === 'DISMISSED';
+                                if (isDismissed) return false;
+
+                                // Vérification du nom du réacteur
+                                let assetName = (i.asset || i.unit || i.affected_asset_or_unit_name || "").toUpperCase().trim();
+                                if (assetName !== nomRecherche) return false;
+
+                                let debut = new Date(i.dateDebut || i.start_date);
+                                let fin = new Date(i.dateFin || i.end_date);
+
+                                // 2. Durée minimale d'au moins 60 minutes
+                                const dureeMinutes = (fin - debut) / (1000 * 60);
+                                if (dureeMinutes < 60) return false;
+
+                                // 3. Début APRÈS 00:59 (soit >= 01:00)
+                                const minutesDebut = debut.getHours() * 60 + debut.getMinutes();
+                                if (minutesDebut <= 59) return false;
+
+                                // 4. Fin AVANT 23:01 (soit <= 23:00)
+                                const minutesFin = fin.getHours() * 60 + fin.getMinutes();
+                                if (minutesFin >= 1381) return false;
+
+                                // 5. Présence sur le jour analysé
+                                return jourEnCours >= debut && jourEnCours <= fin;
+                            })
+                            .reduce((s, i) => s + (i.unavailable || i.value || i.unavailable_capacity || 0), 0);
+                    })
+                };
+            });
+
+            new Chart(document.getElementById('myChart'), {
+                type: 'bar',
+                data: { labels: dates, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        chargerDonneesEtAfficher();
+    </script>
+</body>
+</html>
