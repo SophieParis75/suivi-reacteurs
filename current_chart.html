@@ -2,14 +2,80 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Graphique des Indisponibilités</title>
+    <title>Graphique et Tableau des Indisponibilités</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .chart-container {
+            width: 90%;
+            margin: auto;
+            height: 500px;
+        }
+        .table-container {
+            width: 95%;
+            margin: 40px auto;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+            text-align: center;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px 4px;
+            white-space: nowrap;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        th.reactor-col, td.reactor-col {
+            text-align: left;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+            z-index: 1;
+        }
+        th.reactor-col {
+            background-color: #e6e6e6;
+            z-index: 2;
+        }
+        tr:nth-child(even) td:not(.reactor-col) {
+            background-color: #fafafa;
+        }
+        .has-value {
+            font-weight: bold;
+            color: #d9534f;
+            background-color: #fdf2f2 !important;
+        }
+    </style>
 </head>
 <body>
     <h2>Indisponibilités nucléaires cumulées par jour</h2>
-    <div style="width: 90%; margin: auto; height: 500px;">
+    <div class="chart-container">
         <canvas id="myChart"></canvas>
+    </div>
+
+    <div class="table-container">
+        <h3>Détail des volumes d'indisponibilité retenus (MW)</h3>
+        <table id="summaryTable">
+            <thead>
+                <tr id="tableHeader">
+                    <th class="reactor-col">Réacteur</th>
+                    <!-- Les dates seront injectées ici -->
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- Les lignes de réacteurs seront injectées ici -->
+            </tbody>
+        </table>
     </div>
 
     <script>
@@ -46,7 +112,6 @@
             "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
         };
 
-        // L'URL exacte de ton fichier Python api/rte.py sur Vercel
         const API_URL = '/api/rte';
 
         async function chargerDonneesEtAfficher() {
@@ -57,7 +122,6 @@
                 const response = await fetch(API_URL);
                 if (response.ok) {
                     const json = await response.json();
-                    // On extrait la liste t2 ou max renvoyée par ton script Python
                     rawData = json.list_max_day_t2 || json.list_t2 || [];
                     if (json.t2_iso) t2Iso = json.t2_iso;
                 }
@@ -85,7 +149,7 @@
 
             const reacteurs = Object.keys(configReacteurs);
 
-            // Construction des séries avec tes critères de filtrage
+            // Construction des datasets et collecte des valeurs filtrées
             const datasets = reacteurs.map(r => {
                 const nomRecherche = r.toUpperCase().trim();
                 const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
@@ -95,41 +159,44 @@
                     try { bg = pattern.draw(cfg.pattern, cfg.color); } catch (e) { }
                 }
 
+                const dataPerDate = dates.map(d => {
+                    let jourEnCours = new Date(d);
+
+                    return rawData
+                        .filter(i => {
+                            let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
+                            if (assetName !== nomRecherche) return false;
+
+                            if (!i.from || !i.to) return true;
+
+                            let debut = new Date(i.from);
+                            let fin = new Date(i.to);
+
+                            // 1. Durée d'au moins 60 minutes
+                            const dureeMinutes = (fin - debut) / (1000 * 60);
+                            if (dureeMinutes < 60) return false;
+
+                            // 2. Début après 00:59 (>= 01:00)
+                            const minutesDebut = debut.getHours() * 60 + debut.getMinutes();
+                            if (minutesDebut <= 59) return false;
+
+                            // 3. Fin avant 23:01 (<= 23:00)
+                            const minutesFin = fin.getHours() * 60 + fin.getMinutes();
+                            if (minutesFin >= 1381) return false;
+
+                            return jourEnCours >= debut && jourEnCours <= fin;
+                        })
+                        .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
+                });
+
                 return {
                     label: r,
                     backgroundColor: bg,
-                    data: dates.map(d => {
-                        let jourEnCours = new Date(d);
-
-                        return rawData
-                            .filter(i => {
-                                let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
-                                if (assetName !== nomRecherche) return false;
-
-                                if (!i.from || !i.to) return true; // Si pas de dates précises, on garde la valeur brute
-
-                                let debut = new Date(i.from);
-                                let fin = new Date(i.to);
-
-                                // 1. Durée d'au moins 60 minutes
-                                const dureeMinutes = (fin - debut) / (1000 * 60);
-                                if (dureeMinutes < 60) return false;
-
-                                // 2. Début après 00:59 (>= 01:00)
-                                const minutesDebut = debut.getHours() * 60 + debut.getMinutes();
-                                if (minutesDebut <= 59) return false;
-
-                                // 3. Fin avant 23:01 (<= 23:00)
-                                const minutesFin = fin.getHours() * 60 + fin.getMinutes();
-                                if (minutesFin >= 1381) return false;
-
-                                return jourEnCours >= debut && jourEnCours <= fin;
-                            })
-                            .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
-                    })
+                    data: dataPerDate
                 };
             });
 
+            // Affichage du graphique
             new Chart(document.getElementById('myChart'), {
                 type: 'bar',
                 data: { labels: dates, datasets: datasets },
@@ -141,6 +208,51 @@
                         y: { stacked: true, beginAtZero: true }
                     }
                 }
+            });
+
+            // Remplissage du tableau sous le graphique
+            genererTableau(dates, datasets);
+        }
+
+        function genererTableau(dates, datasets) {
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+
+            // Nettoyage au cas où
+            tableHeader.innerHTML = '<th class="reactor-col">Réacteur</th>';
+            tableBody.innerHTML = '';
+
+            // En-têtes : Ajout des dates en horizontal
+            dates.forEach(d => {
+                const th = document.createElement('th');
+                // Formatage lisible MM-DD
+                const parts = d.split('-');
+                th.innerText = `${parts[2]}/${parts[1]}`;
+                th.title = d;
+                tableHeader.appendChild(th);
+            });
+
+            // Lignes : Ajout des réacteurs en vertical
+            datasets.forEach(ds => {
+                const tr = document.createElement('tr');
+
+                const tdReactor = document.createElement('td');
+                tdReactor.className = 'reactor-col';
+                tdReactor.innerText = ds.label;
+                tr.appendChild(tdReactor);
+
+                ds.data.forEach(val => {
+                    const td = document.createElement('td');
+                    if (val > 0) {
+                        td.innerText = Math.round(val);
+                        td.className = 'has-value';
+                    } else {
+                        td.innerText = '-';
+                    }
+                    tr.appendChild(td);
+                });
+
+                tableBody.appendChild(tr);
             });
         }
 
