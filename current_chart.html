@@ -163,31 +163,32 @@
                     let jourEnCours = new Date(d);
 
                     return rawData
-                        .filter(i => {
-                            let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
-                            if (assetName !== nomRecherche) return false;
+               .filter(i => {
+    let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
+    if (assetName !== nomRecherche) return false;
 
-                            if (!i.from || !i.to) return true;
+    if (!i.from || !i.to) return true;
 
-                            let debut = new Date(i.from);
-                            let fin = new Date(i.to);
+    let debut = new Date(i.from);
+    let fin = new Date(i.to);
 
-                            // 1. Durée d'au moins 60 minutes
-                            const dureeMinutes = (fin - debut) / (1000 * 60);
-                            if (dureeMinutes < 60) return false;
+    // 1. Durée d'au moins 60 minutes
+    const dureeMinutes = (fin - debut) / (1000 * 60);
+    if (dureeMinutes < 60) return false;
 
-                            // 2. Début après 00:59 UTC (>= 01:00 UTC)
-const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
-if (minutesDebut <= 59) return false;
+    // 2. Début après 00:59 UTC (>= 01:00 UTC)
+    const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
+    if (minutesDebut <= 59) return false;
 
-// 3. Fin avant 23:01 UTC (<= 23:00 UTC)
-const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
-if (minutesFin > 1380) return false;
+    // 3. Fin avant 23:01 UTC (<= 23:00 UTC)
+    const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
+    if (minutesFin > 1380) return false;
 
-                            return jourEnCours >= debut && jourEnCours <= fin;
-                        })
-                        .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
-                });
+    // 4. Comparaison stricte sur la date (YYYY-MM-DD en UTC)
+    const isoDebut = debut.toISOString().split('T')[0];
+    const isoFin = fin.toISOString().split('T')[0];
+    return d >= isoDebut && d <= isoFin;
+})
 
                 return {
                     label: r,
