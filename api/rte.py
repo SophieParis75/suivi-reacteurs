@@ -77,6 +77,35 @@ def parse_iso_date(dt_str):
     dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
     return dt.astimezone(PARIS_TZ)
 
+def is_valid_strict_slot(v):
+    """Vérifie si le créneau d'origine respecte la durée >= 60 min et la plage UTC (00:59 < début et fin <= 23:00)"""
+    v_start = parse_iso_date(v.get("start_date"))
+    v_end = parse_iso_date(v.get("end_date"))
+    if not v_start or not v_end:
+        return False
+
+    # 1. Durée totale de l'événement d'origine >= 60 min
+    total_duration_min = (v_end - v_start).total_seconds() / 60.0
+    if total_duration_min < 60:
+        return False
+
+    # 2. Heures UTC
+    v_start_utc = v_start.astimezone(timezone.utc)
+    v_end_utc = v_end.astimezone(timezone.utc)
+
+    start_utc_min = v_start_utc.hour * 60 + v_start_utc.minute
+    end_utc_min = v_end_utc.hour * 60 + v_end_utc.minute
+
+    # Début > 00:59 UTC (soit >= 01:00 UTC / 60 minutes)
+    if start_utc_min <= 59:
+        return False
+
+    # Fin <= 23:00 UTC (1380 minutes), sauf minuit exact du lendemain (00:00 UTC)
+    if end_utc_min > 1380 and not (v_end_utc.hour == 0 and v_end_utc.minute == 0):
+        return False
+
+    return True
+
 def compute_slot_unavailability(v, installed_cap):
     unavail = v.get("unavailable_capacity")
     if unavail is None:
@@ -87,10 +116,12 @@ def compute_slot_unavailability(v, installed_cap):
             unavail = 0
     return max(0, float(unavail))
 
-def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
+def get_reactor_unavailability_at_instant(values, target_dt, installed_cap, strict_filter=False):
     target_ts = target_dt.timestamp()
     active_slots = []
     for v in values:
+        if strict_filter and not is_valid_strict_slot(v):
+            continue
         v_start = parse_iso_date(v.get("start_date"))
         v_end = parse_iso_date(v.get("end_date"))
         if v_start and v_end:
@@ -104,7 +135,7 @@ def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
     
     return 0, None, None
 
-def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
+def get_reactor_daily_max_unavailability(values, day_date, installed_cap, strict_filter=False):
     day_start = datetime(day_date.year, day_date.month, day_date.day, 0, 0, 0, tzinfo=PARIS_TZ)
     day_end = day_start + timedelta(days=1)
 
@@ -114,6 +145,9 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
     eligible_slots = []
 
     for v in values:
+        if strict_filter and not is_valid_strict_slot(v):
+            continue
+
         v_start = parse_iso_date(v.get("start_date"))
         v_end = parse_iso_date(v.get("end_date"))
 
@@ -129,7 +163,6 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
 
         overlap_seconds = o_end - o_start
 
-        # Suppression du seuil minimal : tout chevauchement est éligible
         if overlap_seconds > 0:
             unavail = compute_slot_unavailability(v, installed_cap)
             if unavail > 0:
@@ -151,6 +184,8 @@ def app(environ, start_response):
         query_string = environ.get('QUERY_STRING', '')
         query_components = urllib.parse.parse_qs(query_string)
         
+        strict_filter = query_components.get("strict_filter", ["false"])[0].lower() == "true"
+
         now_paris = datetime.now(PARIS_TZ)
         t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
         t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
@@ -230,7 +265,6 @@ def app(environ, start_response):
             msg_status = str(item.get("message_status") or item.get("status") or "").upper()
             combined_status = remove_accents(f"{event_status} {msg_status}")
 
-            # Strict exclusion for DISMISSED, CANCEL, CANCELLED, and French ANNULE
             if any(term in combined_status for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]):
                 continue
 
@@ -265,27 +299,27 @@ def app(environ, start_response):
             installed_cap = r_info["installed_capacity"]
             values = r_info["values"]
 
-            unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
+            unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap, strict_filter)
             if unavail_t1 > 0:
                 sum_t1 += unavail_t1
                 list_t1.append({"reactor": unit_name, "unavailability_mw": unavail_t1, "from": f_t1, "to": t_t1})
 
-            unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap)
+            unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap, strict_filter)
             if unavail_t2 > 0:
                 sum_t2 += unavail_t2
                 list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
 
-            u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
+            u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap, strict_filter)
             if u_max_t1 > 0:
                 sum_max_t1 += u_max_t1
                 list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
 
-            u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
+            u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap, strict_filter)
             if u_max_t2 > 0:
                 sum_max_t2 += u_max_t2
                 list_max_t2.append({"reactor": unit_name, "unavailability_mw": u_max_t2, "from": f_m_t2, "to": t_m_t2})
 
-            u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap)
+            u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap, strict_filter)
             if u_max_t2_next > 0:
                 sum_max_t2_next += u_max_t2_next
                 list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
@@ -306,14 +340,14 @@ def app(environ, start_response):
                 "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
                 "t2_day_max_mw": sum_max_t2,
                 "t2_day_max_percent": round((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-                "t2_next_day_max_mw": sum_max_t2_next,
-                "t2_next_day_max_percent": round((sum_max_t2_next / TOTAL_PARC_CAPACITY_MW) * 100, 2)
+                "t2_next_day_max_mw": sum_max_next_t2,
+                "t2_next_day_max_percent": round((sum_max_next_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2)
             },
             "list_t1": list_t1,
             "list_t2": list_t2,
             "list_max_day_t1": list_max_t1,
             "list_max_day_t2": list_max_t2,
-            "list_max_next_day_t2": list_max_t2_next
+            "list_max_next_day_t2": list_max_next_day_t2
         }
 
         status = '200 OK'
