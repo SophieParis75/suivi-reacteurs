@@ -187,7 +187,9 @@ def app(environ, start_response):
         )
 
         base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
+        
+        # NOTE : On ne passe PAS 'last_version=true' à RTE afin de recevoir l'historique complet des versions si présent
+        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE"
 
         unavailabilities = []
         next_url = full_url
@@ -212,8 +214,8 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Filtre préalable des messages inactifs ou annulés/dismissed
-        active_unavailabilities = []
+        # 1. Élimination des versions inactives/dismissed/annulées
+        active_versions = []
         exclusion_terms = ["DISMISSED", "INACTIVE", "INACTIF", "CANCEL", "CANCELLED", "ANNULE"]
 
         for item in unavailabilities:
@@ -222,20 +224,20 @@ def app(environ, start_response):
             combined_status = remove_accents(f"{event_status} {msg_status}")
 
             if not any(term in combined_status for term in exclusion_terms):
-                active_unavailabilities.append(item)
+                active_versions.append(item)
 
-        # 2. Dédoublonnage par identifiant pour ne retenir que la version ACTIVES la plus récente
-        latest_by_identifier = {}
-        for item in active_unavailabilities:
+        # 2. Dédoublonnage : parmi les versions ACTIVES, on sélectionne celle qui a le numéro de version le plus élevé
+        latest_active_by_identifier = {}
+        for item in active_versions:
             identifier = item.get("identifier")
             version = int(item.get("version", 0))
 
-            if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
-                latest_by_identifier[identifier] = item
+            if identifier not in latest_active_by_identifier or version > latest_active_by_identifier[identifier]["version"]:
+                latest_active_by_identifier[identifier] = item
 
         # 3. Filtrage environnemental (racine "environ")
         filtered_items = []
-        for item in latest_by_identifier.values():
+        for item in latest_active_by_identifier.values():
             full_item_text = json.dumps(item).lower()
             if "environ" in full_item_text:
                 filtered_items.append(item)
@@ -315,7 +317,7 @@ def app(environ, start_response):
             "list_t2": list_t2,
             "list_max_day_t1": list_max_t1,
             "list_max_day_t2": list_max_t2,
-            "list_max_next_day_t2": list_max_t2_next
+            "list_max_next_day_t2": list_max_next_day_t2
         }
 
         status = '200 OK'
