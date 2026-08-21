@@ -290,7 +290,7 @@ def app(environ, start_response):
         list_max_t1, list_max_t2, list_max_t2_next = [], [], []
 
         sum_t1 = sum_t2 = 0
-        sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
+        sum_max_t1 = sum_max_t2 = sum_max_next_t2 = 0
 
         for unit_name, r_info in reactors_data.items():
             installed_cap = r_info["installed_capacity"]
@@ -318,7 +318,7 @@ def app(environ, start_response):
 
             u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap, strict_filter)
             if u_max_t2_next > 0:
-                sum_max_t2_next += u_max_t2_next
+                sum_max_next_t2 += u_max_t2_next
                 list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
 
         temp_t1 = eq_daily_temps.get(day_t1.strftime('%Y-%m-%d'))
