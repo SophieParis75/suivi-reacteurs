@@ -68,7 +68,7 @@
         <div class="card">
             <div class="rules-info">
                 • Only cuts ≥ 60 minutes are taken into account.<br>
-                • Timeframe constraint: Start &gt; 00:59 and End ≤ 23:00.<br>
+                • Timeframe constraint: Start &gt; 00:59 UTC and End ≤ 23:00 UTC.<br>
                 • For reactors with multiple outages on the same day, only the highest valid outage is considered.
             </div>
             <h2>Summary of Unavailability Totals</h2>
@@ -156,7 +156,6 @@
 
     <script>
         let lastAnalysisData = null;
-        const TOTAL_PARC_CAPACITY_MW = 62990.0;
 
         function setNowDefaults() {
             const now = new Date();
@@ -214,47 +213,7 @@
             return d.toLocaleString('en-GB', { timeZone: 'Europe/Paris' });
         }
 
-        // Filtre robuste sur les créneaux
-        function isValidSlot(item) {
-            if (!item || !item.from || !item.to) return false;
-
-            const dFrom = new Date(item.from);
-            const dTo = new Date(item.to);
-
-            // 1. Durée du créneau >= 60 minutes
-            const durationMs = dTo.getTime() - dFrom.getTime();
-            if (durationMs < 60 * 60 * 1000) {
-                return false;
-            }
-
-            // Minutes depuis minuit pour l'heure de début et de fin
-            const startMinutes = dFrom.getHours() * 60 + dFrom.getMinutes();
-            const endMinutes = dTo.getHours() * 60 + dTo.getMinutes();
-
-            // 2. Début strict après 00:59 (soit >= 01:00 / >= 60 minutes)
-            if (startMinutes <= 59) {
-                return false;
-            }
-
-            // 3. Fin <= 23:00 (1380 minutes), sauf minuit pile (00:00 du jour suivant)
-            if (endMinutes > 1380 && !(dTo.getHours() === 0 && dTo.getMinutes() === 0)) {
-                return false;
-            }
-
-            return true;
-        }
-
-        function filterList(list) {
-            if (!list) return [];
-            return list.filter(isValidSlot);
-        }
-
-        function sumMw(list) {
-            return list.reduce((acc, curr) => acc + (curr.unavailability_mw || 0), 0);
-        }
-
         async function runAnalysis() {
-            const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
             const btn = document.getElementById('btn_analyse');
             btn.disabled = true;
             btn.innerText = "Loading...";
@@ -271,49 +230,14 @@
                     return;
                 }
 
-                const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}`);
-                const rawData = await res.json();
+                // Appel unique avec le filtre strict activé
+                const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
+                const data = await res.json();
 
-                if (rawData.status !== "success") {
-                    alert("Error during RTE API analysis: " + JSON.stringify(rawData));
+                if (data.status !== "success") {
+                    alert("Error during RTE API analysis: " + JSON.stringify(data));
                     return;
                 }
-
-                // Filtrage complet de toutes les listes
-                const filtered_t1 = filterList(rawData.list_t1);
-                const filtered_t2 = filterList(rawData.list_t2);
-                const filtered_max_t1 = filterList(rawData.list_max_day_t1);
-                const filtered_max_t2 = filterList(rawData.list_max_day_t2);
-                const filtered_max_next_t2 = filterList(rawData.list_max_next_day_t2);
-
-                // Recalcul des sommes
-                const sum_t1 = sumMw(filtered_t1);
-                const sum_t2 = sumMw(filtered_t2);
-                const sum_max_t1 = sumMw(filtered_max_t1);
-                const sum_max_t2 = sumMw(filtered_max_t2);
-                const sum_max_next_t2 = sumMw(filtered_max_next_t2);
-
-                const data = {
-                    ...rawData,
-                    list_t1: filtered_t1,
-                    list_t2: filtered_t2,
-                    list_max_day_t1: filtered_max_t1,
-                    list_max_day_t2: filtered_max_t2,
-                    list_max_next_day_t2: filtered_max_next_t2,
-                    summary: {
-                        t1_unavailability_mw: sum_t1,
-                        t1_percent: roundTwo((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100),
-                        t1_day_max_mw: sum_max_t1,
-                        t1_day_max_percent: roundTwo((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100),
-                        t1_temperature_c: rawData.summary.t1_temperature_c,
-                        t2_unavailability_mw: sum_t2,
-                        t2_percent: roundTwo((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100),
-                        t2_day_max_mw: sum_max_t2,
-                        t2_day_max_percent: roundTwo((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100),
-                        t2_next_day_max_mw: sum_max_next_t2,
-                        t2_next_day_max_percent: roundTwo((sum_max_next_t2 / TOTAL_PARC_CAPACITY_MW) * 100)
-                    }
-                };
 
                 lastAnalysisData = { data, t1Raw, t2Raw };
 
@@ -418,10 +342,6 @@
                 btn.disabled = false;
                 btn.innerText = "Analysis";
             }
-        }
-
-        function roundTwo(val) {
-            return Math.round(val * 100) / 100;
         }
 
         function fillTable(tbodyId, list) {
