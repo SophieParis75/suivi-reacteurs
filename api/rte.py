@@ -457,12 +457,13 @@ def app(environ, start_response):
             "message": error_body,
         }).encode("utf-8")
     ]
-except Exception as e:
-  status = "500 Internal Server Error"
-  headers = [("Content-Type", "application/json")]
-  start_response(status, headers)
-  return [
-      json.dumps({"status": "Exception", "message": str(e)}).encode("utf-8")
-  ]
+  except Exception as e:
+    status = "500 Internal Server Error"
+    headers = [("Content-Type", "application/json")]
+    start_response(status, headers)
+    return [
+        json.dumps({"status": "Exception", "message": str(e)}).encode("utf-8")
+    ]
+
 
 handler = app
