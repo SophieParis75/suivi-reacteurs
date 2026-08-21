@@ -67,8 +67,9 @@
         <!-- Global Summary -->
         <div class="card">
             <div class="rules-info">
-                • Only cuts &gt; 59 minutes (≥ 1 hour) are taken into account.<br>
-                • For reactors with multiple outages on the same day, only the highest outage &gt; 59 minutes is considered.
+                • Only cuts ≥ 60 minutes are taken into account.<br>
+                • Timeframe constraint: Start &gt; 00:59 UTC and End ≤ 23:00 UTC.<br>
+                • For reactors with multiple outages on the same day, only the highest valid outage is considered.
             </div>
             <h2>Summary of Unavailability Totals</h2>
             <div class="kpi-grid" id="kpi_container"></div>
@@ -348,11 +349,24 @@
                 return;
             }
 
-            // Filtrage optionnel côté client pour garantir l'exclusion des arrêts < 60 minutes
             const filteredList = list.filter(r => {
                 if (!r.from || !r.to) return true;
-                const durationMinutes = (new Date(r.to) - new Date(r.from)) / (1000 * 60);
-                return durationMinutes >= 60;
+                
+                const dFrom = new Date(r.from);
+                const dTo = new Date(r.to);
+                
+                // Condition 1: Durée minimale d'au moins 60 minutes
+                const durationMinutes = (dTo - dFrom) / (1000 * 60);
+                if (durationMinutes < 60) return false;
+
+                // Condition 2: Plage horaire UTC (début > 00:59 UTC et fin <= 23:00 UTC)
+                const startUtcMinutes = dFrom.getUTCHours() * 60 + dFrom.getUTCMinutes();
+                const endUtcMinutes = dTo.getUTCHours() * 60 + dTo.getUTCMinutes();
+
+                const isStartValid = startUtcMinutes > 59; // strict sous-entendu > 00:59
+                const isEndValid = endUtcMinutes <= 1380 || (dTo.getUTCHours() === 0 && dTo.getUTCMinutes() === 0); // 23:00 UTC = 1380 minutes
+
+                return isStartValid && isEndValid;
             });
 
             if (filteredList.length === 0) {
