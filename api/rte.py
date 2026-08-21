@@ -123,7 +123,6 @@ def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
         v_start_ts = v_start.timestamp()
         v_end_ts = v_end.timestamp()
 
-        # Overlap in seconds via Unix timestamps
         o_start = max(v_start_ts, start_ts)
         o_end = min(v_end_ts, end_ts)
 
@@ -213,27 +212,30 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Deduplication by unique identifier
-        latest_by_identifier = {}
+        # 1. Filtre préalable des messages inactifs ou annulés/dismissed
+        active_unavailabilities = []
+        exclusion_terms = ["DISMISSED", "INACTIVE", "INACTIF", "CANCEL", "CANCELLED", "ANNULE"]
+
         for item in unavailabilities:
+            event_status = str(item.get("event_status") or "").upper()
+            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
+            combined_status = remove_accents(f"{event_status} {msg_status}")
+
+            if not any(term in combined_status for term in exclusion_terms):
+                active_unavailabilities.append(item)
+
+        # 2. Dédoublonnage par identifiant pour ne retenir que la version ACTIVES la plus récente
+        latest_by_identifier = {}
+        for item in active_unavailabilities:
             identifier = item.get("identifier")
             version = int(item.get("version", 0))
 
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # 2. Filtering: Exclude messages marked as DISMISSED, INACTIVE, CANCEL/ANNULE, keep those containing 'environ'
+        # 3. Filtrage environnemental (racine "environ")
         filtered_items = []
         for item in latest_by_identifier.values():
-            event_status = str(item.get("event_status") or "").upper()
-            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
-            combined_status = remove_accents(f"{event_status} {msg_status}")
-
-            # Exclusions strictes pour DISMISSED, INACTIVE, INACTIF, CANCEL/CANCELLED et ANNULE
-            exclusion_terms = ["DISMISSED", "INACTIVE", "INACTIF", "CANCEL", "CANCELLED", "ANNULE"]
-            if any(term in combined_status for term in exclusion_terms):
-                continue
-
             full_item_text = json.dumps(item).lower()
             if "environ" in full_item_text:
                 filtered_items.append(item)
