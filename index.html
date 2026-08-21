@@ -230,8 +230,7 @@
                     return;
                 }
 
-                // Appel unique avec le filtre strict activé
-                const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
+                const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}`);
                 const data = await res.json();
 
                 if (data.status !== "success") {
@@ -350,7 +349,32 @@
                 return;
             }
 
-            const sortedList = [...list].sort((a, b) => a.reactor.localeCompare(b.reactor));
+            const filteredList = list.filter(r => {
+                if (!r.from || !r.to) return true;
+                
+                const dFrom = new Date(r.from);
+                const dTo = new Date(r.to);
+                
+                // Condition 1: Durée minimale d'au moins 60 minutes
+                const durationMinutes = (dTo - dFrom) / (1000 * 60);
+                if (durationMinutes < 60) return false;
+
+                // Condition 2: Plage horaire UTC (début > 00:59 UTC et fin <= 23:00 UTC)
+                const startUtcMinutes = dFrom.getUTCHours() * 60 + dFrom.getUTCMinutes();
+                const endUtcMinutes = dTo.getUTCHours() * 60 + dTo.getUTCMinutes();
+
+                const isStartValid = startUtcMinutes > 59; // strict sous-entendu > 00:59
+                const isEndValid = endUtcMinutes <= 1380 || (dTo.getUTCHours() === 0 && dTo.getUTCMinutes() === 0); // 23:00 UTC = 1380 minutes
+
+                return isStartValid && isEndValid;
+            });
+
+            if (filteredList.length === 0) {
+                document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
+                return;
+            }
+
+            const sortedList = [...filteredList].sort((a, b) => a.reactor.localeCompare(b.reactor));
             const html = sortedList.map(r => `
                 <tr>
                     <td>${r.reactor}</td>
