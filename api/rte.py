@@ -1,469 +1,339 @@
-import base64
-from datetime import datetime, timedelta, timezone
-import json
 import os
-import unicodedata
-import urllib.error
-import urllib.parse
+import json
 import urllib.request
+import urllib.parse
+import urllib.error
+import base64
+import unicodedata
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 PARIS_TZ = ZoneInfo("Europe/Paris")
 TOTAL_PARC_CAPACITY_MW = 62990.0
 
-
 def remove_accents(input_str):
-  """Normalize string to remove accents (e.g., 'ANNULÉ' -> 'ANNULE')"""
-  nfkd_form = unicodedata.normalize("NFKD", input_str)
-  return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
-
+    """Normalize string to remove accents (e.g., 'ANNULÉ' -> 'ANNULE')"""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 def get_rte_token(client_id, client_secret):
-  url = "https://digital.iservices.rte-france.com/token/oauth/"
-  auth_str = f"{client_id}:{client_secret}"
-  b64_auth = base64.b64encode(auth_str.encode()).decode()
-
-  headers = {
-      "Authorization": f"Basic {b64_auth}",
-      "Content-Type": "application/x-www-form-urlencoded",
-  }
-  data = "grant_type=client_credentials".encode("utf-8")
-
-  req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-  with urllib.request.urlopen(req, timeout=10) as resp:
-    res_data = json.loads(resp.read().decode())
-    return res_data.get("access_token")
-
+    url = "https://digital.iservices.rte-france.com/token/oauth/"
+    auth_str = f"{client_id}:{client_secret}"
+    b64_auth = base64.b64encode(auth_str.encode()).decode()
+    
+    headers = {
+        "Authorization": f"Basic {b64_auth}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = "grant_type=client_credentials".encode('utf-8')
+    
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        res_data = json.loads(resp.read().decode())
+        return res_data.get("access_token")
 
 def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
-  if not eq_api_key:
-    return {}
+    if not eq_api_key:
+        return {}
 
-  series_id = urllib.parse.quote("FR Consumption Temperature °C H Actual")
-  url = f"https://app.energyquantified.com/api/timeseries/{series_id}/?begin={start_date_str}&end={end_date_str}&frequency=PT1H"
-
-  req = urllib.request.Request(
-      url,
-      headers={"accept": "application/json", "X-API-Key": eq_api_key},
-      method="GET",
-  )
-
-  daily_temps = {}
-  try:
-    with urllib.request.urlopen(req, timeout=10) as resp:
-      data = json.loads(resp.read().decode("utf-8"))
-      values_list = data.get("data", []) or data.get("values", [])
-
-      buckets = {}
-      for item in values_list:
-        d_str = item.get("date") or item.get("d")
-        val = item.get("value") or item.get("v")
-        if d_str and val is not None:
-          dt = datetime.fromisoformat(d_str.replace("Z", "+00:00")).astimezone(
-              PARIS_TZ
-          )
-          day_key = dt.strftime("%Y-%m-%d")
-          if day_key not in buckets:
-            buckets[day_key] = []
-          buckets[day_key].append(float(val))
-
-      for day_key, vals in buckets.items():
-        if vals:
-          daily_temps[day_key] = round(sum(vals) / len(vals), 1)
-
-  except Exception as e:
-    print(f"Error fetching EQ temperature data: {e}")
-
-  return daily_temps
-
+    series_id = urllib.parse.quote("FR Consumption Temperature °C H Actual")
+    url = f"https://app.energyquantified.com/api/timeseries/{series_id}/?begin={start_date_str}&end={end_date_str}&frequency=PT1H"
+    
+    req = urllib.request.Request(
+        url,
+        headers={"accept": "application/json", "X-API-Key": eq_api_key},
+        method="GET"
+    )
+    
+    daily_temps = {}
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            values_list = data.get("data", []) or data.get("values", [])
+            
+            buckets = {}
+            for item in values_list:
+                d_str = item.get("date") or item.get("d")
+                val = item.get("value") or item.get("v")
+                if d_str and val is not None:
+                    dt = datetime.fromisoformat(d_str.replace("Z", "+00:00")).astimezone(PARIS_TZ)
+                    day_key = dt.strftime("%Y-%m-%d")
+                    if day_key not in buckets:
+                        buckets[day_key] = []
+                    buckets[day_key].append(float(val))
+            
+            for day_key, vals in buckets.items():
+                if vals:
+                    daily_temps[day_key] = round(sum(vals) / len(vals), 1)
+                    
+    except Exception as e:
+        print(f"Error fetching EQ temperature data: {e}")
+        
+    return daily_temps
 
 def parse_iso_date(dt_str):
-  if not dt_str:
-    return None
-  dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-  return dt.astimezone(PARIS_TZ)
-
-
-def is_valid_strict_slot(v):
-  """Vérifie la durée >= 60 min et rejette les créneaux nocturnes (23h01 -> 00h59 heure de Paris)."""
-  v_start = parse_iso_date(v.get("start_date"))
-  v_end = parse_iso_date(v.get("end_date"))
-  if not v_start or not v_end:
-    return False
-
-  # 1. Durée totale de l'événement d'origine >= 60 min
-  total_duration_min = (v_end - v_start).total_seconds() / 60.0
-  if total_duration_min < 60:
-    return False
-
-  # 2. Rejet des événements qui DÉMARRENT pendant la plage nocturne (23h01 -> 00h59)
-  start_min = v_start.hour * 60 + v_start.minute
-  if start_min > 1380 or start_min <= 59:
-    return False
-
-  # 3. Rejet des événements courts (< 24h) qui SE TERMINENT pendant la plage nocturne (23h01 -> 00h59)
-  end_min = v_end.hour * 60 + v_end.minute
-  is_midnight_exact = v_end.hour == 0 and v_end.minute == 0
-
-  if (
-      total_duration_min < 1440
-      and (end_min > 1380 or end_min <= 59)
-      and not is_midnight_exact
-  ):
-    return False
-
-  return True
-
+    if not dt_str:
+        return None
+    dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+    return dt.astimezone(PARIS_TZ)
 
 def compute_slot_unavailability(v, installed_cap):
-  unavail = v.get("unavailable_capacity")
-  if unavail is None:
-    avail = v.get("available_capacity")
-    if avail is not None:
-      unavail = installed_cap - avail
-    else:
-      unavail = 0
-  return max(0, float(unavail))
+    unavail = v.get("unavailable_capacity")
+    if unavail is None:
+        avail = v.get("available_capacity")
+        if avail is not None:
+            unavail = installed_cap - avail
+        else:
+            unavail = 0
+    return max(0, float(unavail))
 
+def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
+    target_ts = target_dt.timestamp()
+    active_slots = []
+    for v in values:
+        v_start = parse_iso_date(v.get("start_date"))
+        v_end = parse_iso_date(v.get("end_date"))
+        if v_start and v_end:
+            if v_start.timestamp() <= target_ts < v_end.timestamp():
+                unavail = compute_slot_unavailability(v, installed_cap)
+                if unavail > 0:
+                    active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
+    
+    if active_slots:
+        return max(active_slots, key=lambda x: x[0])
+    
+    return 0, None, None
 
-def get_reactor_unavailability_at_instant(
-    values, target_dt, installed_cap, strict_filter=False
-):
-  target_ts = target_dt.timestamp()
-  active_slots = []
-  for v in values:
-    if strict_filter and not is_valid_strict_slot(v):
-      continue
-    v_start = parse_iso_date(v.get("start_date"))
-    v_end = parse_iso_date(v.get("end_date"))
-    if v_start and v_end:
-      if v_start.timestamp() <= target_ts < v_end.timestamp():
-        unavail = compute_slot_unavailability(v, installed_cap)
-        if unavail > 0:
-          active_slots.append(
-              (unavail, v.get("start_date"), v.get("end_date"))
-          )
+def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
+    day_start = datetime(day_date.year, day_date.month, day_date.day, 0, 0, 0, tzinfo=PARIS_TZ)
+    day_end = day_start + timedelta(days=1)
 
-  if active_slots:
-    return max(active_slots, key=lambda x: x[0])
+    start_ts = day_start.timestamp()
+    end_ts = day_end.timestamp()
 
-  return 0, None, None
+    eligible_slots = []
 
+    for v in values:
+        v_start = parse_iso_date(v.get("start_date"))
+        v_end = parse_iso_date(v.get("end_date"))
 
-def get_reactor_daily_max_unavailability(
-    values, day_date, installed_cap, strict_filter=False
-):
-  day_start = datetime(
-      day_date.year, day_date.month, day_date.day, 0, 0, 0, tzinfo=PARIS_TZ
-  )
-  day_end = day_start + timedelta(days=1)
+        if not v_start or not v_end:
+            continue
 
-  start_ts = day_start.timestamp()
-  end_ts = day_end.timestamp()
+        v_start_ts = v_start.timestamp()
+        v_end_ts = v_end.timestamp()
 
-  eligible_slots = []
+        # Overlap in seconds via Unix timestamps
+        o_start = max(v_start_ts, start_ts)
+        o_end = min(v_end_ts, end_ts)
 
-  for v in values:
-    if strict_filter and not is_valid_strict_slot(v):
-      continue
+        overlap_seconds = o_end - o_start
 
-    v_start = parse_iso_date(v.get("start_date"))
-    v_end = parse_iso_date(v.get("end_date"))
+        # Suppression du seuil minimal : tout chevauchement est éligible
+        if overlap_seconds > 0:
+            unavail = compute_slot_unavailability(v, installed_cap)
+            if unavail > 0:
+                eligible_slots.append({
+                    "unavail": unavail,
+                    "overlap_seconds": overlap_seconds,
+                    "start_date": v.get("start_date"),
+                    "end_date": v.get("end_date")
+                })
 
-    if not v_start or not v_end:
-      continue
+    if eligible_slots:
+        best_slot = max(eligible_slots, key=lambda x: x["unavail"])
+        return best_slot["unavail"], best_slot["start_date"], best_slot["end_date"]
 
-    v_start_ts = v_start.timestamp()
-    v_end_ts = v_end.timestamp()
-
-    # Overlap in seconds via Unix timestamps
-    o_start = max(v_start_ts, start_ts)
-    o_end = min(v_end_ts, end_ts)
-
-    overlap_seconds = o_end - o_start
-
-    if overlap_seconds > 0:
-      unavail = compute_slot_unavailability(v, installed_cap)
-      if unavail > 0:
-        eligible_slots.append({
-            "unavail": unavail,
-            "overlap_seconds": overlap_seconds,
-            "start_date": v.get("start_date"),
-            "end_date": v.get("end_date"),
-        })
-
-  if eligible_slots:
-    best_slot = max(eligible_slots, key=lambda x: x["unavail"])
-    return best_slot["unavail"], best_slot["start_date"], best_slot["end_date"]
-
-  return 0, None, None
-
+    return 0, None, None
 
 def app(environ, start_response):
-  try:
-    query_string = environ.get("QUERY_STRING", "")
-    query_components = urllib.parse.parse_qs(query_string)
+    try:
+        query_string = environ.get('QUERY_STRING', '')
+        query_components = urllib.parse.parse_qs(query_string)
+        
+        now_paris = datetime.now(PARIS_TZ)
+        t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
+        t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
 
-    strict_filter = (
-        query_components.get("strict_filter", ["false"])[0].lower() == "true"
-    )
+        t1_dt = datetime.fromisoformat(t1_str).astimezone(PARIS_TZ)
+        t2_dt = datetime.fromisoformat(t2_str).astimezone(PARIS_TZ)
 
-    now_paris = datetime.now(PARIS_TZ)
-    t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
-    t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
+        client_id = os.environ.get("RTE_CLIENT_ID")
+        client_secret = os.environ.get("RTE_CLIENT_SECRET")
+        eq_api_key = os.environ.get("EQ_API_KEY")
 
-    t1_dt = datetime.fromisoformat(t1_str).astimezone(PARIS_TZ)
-    t2_dt = datetime.fromisoformat(t2_str).astimezone(PARIS_TZ)
+        if not client_id or not client_secret:
+            status = '500 Internal Server Error'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET"}).encode('utf-8')]
 
-    client_id = os.environ.get("RTE_CLIENT_ID")
-    client_secret = os.environ.get("RTE_CLIENT_SECRET")
-    eq_api_key = os.environ.get("EQ_API_KEY")
+        token = get_rte_token(client_id, client_secret)
 
-    if not client_id or not client_secret:
-      status = "500 Internal Server Error"
-      headers = [("Content-Type", "application/json")]
-      start_response(status, headers)
-      return [
-          json.dumps({
-              "status": "error",
-              "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET",
-          }).encode("utf-8")
-      ]
+        min_dt = min(t1_dt, t2_dt)
+        max_dt = max(t1_dt, t2_dt)
 
-    token = get_rte_token(client_id, client_secret)
+        search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) - timedelta(days=1)
+        search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=3)
 
-    min_dt = min(t1_dt, t2_dt)
-    max_dt = max(t1_dt, t2_dt)
+        search_start_utc = search_start_paris.astimezone(timezone.utc)
+        search_end_utc = search_end_paris.astimezone(timezone.utc)
 
-    search_start_paris = datetime(
-        min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ
-    ) - timedelta(days=1)
-    search_end_paris = datetime(
-        max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ
-    ) + timedelta(days=3)
+        start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-    search_start_utc = search_start_paris.astimezone(timezone.utc)
-    search_end_utc = search_end_paris.astimezone(timezone.utc)
+        eq_daily_temps = get_eq_temperatures(
+            min_dt.strftime('%Y-%m-%d'),
+            (max_dt + timedelta(days=2)).strftime('%Y-%m-%d'),
+            eq_api_key
+        )
 
-    start_str = search_start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_str = search_end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
+        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
 
-    eq_daily_temps = get_eq_temperatures(
-        min_dt.strftime("%Y-%m-%d"),
-        (max_dt + timedelta(days=2)).strftime("%Y-%m-%d"),
-        eq_api_key,
-    )
+        unavailabilities = []
+        next_url = full_url
 
-    base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
-    full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
+        while next_url:
+            req_rte = urllib.request.Request(
+                next_url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                method="GET"
+            )
 
-    unavailabilities = []
-    next_url = full_url
+            with urllib.request.urlopen(req_rte, timeout=20) as resp:
+                raw_data = json.loads(resp.read().decode('utf-8'))
 
-    while next_url:
-      req_rte = urllib.request.Request(
-          next_url,
-          headers={
-              "Authorization": f"Bearer {token}",
-              "Accept": "application/json",
-          },
-          method="GET",
-      )
+            batch = raw_data.get("generation_unavailabilities", [])
+            unavailabilities.extend(batch)
 
-      with urllib.request.urlopen(req_rte, timeout=20) as resp:
-        raw_data = json.loads(resp.read().decode("utf-8"))
+            continuation_token = raw_data.get("continuation_token") or raw_data.get("pagination", {}).get("continuation_token")
 
-      batch = raw_data.get("generation_unavailabilities", [])
-      unavailabilities.extend(batch)
+            if continuation_token:
+                next_url = f"{full_url}&continuation_token={urllib.parse.quote(continuation_token)}"
+            else:
+                next_url = None
 
-      continuation_token = raw_data.get("continuation_token") or raw_data.get(
-          "pagination", {}
-      ).get("continuation_token")
+        # 1. Deduplication by unique identifier
+        latest_by_identifier = {}
+        for item in unavailabilities:
+            identifier = item.get("identifier")
+            version = int(item.get("version", 0))
 
-      if continuation_token:
-        next_url = f"{full_url}&continuation_token={urllib.parse.quote(continuation_token)}"
-      else:
-        next_url = None
+            if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
+                latest_by_identifier[identifier] = item
 
-    # 1. Deduplication by unique identifier
-    latest_by_identifier = {}
-    for item in unavailabilities:
-      identifier = item.get("identifier")
-      version = int(item.get("version", 0))
+        # 2. Filtering: Exclude messages marked as DISMISSED or CANCELED/ANNULE, keep those containing 'environ'
+        filtered_items = []
+        for item in latest_by_identifier.values():
+            event_status = str(item.get("event_status") or "").upper()
+            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
+            combined_status = remove_accents(f"{event_status} {msg_status}")
 
-      if (
-          identifier not in latest_by_identifier
-          or version > latest_by_identifier[identifier]["version"]
-      ):
-        latest_by_identifier[identifier] = item
+            # Strict exclusion for DISMISSED, CANCEL, CANCELLED, and French ANNULE
+            if any(term in combined_status for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]):
+                continue
 
-    # 2. Filtering: Exclude messages marked as DISMISSED or CANCELED/ANNULE, keep those containing 'environ'
-    filtered_items = []
-    for item in latest_by_identifier.values():
-      event_status = str(item.get("event_status") or "").upper()
-      msg_status = str(
-          item.get("message_status") or item.get("status") or ""
-      ).upper()
-      combined_status = remove_accents(f"{event_status} {msg_status}")
+            full_item_text = json.dumps(item).lower()
+            if "environ" in full_item_text:
+                filtered_items.append(item)
 
-      if any(
-          term in combined_status
-          for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]
-      ):
-        continue
+        reactors_data = {}
+        for item in filtered_items:
+            unit_name = item.get("affected_asset_or_unit_name", "Unknown")
+            installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
+            values = item.get("values", [])
 
-      full_item_text = json.dumps(item).lower()
-      if "environ" in full_item_text:
-        filtered_items.append(item)
+            if unit_name not in reactors_data:
+                reactors_data[unit_name] = {
+                    "installed_capacity": installed_cap,
+                    "values": []
+                }
+            reactors_data[unit_name]["values"].extend(values)
 
-    reactors_data = {}
-    for item in filtered_items:
-      unit_name = item.get("affected_asset_or_unit_name", "Unknown")
-      installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
-      values = item.get("values", [])
+        day_t1 = t1_dt.date()
+        day_t2 = t2_dt.date()
+        day_t2_next = day_t2 + timedelta(days=1)
 
-      if unit_name not in reactors_data:
-        reactors_data[unit_name] = {
-            "installed_capacity": installed_cap,
-            "values": [],
+        list_t1, list_t2 = [], []
+        list_max_t1, list_max_t2, list_max_t2_next = [], [], []
+
+        sum_t1 = sum_t2 = 0
+        sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
+
+        for unit_name, r_info in reactors_data.items():
+            installed_cap = r_info["installed_capacity"]
+            values = r_info["values"]
+
+            unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
+            if unavail_t1 > 0:
+                sum_t1 += unavail_t1
+                list_t1.append({"reactor": unit_name, "unavailability_mw": unavail_t1, "from": f_t1, "to": t_t1})
+
+            unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap)
+            if unavail_t2 > 0:
+                sum_t2 += unavail_t2
+                list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
+
+            u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
+            if u_max_t1 > 0:
+                sum_max_t1 += u_max_t1
+                list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
+
+            u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
+            if u_max_t2 > 0:
+                sum_max_t2 += u_max_t2
+                list_max_t2.append({"reactor": unit_name, "unavailability_mw": u_max_t2, "from": f_m_t2, "to": t_m_t2})
+
+            u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap)
+            if u_max_t2_next > 0:
+                sum_max_t2_next += u_max_t2_next
+                list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
+
+        temp_t1 = eq_daily_temps.get(day_t1.strftime('%Y-%m-%d'))
+
+        payload = {
+            "status": "success",
+            "t1_iso": t1_dt.isoformat(),
+            "t2_iso": t2_dt.isoformat(),
+            "summary": {
+                "t1_unavailability_mw": sum_t1,
+                "t1_percent": round((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t1_day_max_mw": sum_max_t1,
+                "t1_day_max_percent": round((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t1_temperature_c": temp_t1,
+                "t2_unavailability_mw": sum_t2,
+                "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_day_max_mw": sum_max_t2,
+                "t2_day_max_percent": round((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_next_day_max_mw": sum_max_t2_next,
+                "t2_next_day_max_percent": round((sum_max_t2_next / TOTAL_PARC_CAPACITY_MW) * 100, 2)
+            },
+            "list_t1": list_t1,
+            "list_t2": list_t2,
+            "list_max_day_t1": list_max_t1,
+            "list_max_day_t2": list_max_t2,
+            "list_max_next_day_t2": list_max_t2_next
         }
-      reactors_data[unit_name]["values"].extend(values)
 
-    day_t1 = t1_dt.date()
-    day_t2 = t2_dt.date()
-    day_t2_next = day_t2 + timedelta(days=1)
+        status = '200 OK'
+        headers = [
+            ('Content-Type', 'application/json'),
+            ('Access-Control-Allow-Origin', '*')
+        ]
+        start_response(status, headers)
+        return [json.dumps(payload).encode('utf-8')]
 
-    list_t1, list_t2 = [], []
-    list_max_t1, list_max_t2, list_max_next_day_t2 = [], [], []
-
-    sum_t1 = sum_t2 = 0
-    sum_max_t1 = sum_max_t2 = sum_max_next_t2 = 0
-
-    for unit_name, r_info in reactors_data.items():
-      installed_cap = r_info["installed_capacity"]
-      values = r_info["values"]
-
-      unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(
-          values, t1_dt, installed_cap, strict_filter
-      )
-      if unavail_t1 > 0:
-        sum_t1 += unavail_t1
-        list_t1.append({
-            "reactor": unit_name,
-            "unavailability_mw": unavail_t1,
-            "from": f_t1,
-            "to": t_t1,
-        })
-
-      unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(
-          values, t2_dt, installed_cap, strict_filter
-      )
-      if unavail_t2 > 0:
-        sum_t2 += unavail_t2
-        list_t2.append({
-            "reactor": unit_name,
-            "unavailability_mw": unavail_t2,
-            "from": f_t2,
-            "to": t_t2,
-        })
-
-      u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(
-          values, day_t1, installed_cap, strict_filter
-      )
-      if u_max_t1 > 0:
-        sum_max_t1 += u_max_t1
-        list_max_t1.append({
-            "reactor": unit_name,
-            "unavailability_mw": u_max_t1,
-            "from": f_m_t1,
-            "to": t_m_t1,
-        })
-
-      u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(
-          values, day_t2, installed_cap, strict_filter
-      )
-      if u_max_t2 > 0:
-        sum_max_t2 += u_max_t2
-        list_max_t2.append({
-            "reactor": unit_name,
-            "unavailability_mw": u_max_t2,
-            "from": f_m_t2,
-            "to": t_m_t2,
-        })
-
-      u_max_t2_next, f_m_t2_next, t_m_t2_next = (
-          get_reactor_daily_max_unavailability(
-              values, day_t2_next, installed_cap, strict_filter
-          )
-      )
-      if u_max_t2_next > 0:
-        sum_max_next_t2 += u_max_t2_next
-        list_max_next_day_t2.append({
-            "reactor": unit_name,
-            "unavailability_mw": u_max_t2_next,
-            "from": f_m_t2_next,
-            "to": t_m_t2_next,
-        })
-
-    temp_t1 = eq_daily_temps.get(day_t1.strftime("%Y-%m-%d"))
-
-    payload = {
-        "status": "success",
-        "t1_iso": t1_dt.isoformat(),
-        "t2_iso": t2_dt.isoformat(),
-        "summary": {
-            "t1_unavailability_mw": sum_t1,
-            "t1_percent": round((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-            "t1_day_max_mw": sum_max_t1,
-            "t1_day_max_percent": round(
-                (sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2
-            ),
-            "t1_temperature_c": temp_t1,
-            "t2_unavailability_mw": sum_t2,
-            "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
-            "t2_day_max_mw": sum_max_t2,
-            "t2_day_max_percent": round(
-                (sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2
-            ),
-            "t2_next_day_max_mw": sum_max_next_t2,
-            "t2_next_day_max_percent": round(
-                (sum_max_next_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2
-            ),
-        },
-        "list_t1": list_t1,
-        "list_t2": list_t2,
-        "list_max_day_t1": list_max_t1,
-        "list_max_day_t2": list_max_t2,
-        "list_max_next_day_t2": list_max_next_day_t2,
-    }
-
-    status = "200 OK"
-    headers = [
-        ("Content-Type", "application/json"),
-        ("Access-Control-Allow-Origin", "*"),
-    ]
-    start_response(status, headers)
-    return [json.dumps(payload).encode("utf-8")]
-
-  except urllib.error.HTTPError as e:
-    error_body = e.read().decode("utf-8", errors="ignore")
-    status = f"{e.code} HTTP Error"
-    headers = [("Content-Type", "application/json")]
-    start_response(status, headers)
-    return [
-        json.dumps({
-            "status": "HTTPError",
-            "code": e.code,
-            "message": error_body,
-        }).encode("utf-8")
-    ]
-  except Exception as e:
-    status = "500 Internal Server Error"
-    headers = [("Content-Type", "application/json")]
-    start_response(status, headers)
-    return [
-        json.dumps({"status": "Exception", "message": str(e)}).encode("utf-8")
-    ]
-
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='ignore')
+        status = f'{e.code} HTTP Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+        return [json.dumps({"status": "HTTPError", "code": e.code, "message": error_body}).encode('utf-8')]
+    except Exception as e:
+        status = '500 Internal Server Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+        return [json.dumps({"status": "Exception", "message": str(e)}).encode('utf-8')]
 
 handler = app
