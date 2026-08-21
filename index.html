@@ -68,7 +68,7 @@
         <div class="card">
             <div class="rules-info">
                 • Only cuts ≥ 60 minutes are taken into account.<br>
-                • Timeframe constraint: Start &gt; 00:59 UTC and End ≤ 23:00 UTC.<br>
+                • Timeframe constraint: Start &gt; 00:59 and End ≤ 23:00.<br>
                 • For reactors with multiple outages on the same day, only the highest valid outage is considered.
             </div>
             <h2>Summary of Unavailability Totals</h2>
@@ -214,29 +214,30 @@
             return d.toLocaleString('en-GB', { timeZone: 'Europe/Paris' });
         }
 
-        // Filtre strict appliqué sur le créneau reçu
+        // Filtre robuste sur les créneaux
         function isValidSlot(item) {
             if (!item || !item.from || !item.to) return false;
 
             const dFrom = new Date(item.from);
             const dTo = new Date(item.to);
 
-            // 1. Durée du créneau transmis : doit faire au moins 60 minutes (3 600 000 ms)
+            // 1. Durée du créneau >= 60 minutes
             const durationMs = dTo.getTime() - dFrom.getTime();
             if (durationMs < 60 * 60 * 1000) {
                 return false;
             }
 
-            // 2. Filtre UTC : Début > 00:59 UTC (>= 01:00 UTC, soit >= 60 min dans la journée UTC)
-            const startUtcMinutes = dFrom.getUTCHours() * 60 + dFrom.getUTCMinutes();
-            if (startUtcMinutes < 60) {
+            // Minutes depuis minuit pour l'heure de début et de fin
+            const startMinutes = dFrom.getHours() * 60 + dFrom.getMinutes();
+            const endMinutes = dTo.getHours() * 60 + dTo.getMinutes();
+
+            // 2. Début strict après 00:59 (soit >= 01:00 / >= 60 minutes)
+            if (startMinutes <= 59) {
                 return false;
             }
 
-            // 3. Filtre UTC : Fin <= 23:00 UTC (1380 minutes UTC). 
-            // 00:00 UTC du lendemain est la fin légitime de la journée.
-            const endUtcMinutes = dTo.getUTCHours() * 60 + dTo.getUTCMinutes();
-            if (endUtcMinutes > 1380 && !(dTo.getUTCHours() === 0 && dTo.getUTCMinutes() === 0)) {
+            // 3. Fin <= 23:00 (1380 minutes), sauf minuit pile (00:00 du jour suivant)
+            if (endMinutes > 1380 && !(dTo.getHours() === 0 && dTo.getMinutes() === 0)) {
                 return false;
             }
 
@@ -277,14 +278,14 @@
                     return;
                 }
 
-                // Application du filtre sur toutes les listes
+                // Filtrage complet de toutes les listes
                 const filtered_t1 = filterList(rawData.list_t1);
                 const filtered_t2 = filterList(rawData.list_t2);
                 const filtered_max_t1 = filterList(rawData.list_max_day_t1);
                 const filtered_max_t2 = filterList(rawData.list_max_day_t2);
                 const filtered_max_next_t2 = filterList(rawData.list_max_next_day_t2);
 
-                // Recalcul exact des sommes et KPI
+                // Recalcul des sommes
                 const sum_t1 = sumMw(filtered_t1);
                 const sum_t2 = sumMw(filtered_t2);
                 const sum_max_t1 = sumMw(filtered_max_t1);
