@@ -78,32 +78,35 @@ def parse_iso_date(dt_str):
     return dt.astimezone(PARIS_TZ)
 
 def is_valid_strict_slot(v):
-    """Vérifie si le créneau d'origine respecte la durée >= 60 min et ne se situe pas dans la plage interdite (23:01 -> 00:59 heure de Paris)"""
-    v_start = parse_iso_date(v.get("start_date"))
-    v_end = parse_iso_date(v.get("end_date"))
-    if not v_start or not v_end:
-        return False
+  """Vérifie si le créneau d'origine respecte la durée >= 60 min et n'est pas un micro-créneau nocturne."""
+  v_start = parse_iso_date(v.get("start_date"))
+  v_end = parse_iso_date(v.get("end_date"))
+  if not v_start or not v_end:
+    return False
 
-    # 1. Durée totale de l'événement d'origine >= 60 min
-    total_duration_min = (v_end - v_start).total_seconds() / 60.0
-    if total_duration_min < 60:
-        return False
+  # 1. Durée totale de l'événement d'origine >= 60 min
+  total_duration_min = (v_end - v_start).total_seconds() / 60.0
+  if total_duration_min < 60:
+    return False
 
-    # 2. Vérification des heures en heure de Paris
-    # Un événement est invalide s'il commence OU s'il se termine entre 23:01 et 00:59
-    start_min = v_start.hour * 60 + v_start.minute
-    end_min = v_end.hour * 60 + v_end.minute
+  # 2. Rejet des événements qui DÉMARRENT pendant la plage nocturne (23h01 -> 00h59)
+  start_min = v_start.hour * 60 + v_start.minute
+  if start_min > 1380 or start_min <= 59:
+    return False
 
-    # Début interdit entre 23:01 (1381 min) et 00:59 (59 min)
-    if start_min > 1380 or start_min <= 59:
-        return False
+  # 3. Rejet des événements courts (< 24h) qui SE TERMINENT pendant la plage nocturne (23h01 -> 00h59)
+  # (Les événements de plus de 24h qui se terminent à 00h30 restent valides pour la journée précédente)
+  end_min = v_end.hour * 60 + v_end.minute
+  is_midnight_exact = v_end.hour == 0 and v_end.minute == 0
 
-    # Fin interdite entre 23:01 (1381 min) et 00:59 (59 min)
-    # Exception : 00:00 pile (minuit) qui est représenté par hour=0, minute=0 et est valide.
-    if (end_min > 1380 or end_min <= 59) and not (v_end.hour == 0 and v_end.minute == 0):
-        return False
+  if (
+      total_duration_min < 1440
+      and (end_min > 1380 or end_min <= 59)
+      and not is_midnight_exact
+  ):
+    return False
 
-    return True
+  return True
 
 def compute_slot_unavailability(v, installed_cap):
     unavail = v.get("unavailable_capacity")
