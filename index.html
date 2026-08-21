@@ -254,6 +254,7 @@
         }
 
         async function runAnalysis() {
+            const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
             const btn = document.getElementById('btn_analyse');
             btn.disabled = true;
             btn.innerText = "Loading...";
