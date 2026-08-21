@@ -214,25 +214,35 @@
             return d.toLocaleString('en-GB', { timeZone: 'Europe/Paris' });
         }
 
-        // Fonction maîtresse de filtrage des indisponibilités
+        // Validation stricte des créneaux
         function isValidSlot(item) {
             if (!item || !item.from || !item.to) return false;
 
             const dFrom = new Date(item.from);
             const dTo = new Date(item.to);
 
-            // 1. Durée minimale d'au moins 60 minutes
+            // 1. Durée globale du créneau (au moins 60 minutes)
             const durationMinutes = (dTo - dFrom) / (1000 * 60);
             if (durationMinutes < 60) return false;
 
-            // 2. Vérification des heures UTC : Début > 00:59 UTC et Fin <= 23:00 UTC
+            // 2. Traitement des heures UTC pour exclure la tranche 00:00 - 00:59 UTC et > 23:00 UTC
             const startUtcMinutes = dFrom.getUTCHours() * 60 + dFrom.getUTCMinutes();
             const endUtcMinutes = dTo.getUTCHours() * 60 + dTo.getUTCMinutes();
 
-            // > 00:59 UTC implique strictement à partir de 01:00 UTC (>= 60 min)
-            if (startUtcMinutes <= 59) return false;
+            // Si le créneau se termine à 00:59 UTC ou avant sur la même journée UTC, on rejette
+            if (dFrom.getUTCFullYear() === dTo.getUTCFullYear() &&
+                dFrom.getUTCMonth() === dTo.getUTCMonth() &&
+                dFrom.getUTCDate() === dTo.getUTCDate()) {
+                
+                if (startUtcMinutes < 60 && endUtcMinutes <= 59) return false;
+            }
 
-            // <= 23:00 UTC implique <= 1380 minutes (00:00 UTC du lendemain est accepté car clôture du jour)
+            // Si le créneau se termine entre 00:01 UTC et 00:59 UTC, il s'agit de la tranche exclue (ex: fin à 00:30)
+            if (dTo.getUTCHours() === 0 && dTo.getUTCMinutes() > 0 && dTo.getUTCMinutes() <= 59) {
+                return false;
+            }
+
+            // Exclure les fins strictement après 23:00 UTC (1380 minutes) sauf minuit exact (00:00 UTC du lendemain)
             if (endUtcMinutes > 1380 && !(dTo.getUTCHours() === 0 && dTo.getUTCMinutes() === 0)) {
                 return false;
             }
@@ -274,14 +284,14 @@
                     return;
                 }
 
-                // Filtrage complet de toutes les listes reçues de l'API
+                // Filtrage complet de toutes les listes
                 const filtered_t1 = filterList(rawData.list_t1);
                 const filtered_t2 = filterList(rawData.list_t2);
                 const filtered_max_t1 = filterList(rawData.list_max_day_t1);
                 const filtered_max_t2 = filterList(rawData.list_max_day_t2);
                 const filtered_max_next_t2 = filterList(rawData.list_max_next_day_t2);
 
-                // Recalcul des totaux et pourcentages pour les KPI
+                // Recalcul des sommes
                 const sum_t1 = sumMw(filtered_t1);
                 const sum_t2 = sumMw(filtered_t2);
                 const sum_max_t1 = sumMw(filtered_max_t1);
