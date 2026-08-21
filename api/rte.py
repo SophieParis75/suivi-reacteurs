@@ -214,7 +214,7 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Deduplication par identifiant unique (dernière version)
+        # 1. Deduplication by unique identifier
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -223,14 +223,14 @@ def app(environ, start_response):
             if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
                 latest_by_identifier[identifier] = item
 
-        # 2. Filtrage : Exclusion stricte SEULEMENT des messages annulés (DISMISSED, CANCEL, CANCELLED, ANNULE).
-        # Les messages INACTIVE sont bien conservés.
+        # 2. Filtering: Exclude messages marked as DISMISSED or CANCELED/ANNULE, keep those containing 'environ'
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
             msg_status = str(item.get("message_status") or item.get("status") or "").upper()
             combined_status = remove_accents(f"{event_status} {msg_status}")
 
+            # Strict exclusion for DISMISSED, CANCEL, CANCELLED, and French ANNULE
             if any(term in combined_status for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]):
                 continue
 
@@ -313,7 +313,7 @@ def app(environ, start_response):
             "list_t2": list_t2,
             "list_max_day_t1": list_max_t1,
             "list_max_day_t2": list_max_t2,
-            "list_max_next_day_t2": list_max_next_day_t2
+            "list_max_next_day_t2": list_max_t2_next
         }
 
         status = '200 OK'
