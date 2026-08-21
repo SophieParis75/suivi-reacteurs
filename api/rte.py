@@ -1,27 +1,267 @@
-# 1. Dédoublonnage strict par identifiant : ne garder QUE la version la plus récente absolue (ex. v11)
-latest_by_identifier = {}
-for item in unavailabilities:
-    identifier = item.get("identifier")
-    version = int(item.get("version", 0))
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Graphique et Tableau des Indisponibilités</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .chart-container {
+            width: 90%;
+            margin: auto;
+            height: 500px;
+        }
+        .table-container {
+            width: 95%;
+            margin: 40px auto;
+            overflow-x: auto;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 12px;
+            text-align: center;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px 4px;
+            white-space: nowrap;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        th.reactor-col, td.reactor-col {
+            text-align: left;
+            font-weight: bold;
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+            z-index: 1;
+        }
+        th.reactor-col {
+            background-color: #e6e6e6;
+            z-index: 2;
+        }
+        tr:nth-child(even) td:not(.reactor-col) {
+            background-color: #fafafa;
+        }
+        .has-value {
+            font-weight: bold;
+            color: #d9534f;
+            background-color: #fdf2f2 !important;
+        }
+    </style>
+</head>
+<body>
+    <h2>Indisponibilités nucléaires cumulées par jour</h2>
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
 
-    if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
-        latest_by_identifier[identifier] = item
+    <div class="table-container">
+        <h3>Détail des volumes d'indisponibilité retenus (MW)</h3>
+        <table id="summaryTable">
+            <thead>
+                <tr id="tableHeader">
+                    <th class="reactor-col">Réacteur</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
+    </div>
 
-# 2. Filtrage : exclure uniquement les messages annulés/jetés (DISMISSED, CANCEL, ANNULE)
-# On CONSERVE les messages INACTIVE car leurs dates reflètent la fin réelle de l'événement
-filtered_items = []
-exclusion_terms = ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]
+    <script>
+        const configReacteurs = {
+            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
+            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
+            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
+            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
+            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
+            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
+            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
+            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
+            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
+            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
+            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
+            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
+            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
+            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
+            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
+            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
+            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
+            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
+            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
+            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
+            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
+            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
+            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
+            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
+            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
+            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
+            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
+            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
+            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
+            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
+        };
 
-for item in latest_by_identifier.values():
-    event_status = str(item.get("event_status") or "").upper()
-    msg_status = str(item.get("message_status") or item.get("status") or "").upper()
-    combined_status = remove_accents(f"{event_status} {msg_status}")
+        const API_URL = '/api/rte';
 
-    # Si la version est annulée ou rejetée, on l'ignore
-    if any(term in combined_status for term in exclusion_terms):
-        continue
+        function removeAccents(str) {
+            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        }
 
-    # Filtrage environnemental (racine "environ")
-    full_item_text = json.dumps(item).lower()
-    if "environ" in full_item_text:
-        filtered_items.append(item)
+        async function chargerDonneesEtAfficher() {
+            let rawData = [];
+            let t2Iso = new Date().toISOString();
+
+            try {
+                const response = await fetch(API_URL);
+                if (response.ok) {
+                    const json = await response.json();
+                    rawData = json.list_max_day_t2 || json.list_t2 || [];
+                    if (json.t2_iso) t2Iso = json.t2_iso;
+                }
+            } catch (err) {
+                console.error("Erreur lors de l'appel de /api/rte :", err);
+            }
+
+            if (!rawData || rawData.length === 0) {
+                document.body.innerHTML = "<h2>Aucune donnée disponible de l'API.</h2>";
+                return;
+            }
+
+            const datePart = t2Iso.split('T')[0];
+            let dateRef = new Date(datePart);
+            let dateDepart = new Date(dateRef);
+            dateDepart.setDate(dateRef.getDate() - 1);
+
+            let dates = [];
+            for (let i = 0; i < 22; i++) {
+                let d = new Date(dateDepart);
+                d.setDate(dateDepart.getDate() + i);
+                dates.push(d.toISOString().split('T')[0]);
+            }
+
+            const reacteurs = Object.keys(configReacteurs);
+
+            const datasets = reacteurs.map(r => {
+                const nomRecherche = r.toUpperCase().trim();
+                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+
+                let bg = cfg.color;
+                if (typeof pattern !== 'undefined' && pattern.draw) {
+                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch (e) { }
+                }
+
+                const dataPerDate = dates.map(d => {
+                    return rawData
+                        .filter(i => {
+                            // 1. Exclusion des messages annulés ou démis (inclut "Annulé", "ANNULÉ", "ANNULE", "DISMISSED", "CANCEL")
+                            const rawStatus = `${i.event_status || ''} ${i.message_status || ''} ${i.status || ''}`;
+                            const normalizedStatus = removeAccents(rawStatus).toUpperCase();
+                            
+                            const exclusionTerms = ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"];
+                            if (exclusionTerms.some(term => normalizedStatus.includes(term))) {
+                                return false;
+                            }
+
+                            // 2. Filtrage par réacteur
+                            let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
+                            if (assetName !== nomRecherche) return false;
+
+                            if (!i.from || !i.to) return true;
+
+                            let debut = new Date(i.from);
+                            let fin = new Date(i.to);
+
+                            // 3. Durée d'au moins 60 minutes
+                            const dureeMinutes = (fin - debut) / (1000 * 60);
+                            if (dureeMinutes < 60) return false;
+
+                            // 4. Début après 00:59 UTC (>= 01:00 UTC)
+                            const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
+                            if (minutesDebut <= 59) return false;
+
+                            // 5. Fin avant 23:01 UTC (<= 23:00 UTC)
+                            const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
+                            if (minutesFin > 1380) return false;
+
+                            // 6. Présence sur la journée (chaîne YYYY-MM-DD UTC)
+                            const isoDebut = debut.toISOString().split('T')[0];
+                            const isoFin = fin.toISOString().split('T')[0];
+                            return d >= isoDebut && d <= isoFin;
+                        })
+                        .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
+                });
+
+                return {
+                    label: r,
+                    backgroundColor: bg,
+                    data: dataPerDate
+                };
+            });
+
+            new Chart(document.getElementById('myChart'), {
+                type: 'bar',
+                data: { labels: dates, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+
+            genererTableau(dates, datasets);
+        }
+
+        function genererTableau(dates, datasets) {
+            const tableHeader = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+
+            tableHeader.innerHTML = '<th class="reactor-col">Réacteur</th>';
+            tableBody.innerHTML = '';
+
+            dates.forEach(d => {
+                const th = document.createElement('th');
+                const parts = d.split('-');
+                th.innerText = `${parts[2]}/${parts[1]}`;
+                th.title = d;
+                tableHeader.appendChild(th);
+            });
+
+            datasets.forEach(ds => {
+                const tr = document.createElement('tr');
+
+                const tdReactor = document.createElement('td');
+                tdReactor.className = 'reactor-col';
+                tdReactor.innerText = ds.label;
+                tr.appendChild(tdReactor);
+
+                ds.data.forEach(val => {
+                    const td = document.createElement('td');
+                    if (val > 0) {
+                        td.innerText = Math.round(val);
+                        td.className = 'has-value';
+                    } else {
+                        td.innerText = '-';
+                    }
+                    tr.appendChild(td);
+                });
+
+                tableBody.appendChild(tr);
+            });
+        }
+
+        chargerDonneesEtAfficher();
+    </script>
+</body>
+</html>
