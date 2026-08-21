@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Graphique et Tableau des Indisponibilités</title>
+    <title>Unavailabilities Chart and Table</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
     <style>
@@ -63,17 +63,17 @@
         <h2 style="margin-top: 0; margin-bottom: 10px;">Nuclear Environmental Unavailabilities Analysis</h2>
         <a href="index.html" target="_blank">View Detailed Analysis →</a>
     </div>
-    <h2>Indisponibilités nucléaires cumulées par jour</h2>
+    <h2>Cumulative Daily Nuclear Unavailabilities</h2>
     <div class="chart-container">
         <canvas id="myChart"></canvas>
     </div>
 
     <div class="table-container">
-        <h3>Détail des volumes d'indisponibilité retenus (MW)</h3>
+        <h3>Selected Unavailability Volumes Breakdown (MW)</h3>
         <table id="summaryTable">
             <thead>
                 <tr id="tableHeader">
-                    <th class="reactor-col">Réacteur</th>
+                    <th class="reactor-col">Reactor</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
@@ -117,7 +117,7 @@
 
         const API_URL = '/api/rte?strict_filter=true';
 
-        async function chargerDonneesEtAfficher() {
+        async function loadDataAndRender() {
             let rawData = [];
             let t2Iso = new Date().toISOString();
 
@@ -129,31 +129,31 @@
                     if (json.t2_iso) t2Iso = json.t2_iso;
                 }
             } catch (err) {
-                console.error("Erreur lors de l'appel de /api/rte :", err);
+                console.error("Error fetching /api/rte data:", err);
             }
 
             if (!rawData || rawData.length === 0) {
-                document.body.innerHTML = "<h2>Aucune donnée disponible de l'API.</h2>";
+                document.body.innerHTML = "<h2>No data available from the API.</h2>";
                 return;
             }
 
             const datePart = t2Iso.split('T')[0];
             let dateRef = new Date(datePart);
-            let dateDepart = new Date(dateRef);
-            dateDepart.setDate(dateRef.getDate() - 1);
+            let startDate = new Date(dateRef);
+            startDate.setDate(dateRef.getDate() - 1);
 
             let dates = [];
             for (let i = 0; i < 22; i++) {
-                let d = new Date(dateDepart);
-                d.setDate(dateDepart.getDate() + i);
+                let d = new Date(startDate);
+                d.setDate(startDate.getDate() + i);
                 dates.push(d.toISOString().split('T')[0]);
             }
 
-            const reacteurs = Object.keys(configReacteurs);
+            const reactors = Object.keys(configReacteurs);
 
-            const datasets = reacteurs.map(r => {
-                const nomRecherche = r.toUpperCase().trim();
-                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+            const datasets = reactors.map(r => {
+                const searchName = r.toUpperCase().trim();
+                const cfg = configReacteurs[searchName] || { pattern: 'solid', color: '#808080' };
 
                 let bg = cfg.color;
                 if (typeof pattern !== 'undefined' && pattern.draw) {
@@ -164,27 +164,27 @@
                     return rawData
                         .filter(i => {
                             let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
-                            if (assetName !== nomRecherche) return false;
+                            if (assetName !== searchName) return false;
 
                             if (!i.from || !i.to) return true;
 
-                            let debut = new Date(i.from);
-                            let fin = new Date(i.to);
+                            let start = new Date(i.from);
+                            let end = new Date(i.to);
 
-                            // 1. Durée totale de l'événement >= 60 min
-                            const dureeTotaleMinutes = (fin - debut) / (1000 * 60);
-                            if (dureeTotaleMinutes < 60) return false;
+                            // 1. Total event duration >= 60 min
+                            const totalDurationMinutes = (end - start) / (1000 * 60);
+                            if (totalDurationMinutes < 60) return false;
 
-                            // 2. Calcul du chevauchement exact avec la journée 'd'
+                            // 2. Calculate exact overlap with day 'd'
                             const dayStart = new Date(`${d}T00:00:00`);
                             const dayEnd = new Date(`${d}T23:59:59.999`);
 
-                            const oStart = Math.max(debut.getTime(), dayStart.getTime());
-                            const oEnd = Math.min(fin.getTime(), dayEnd.getTime());
+                            const oStart = Math.max(start.getTime(), dayStart.getTime());
+                            const oEnd = Math.min(end.getTime(), dayEnd.getTime());
 
                             const overlapMinutes = (oEnd - oStart) / (1000 * 60);
 
-                            // La portion présente sur la journée d doit faire au moins 60 minutes
+                            // Portion present on day d must be at least 60 minutes
                             return overlapMinutes >= 60;
                         })
                         .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
@@ -210,14 +210,14 @@
                 }
             });
 
-            genererTableau(dates, datasets);
+            generateTable(dates, datasets);
         }
 
-        function genererTableau(dates, datasets) {
+        function generateTable(dates, datasets) {
             const tableHeader = document.getElementById('tableHeader');
             const tableBody = document.getElementById('tableBody');
 
-            tableHeader.innerHTML = '<th class="reactor-col">Réacteur</th>';
+            tableHeader.innerHTML = '<th class="reactor-col">Reactor</th>';
             tableBody.innerHTML = '';
 
             dates.forEach(d => {
@@ -251,7 +251,7 @@
             });
         }
 
-        chargerDonneesEtAfficher();
+        loadDataAndRender();
     </script>
 </body>
 </html>
