@@ -78,7 +78,7 @@ def parse_iso_date(dt_str):
     return dt.astimezone(PARIS_TZ)
 
 def is_valid_strict_slot(v):
-    """Vérifie si le créneau d'origine respecte la durée >= 60 min et la plage UTC (00:59 < début et fin <= 23:00)"""
+    """Vérifie si le créneau d'origine respecte la durée >= 60 min et la plage 01:00-23:00 heure de Paris"""
     v_start = parse_iso_date(v.get("start_date"))
     v_end = parse_iso_date(v.get("end_date"))
     if not v_start or not v_end:
@@ -89,19 +89,16 @@ def is_valid_strict_slot(v):
     if total_duration_min < 60:
         return False
 
-    # 2. Heures UTC
-    v_start_utc = v_start.astimezone(timezone.utc)
-    v_end_utc = v_end.astimezone(timezone.utc)
+    # 2. Heures en heure de Paris
+    start_paris_min = v_start.hour * 60 + v_start.minute
+    end_paris_min = v_end.hour * 60 + v_end.minute
 
-    start_utc_min = v_start_utc.hour * 60 + v_start_utc.minute
-    end_utc_min = v_end_utc.hour * 60 + v_end_utc.minute
-
-    # Début > 00:59 UTC (soit >= 01:00 UTC / 60 minutes)
-    if start_utc_min <= 59:
+    # Début strict à partir de 01:00 heure de Paris (soit > 00:59 / >= 60 min)
+    if start_paris_min <= 59:
         return False
 
-    # Fin <= 23:00 UTC (1380 minutes), sauf minuit exact du lendemain (00:00 UTC)
-    if end_utc_min > 1380 and not (v_end_utc.hour == 0 and v_end_utc.minute == 0):
+    # Fin <= 23:00 heure de Paris (1380 min), sauf minuit pile (00:00 du lendemain)
+    if end_paris_min > 1380 and not (v_end.hour == 0 and v_end.minute == 0):
         return False
 
     return True
