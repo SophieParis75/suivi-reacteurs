@@ -85,7 +85,11 @@ def parse_iso_date(dt_str):
 
 
 def is_valid_strict_slot(v):
-  """Vérifie la durée >= 60 min et rejette les créneaux nocturnes (23h01 -> 00h59 heure de Paris)."""
+  """Vérifie que la durée >= 60 min.
+
+  Les indisponibilités de >= 24h sont toujours conservées. Les créneaux plus
+  courts ne doivent pas être purement nocturnes.
+  """
   v_start = parse_iso_date(v.get("start_date"))
   v_end = parse_iso_date(v.get("end_date"))
   if not v_start or not v_end:
@@ -96,18 +100,20 @@ def is_valid_strict_slot(v):
   if total_duration_min < 60:
     return False
 
-  # 2. Rejet des événements qui DÉMARRENT pendant la plage nocturne (23h01 -> 00h59)
-  start_min = v_start.hour * 60 + v_start.minute
-  if start_min > 1380 or start_min <= 59:
-    return False
+  # 2. Si l'événement dure 24h ou plus, il est TOUJOURS VALIDE (ex: arrêts longs)
+  if total_duration_min >= 1440:
+    return True
 
-  # 3. Rejet des événements courts (< 24h) qui SE TERMINENT pendant la plage nocturne (23h01 -> 00h59)
+  # 3. Pour les événements courts (< 24h) :
+  # On exclut uniquement ceux qui démarrent en fin de soirée (>= 23h01) ET se terminent en début de nuit (<= 00h59)
+  start_min = v_start.hour * 60 + v_start.minute
   end_min = v_end.hour * 60 + v_end.minute
   is_midnight_exact = v_end.hour == 0 and v_end.minute == 0
 
+  # Créneau démarrant à 23h00 ou plus tard ET finissant avant 01h00 (hors minuit pile)
   if (
-      total_duration_min < 1440
-      and (end_min > 1380 or end_min <= 59)
+      start_min > 1380
+      and (end_min <= 59 or end_min > 1380)
       and not is_midnight_exact
   ):
     return False
