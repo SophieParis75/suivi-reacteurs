@@ -67,8 +67,8 @@
         <!-- Global Summary -->
         <div class="card">
             <div class="rules-info">
-                • Only cuts &gt; 30 minutes are taken into account.<br>
-                • For reactors with multiple outages on the same day, only the highest outage &gt; 30 minutes is considered.
+                • Only cuts &gt; 59 minutes (≥ 1 hour) are taken into account.<br>
+                • For reactors with multiple outages on the same day, only the highest outage &gt; 59 minutes is considered.
             </div>
             <h2>Summary of Unavailability Totals</h2>
             <div class="kpi-grid" id="kpi_container"></div>
@@ -347,7 +347,20 @@
                 document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
                 return;
             }
-            const sortedList = [...list].sort((a, b) => a.reactor.localeCompare(b.reactor));
+
+            // Filtrage optionnel côté client pour garantir l'exclusion des arrêts < 60 minutes
+            const filteredList = list.filter(r => {
+                if (!r.from || !r.to) return true;
+                const durationMinutes = (new Date(r.to) - new Date(r.from)) / (1000 * 60);
+                return durationMinutes >= 60;
+            });
+
+            if (filteredList.length === 0) {
+                document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
+                return;
+            }
+
+            const sortedList = [...filteredList].sort((a, b) => a.reactor.localeCompare(b.reactor));
             const html = sortedList.map(r => `
                 <tr>
                     <td>${r.reactor}</td>
