@@ -1,267 +1,339 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Graphique et Tableau des Indisponibilités</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        .chart-container {
-            width: 90%;
-            margin: auto;
-            height: 500px;
-        }
-        .table-container {
-            width: 95%;
-            margin: 40px auto;
-            overflow-x: auto;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            font-size: 12px;
-            text-align: center;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 6px 4px;
-            white-space: nowrap;
-        }
-        th {
-            background-color: #f2f2f2;
-            font-weight: bold;
-        }
-        th.reactor-col, td.reactor-col {
-            text-align: left;
-            font-weight: bold;
-            position: sticky;
-            left: 0;
-            background-color: #fff;
-            z-index: 1;
-        }
-        th.reactor-col {
-            background-color: #e6e6e6;
-            z-index: 2;
-        }
-        tr:nth-child(even) td:not(.reactor-col) {
-            background-color: #fafafa;
-        }
-        .has-value {
-            font-weight: bold;
-            color: #d9534f;
-            background-color: #fdf2f2 !important;
-        }
-    </style>
-</head>
-<body>
-    <h2>Indisponibilités nucléaires cumulées par jour</h2>
-    <div class="chart-container">
-        <canvas id="myChart"></canvas>
-    </div>
+import os
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
+import base64
+import unicodedata
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-    <div class="table-container">
-        <h3>Détail des volumes d'indisponibilité retenus (MW)</h3>
-        <table id="summaryTable">
-            <thead>
-                <tr id="tableHeader">
-                    <th class="reactor-col">Réacteur</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-            </tbody>
-        </table>
-    </div>
+PARIS_TZ = ZoneInfo("Europe/Paris")
+TOTAL_PARC_CAPACITY_MW = 62990.0
 
-    <script>
-        const configReacteurs = {
-            "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
-            "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
-            "BLAYAIS 1": { pattern: 'solid', color: '#636D01' },
-            "BLAYAIS 2": { pattern: 'solid', color: '#8B9434' },
-            "BLAYAIS 3": { pattern: 'solid', color: '#C5C999' },
-            "BLAYAIS 4": { pattern: 'solid', color: '#E3EDA3' },
-            "BUGEY 2": { pattern: 'solid', color: '#E62B60' },
-            "BUGEY 3": { pattern: 'solid', color: '#FF83A6' },
-            "BUGEY 4": { pattern: 'solid', color: '#E6AAAF' },
-            "BUGEY 5": { pattern: 'solid', color: '#FFD6E1' },
-            "CATTENOM 1": { pattern: 'disc', color: '#636D01' },
-            "CATTENOM 2": { pattern: 'disc', color: '#8B9434' },
-            "CATTENOM 3": { pattern: 'disc', color: '#C5C999' },
-            "CATTENOM 4": { pattern: 'disc', color: '#E2E4CC' },
-            "CHOOZ 1": { pattern: 'diagonal', color: '#2097E6' },
-            "CHOOZ 2": { pattern: 'diagonal', color: '#7CCBFF' },
-            "CRUAS 1": { pattern: 'disc', color: '#2E2900' },
-            "CRUAS 2": { pattern: 'disc', color: '#5C5833' },
-            "CRUAS 3": { pattern: 'disc', color: '#ADAB99' },
-            "CRUAS 4": { pattern: 'disc', color: '#D6D5CC' },
-            "GOLFECH 1": { pattern: 'solid', color: '#2097E6' },
-            "GOLFECH 2": { pattern: 'solid', color: '#7CCBFF' },
-            "NOGENT 1": { pattern: 'disc', color: '#5C5833' },
-            "NOGENT 2": { pattern: 'disc', color: '#ADAB99' },
-            "ST ALBAN 1": { pattern: 'solid', color: '#332E00' },
-            "ST ALBAN 2": { pattern: 'solid', color: '#858266' },
-            "TRICASTIN 1": { pattern: 'disc', color: '#E62B60' },
-            "TRICASTIN 2": { pattern: 'disc', color: '#FF5989' },
-            "TRICASTIN 3": { pattern: 'disc', color: '#FFACC4' },
-            "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
-        };
+def remove_accents(input_str):
+    """Normalize string to remove accents (e.g., 'ANNULÉ' -> 'ANNULE')"""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-        const API_URL = '/api/rte';
+def get_rte_token(client_id, client_secret):
+    url = "https://digital.iservices.rte-france.com/token/oauth/"
+    auth_str = f"{client_id}:{client_secret}"
+    b64_auth = base64.b64encode(auth_str.encode()).decode()
+    
+    headers = {
+        "Authorization": f"Basic {b64_auth}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = "grant_type=client_credentials".encode('utf-8')
+    
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        res_data = json.loads(resp.read().decode())
+        return res_data.get("access_token")
 
-        function removeAccents(str) {
-            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        }
+def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
+    if not eq_api_key:
+        return {}
 
-        async function chargerDonneesEtAfficher() {
-            let rawData = [];
-            let t2Iso = new Date().toISOString();
+    series_id = urllib.parse.quote("FR Consumption Temperature °C H Actual")
+    url = f"https://app.energyquantified.com/api/timeseries/{series_id}/?begin={start_date_str}&end={end_date_str}&frequency=PT1H"
+    
+    req = urllib.request.Request(
+        url,
+        headers={"accept": "application/json", "X-API-Key": eq_api_key},
+        method="GET"
+    )
+    
+    daily_temps = {}
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            values_list = data.get("data", []) or data.get("values", [])
+            
+            buckets = {}
+            for item in values_list:
+                d_str = item.get("date") or item.get("d")
+                val = item.get("value") or item.get("v")
+                if d_str and val is not None:
+                    dt = datetime.fromisoformat(d_str.replace("Z", "+00:00")).astimezone(PARIS_TZ)
+                    day_key = dt.strftime("%Y-%m-%d")
+                    if day_key not in buckets:
+                        buckets[day_key] = []
+                    buckets[day_key].append(float(val))
+            
+            for day_key, vals in buckets.items():
+                if vals:
+                    daily_temps[day_key] = round(sum(vals) / len(vals), 1)
+                    
+    except Exception as e:
+        print(f"Error fetching EQ temperature data: {e}")
+        
+    return daily_temps
 
-            try {
-                const response = await fetch(API_URL);
-                if (response.ok) {
-                    const json = await response.json();
-                    rawData = json.list_max_day_t2 || json.list_t2 || [];
-                    if (json.t2_iso) t2Iso = json.t2_iso;
+def parse_iso_date(dt_str):
+    if not dt_str:
+        return None
+    dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+    return dt.astimezone(PARIS_TZ)
+
+def compute_slot_unavailability(v, installed_cap):
+    unavail = v.get("unavailable_capacity")
+    if unavail is None:
+        avail = v.get("available_capacity")
+        if avail is not None:
+            unavail = installed_cap - avail
+        else:
+            unavail = 0
+    return max(0, float(unavail))
+
+def get_reactor_unavailability_at_instant(values, target_dt, installed_cap):
+    target_ts = target_dt.timestamp()
+    active_slots = []
+    for v in values:
+        v_start = parse_iso_date(v.get("start_date"))
+        v_end = parse_iso_date(v.get("end_date"))
+        if v_start and v_end:
+            if v_start.timestamp() <= target_ts < v_end.timestamp():
+                unavail = compute_slot_unavailability(v, installed_cap)
+                if unavail > 0:
+                    active_slots.append((unavail, v.get("start_date"), v.get("end_date")))
+    
+    if active_slots:
+        return max(active_slots, key=lambda x: x[0])
+    
+    return 0, None, None
+
+def get_reactor_daily_max_unavailability(values, day_date, installed_cap):
+    day_start = datetime(day_date.year, day_date.month, day_date.day, 0, 0, 0, tzinfo=PARIS_TZ)
+    day_end = day_start + timedelta(days=1)
+
+    start_ts = day_start.timestamp()
+    end_ts = day_end.timestamp()
+
+    eligible_slots = []
+
+    for v in values:
+        v_start = parse_iso_date(v.get("start_date"))
+        v_end = parse_iso_date(v.get("end_date"))
+
+        if not v_start or not v_end:
+            continue
+
+        v_start_ts = v_start.timestamp()
+        v_end_ts = v_end.timestamp()
+
+        # Overlap in seconds via Unix timestamps
+        o_start = max(v_start_ts, start_ts)
+        o_end = min(v_end_ts, end_ts)
+
+        overlap_seconds = o_end - o_start
+
+        # Suppression du seuil minimal : tout chevauchement est éligible
+        if overlap_seconds > 0:
+            unavail = compute_slot_unavailability(v, installed_cap)
+            if unavail > 0:
+                eligible_slots.append({
+                    "unavail": unavail,
+                    "overlap_seconds": overlap_seconds,
+                    "start_date": v.get("start_date"),
+                    "end_date": v.get("end_date")
+                })
+
+    if eligible_slots:
+        best_slot = max(eligible_slots, key=lambda x: x["unavail"])
+        return best_slot["unavail"], best_slot["start_date"], best_slot["end_date"]
+
+    return 0, None, None
+
+def app(environ, start_response):
+    try:
+        query_string = environ.get('QUERY_STRING', '')
+        query_components = urllib.parse.parse_qs(query_string)
+        
+        now_paris = datetime.now(PARIS_TZ)
+        t1_str = query_components.get("t1", [now_paris.isoformat()])[0]
+        t2_str = query_components.get("t2", [now_paris.isoformat()])[0]
+
+        t1_dt = datetime.fromisoformat(t1_str).astimezone(PARIS_TZ)
+        t2_dt = datetime.fromisoformat(t2_str).astimezone(PARIS_TZ)
+
+        client_id = os.environ.get("RTE_CLIENT_ID")
+        client_secret = os.environ.get("RTE_CLIENT_SECRET")
+        eq_api_key = os.environ.get("EQ_API_KEY")
+
+        if not client_id or not client_secret:
+            status = '500 Internal Server Error'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps({"status": "error", "message": "Missing RTE_CLIENT_ID or RTE_CLIENT_SECRET"}).encode('utf-8')]
+
+        token = get_rte_token(client_id, client_secret)
+
+        min_dt = min(t1_dt, t2_dt)
+        max_dt = max(t1_dt, t2_dt)
+
+        search_start_paris = datetime(min_dt.year, min_dt.month, min_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) - timedelta(days=1)
+        search_end_paris = datetime(max_dt.year, max_dt.month, max_dt.day, 0, 0, 0, tzinfo=PARIS_TZ) + timedelta(days=3)
+
+        search_start_utc = search_start_paris.astimezone(timezone.utc)
+        search_end_utc = search_end_paris.astimezone(timezone.utc)
+
+        start_str = search_start_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        end_str = search_end_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        eq_daily_temps = get_eq_temperatures(
+            min_dt.strftime('%Y-%m-%d'),
+            (max_dt + timedelta(days=2)).strftime('%Y-%m-%d'),
+            eq_api_key
+        )
+
+        base_url = "https://digital.iservices.rte-france.com/open_api/unavailability_additional_information/v7/generation_unavailabilities"
+        full_url = f"{base_url}?start_date={start_str}&end_date={end_str}&date_type=EVENT_DATE&last_version=true"
+
+        unavailabilities = []
+        next_url = full_url
+
+        while next_url:
+            req_rte = urllib.request.Request(
+                next_url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                method="GET"
+            )
+
+            with urllib.request.urlopen(req_rte, timeout=20) as resp:
+                raw_data = json.loads(resp.read().decode('utf-8'))
+
+            batch = raw_data.get("generation_unavailabilities", [])
+            unavailabilities.extend(batch)
+
+            continuation_token = raw_data.get("continuation_token") or raw_data.get("pagination", {}).get("continuation_token")
+
+            if continuation_token:
+                next_url = f"{full_url}&continuation_token={urllib.parse.quote(continuation_token)}"
+            else:
+                next_url = None
+
+        # 1. Deduplication par identifiant unique (dernière version)
+        latest_by_identifier = {}
+        for item in unavailabilities:
+            identifier = item.get("identifier")
+            version = int(item.get("version", 0))
+
+            if identifier not in latest_by_identifier or version > latest_by_identifier[identifier]["version"]:
+                latest_by_identifier[identifier] = item
+
+        # 2. Filtrage : Exclusion stricte SEULEMENT des messages annulés (DISMISSED, CANCEL, CANCELLED, ANNULE).
+        # Les messages INACTIVE sont bien conservés.
+        filtered_items = []
+        for item in latest_by_identifier.values():
+            event_status = str(item.get("event_status") or "").upper()
+            msg_status = str(item.get("message_status") or item.get("status") or "").upper()
+            combined_status = remove_accents(f"{event_status} {msg_status}")
+
+            if any(term in combined_status for term in ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"]):
+                continue
+
+            full_item_text = json.dumps(item).lower()
+            if "environ" in full_item_text:
+                filtered_items.append(item)
+
+        reactors_data = {}
+        for item in filtered_items:
+            unit_name = item.get("affected_asset_or_unit_name", "Unknown")
+            installed_cap = item.get("affected_asset_or_unit_installed_capacity", 0)
+            values = item.get("values", [])
+
+            if unit_name not in reactors_data:
+                reactors_data[unit_name] = {
+                    "installed_capacity": installed_cap,
+                    "values": []
                 }
-            } catch (err) {
-                console.error("Erreur lors de l'appel de /api/rte :", err);
-            }
+            reactors_data[unit_name]["values"].extend(values)
 
-            if (!rawData || rawData.length === 0) {
-                document.body.innerHTML = "<h2>Aucune donnée disponible de l'API.</h2>";
-                return;
-            }
+        day_t1 = t1_dt.date()
+        day_t2 = t2_dt.date()
+        day_t2_next = day_t2 + timedelta(days=1)
 
-            const datePart = t2Iso.split('T')[0];
-            let dateRef = new Date(datePart);
-            let dateDepart = new Date(dateRef);
-            dateDepart.setDate(dateRef.getDate() - 1);
+        list_t1, list_t2 = [], []
+        list_max_t1, list_max_t2, list_max_t2_next = [], [], []
 
-            let dates = [];
-            for (let i = 0; i < 22; i++) {
-                let d = new Date(dateDepart);
-                d.setDate(dateDepart.getDate() + i);
-                dates.push(d.toISOString().split('T')[0]);
-            }
+        sum_t1 = sum_t2 = 0
+        sum_max_t1 = sum_max_t2 = sum_max_t2_next = 0
 
-            const reacteurs = Object.keys(configReacteurs);
+        for unit_name, r_info in reactors_data.items():
+            installed_cap = r_info["installed_capacity"]
+            values = r_info["values"]
 
-            const datasets = reacteurs.map(r => {
-                const nomRecherche = r.toUpperCase().trim();
-                const cfg = configReacteurs[nomRecherche] || { pattern: 'solid', color: '#808080' };
+            unavail_t1, f_t1, t_t1 = get_reactor_unavailability_at_instant(values, t1_dt, installed_cap)
+            if unavail_t1 > 0:
+                sum_t1 += unavail_t1
+                list_t1.append({"reactor": unit_name, "unavailability_mw": unavail_t1, "from": f_t1, "to": t_t1})
 
-                let bg = cfg.color;
-                if (typeof pattern !== 'undefined' && pattern.draw) {
-                    try { bg = pattern.draw(cfg.pattern, cfg.color); } catch (e) { }
-                }
+            unavail_t2, f_t2, t_t2 = get_reactor_unavailability_at_instant(values, t2_dt, installed_cap)
+            if unavail_t2 > 0:
+                sum_t2 += unavail_t2
+                list_t2.append({"reactor": unit_name, "unavailability_mw": unavail_t2, "from": f_t2, "to": t_t2})
 
-                const dataPerDate = dates.map(d => {
-                    return rawData
-                        .filter(i => {
-                            // 1. Exclusion des messages annulés ou démis (inclut "Annulé", "ANNULÉ", "ANNULE", "DISMISSED", "CANCEL")
-                            const rawStatus = `${i.event_status || ''} ${i.message_status || ''} ${i.status || ''}`;
-                            const normalizedStatus = removeAccents(rawStatus).toUpperCase();
-                            
-                            const exclusionTerms = ["DISMISSED", "CANCEL", "CANCELLED", "ANNULE"];
-                            if (exclusionTerms.some(term => normalizedStatus.includes(term))) {
-                                return false;
-                            }
+            u_max_t1, f_m_t1, t_m_t1 = get_reactor_daily_max_unavailability(values, day_t1, installed_cap)
+            if u_max_t1 > 0:
+                sum_max_t1 += u_max_t1
+                list_max_t1.append({"reactor": unit_name, "unavailability_mw": u_max_t1, "from": f_m_t1, "to": t_m_t1})
 
-                            // 2. Filtrage par réacteur
-                            let assetName = (i.reactor || i.affected_asset_or_unit_name || "").toUpperCase().trim();
-                            if (assetName !== nomRecherche) return false;
+            u_max_t2, f_m_t2, t_m_t2 = get_reactor_daily_max_unavailability(values, day_t2, installed_cap)
+            if u_max_t2 > 0:
+                sum_max_t2 += u_max_t2
+                list_max_t2.append({"reactor": unit_name, "unavailability_mw": u_max_t2, "from": f_m_t2, "to": t_m_t2})
 
-                            if (!i.from || !i.to) return true;
+            u_max_t2_next, f_m_t2_next, t_m_t2_next = get_reactor_daily_max_unavailability(values, day_t2_next, installed_cap)
+            if u_max_t2_next > 0:
+                sum_max_t2_next += u_max_t2_next
+                list_max_t2_next.append({"reactor": unit_name, "unavailability_mw": u_max_t2_next, "from": f_m_t2_next, "to": t_m_t2_next})
 
-                            let debut = new Date(i.from);
-                            let fin = new Date(i.to);
+        temp_t1 = eq_daily_temps.get(day_t1.strftime('%Y-%m-%d'))
 
-                            // 3. Durée d'au moins 60 minutes
-                            const dureeMinutes = (fin - debut) / (1000 * 60);
-                            if (dureeMinutes < 60) return false;
-
-                            // 4. Début après 00:59 UTC (>= 01:00 UTC)
-                            const minutesDebut = debut.getUTCHours() * 60 + debut.getUTCMinutes();
-                            if (minutesDebut <= 59) return false;
-
-                            // 5. Fin avant 23:01 UTC (<= 23:00 UTC)
-                            const minutesFin = fin.getUTCHours() * 60 + fin.getUTCMinutes();
-                            if (minutesFin > 1380) return false;
-
-                            // 6. Présence sur la journée (chaîne YYYY-MM-DD UTC)
-                            const isoDebut = debut.toISOString().split('T')[0];
-                            const isoFin = fin.toISOString().split('T')[0];
-                            return d >= isoDebut && d <= isoFin;
-                        })
-                        .reduce((s, i) => s + (i.unavailability_mw || i.unavailable || 0), 0);
-                });
-
-                return {
-                    label: r,
-                    backgroundColor: bg,
-                    data: dataPerDate
-                };
-            });
-
-            new Chart(document.getElementById('myChart'), {
-                type: 'bar',
-                data: { labels: dates, datasets: datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, beginAtZero: true }
-                    }
-                }
-            });
-
-            genererTableau(dates, datasets);
+        payload = {
+            "status": "success",
+            "t1_iso": t1_dt.isoformat(),
+            "t2_iso": t2_dt.isoformat(),
+            "summary": {
+                "t1_unavailability_mw": sum_t1,
+                "t1_percent": round((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t1_day_max_mw": sum_max_t1,
+                "t1_day_max_percent": round((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t1_temperature_c": temp_t1,
+                "t2_unavailability_mw": sum_t2,
+                "t2_percent": round((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_day_max_mw": sum_max_t2,
+                "t2_day_max_percent": round((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100, 2),
+                "t2_next_day_max_mw": sum_max_t2_next,
+                "t2_next_day_max_percent": round((sum_max_t2_next / TOTAL_PARC_CAPACITY_MW) * 100, 2)
+            },
+            "list_t1": list_t1,
+            "list_t2": list_t2,
+            "list_max_day_t1": list_max_t1,
+            "list_max_day_t2": list_max_t2,
+            "list_max_next_day_t2": list_max_next_day_t2
         }
 
-        function genererTableau(dates, datasets) {
-            const tableHeader = document.getElementById('tableHeader');
-            const tableBody = document.getElementById('tableBody');
+        status = '200 OK'
+        headers = [
+            ('Content-Type', 'application/json'),
+            ('Access-Control-Allow-Origin', '*')
+        ]
+        start_response(status, headers)
+        return [json.dumps(payload).encode('utf-8')]
 
-            tableHeader.innerHTML = '<th class="reactor-col">Réacteur</th>';
-            tableBody.innerHTML = '';
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='ignore')
+        status = f'{e.code} HTTP Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+        return [json.dumps({"status": "HTTPError", "code": e.code, "message": error_body}).encode('utf-8')]
+    except Exception as e:
+        status = '500 Internal Server Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+        return [json.dumps({"status": "Exception", "message": str(e)}).encode('utf-8')]
 
-            dates.forEach(d => {
-                const th = document.createElement('th');
-                const parts = d.split('-');
-                th.innerText = `${parts[2]}/${parts[1]}`;
-                th.title = d;
-                tableHeader.appendChild(th);
-            });
-
-            datasets.forEach(ds => {
-                const tr = document.createElement('tr');
-
-                const tdReactor = document.createElement('td');
-                tdReactor.className = 'reactor-col';
-                tdReactor.innerText = ds.label;
-                tr.appendChild(tdReactor);
-
-                ds.data.forEach(val => {
-                    const td = document.createElement('td');
-                    if (val > 0) {
-                        td.innerText = Math.round(val);
-                        td.className = 'has-value';
-                    } else {
-                        td.innerText = '-';
-                    }
-                    tr.appendChild(td);
-                });
-
-                tableBody.appendChild(tr);
-            });
-        }
-
-        chargerDonneesEtAfficher();
-    </script>
-</body>
-</html>
+handler = app
