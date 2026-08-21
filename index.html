@@ -156,6 +156,7 @@
 
     <script>
         let lastAnalysisData = null;
+        const TOTAL_PARC_CAPACITY_MW = 62990.0;
 
         function setNowDefaults() {
             const now = new Date();
@@ -213,6 +214,41 @@
             return d.toLocaleString('en-GB', { timeZone: 'Europe/Paris' });
         }
 
+        // Fonction maîtresse de filtrage des indisponibilités
+        function isValidSlot(item) {
+            if (!item || !item.from || !item.to) return false;
+
+            const dFrom = new Date(item.from);
+            const dTo = new Date(item.to);
+
+            // 1. Durée minimale d'au moins 60 minutes
+            const durationMinutes = (dTo - dFrom) / (1000 * 60);
+            if (durationMinutes < 60) return false;
+
+            // 2. Vérification des heures UTC : Début > 00:59 UTC et Fin <= 23:00 UTC
+            const startUtcMinutes = dFrom.getUTCHours() * 60 + dFrom.getUTCMinutes();
+            const endUtcMinutes = dTo.getUTCHours() * 60 + dTo.getUTCMinutes();
+
+            // > 00:59 UTC implique strictement à partir de 01:00 UTC (>= 60 min)
+            if (startUtcMinutes <= 59) return false;
+
+            // <= 23:00 UTC implique <= 1380 minutes (00:00 UTC du lendemain est accepté car clôture du jour)
+            if (endUtcMinutes > 1380 && !(dTo.getUTCHours() === 0 && dTo.getUTCMinutes() === 0)) {
+                return false;
+            }
+
+            return true;
+        }
+
+        function filterList(list) {
+            if (!list) return [];
+            return list.filter(isValidSlot);
+        }
+
+        function sumMw(list) {
+            return list.reduce((acc, curr) => acc + (curr.unavailability_mw || 0), 0);
+        }
+
         async function runAnalysis() {
             const btn = document.getElementById('btn_analyse');
             btn.disabled = true;
@@ -231,12 +267,48 @@
                 }
 
                 const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}`);
-                const data = await res.json();
+                const rawData = await res.json();
 
-                if (data.status !== "success") {
-                    alert("Error during RTE API analysis: " + JSON.stringify(data));
+                if (rawData.status !== "success") {
+                    alert("Error during RTE API analysis: " + JSON.stringify(rawData));
                     return;
                 }
+
+                // Filtrage complet de toutes les listes reçues de l'API
+                const filtered_t1 = filterList(rawData.list_t1);
+                const filtered_t2 = filterList(rawData.list_t2);
+                const filtered_max_t1 = filterList(rawData.list_max_day_t1);
+                const filtered_max_t2 = filterList(rawData.list_max_day_t2);
+                const filtered_max_next_t2 = filterList(rawData.list_max_next_day_t2);
+
+                // Recalcul des totaux et pourcentages pour les KPI
+                const sum_t1 = sumMw(filtered_t1);
+                const sum_t2 = sumMw(filtered_t2);
+                const sum_max_t1 = sumMw(filtered_max_t1);
+                const sum_max_t2 = sumMw(filtered_max_t2);
+                const sum_max_next_t2 = sumMw(filtered_max_next_t2);
+
+                const data = {
+                    ...rawData,
+                    list_t1: filtered_t1,
+                    list_t2: filtered_t2,
+                    list_max_day_t1: filtered_max_t1,
+                    list_max_day_t2: filtered_max_t2,
+                    list_max_next_day_t2: filtered_max_next_t2,
+                    summary: {
+                        t1_unavailability_mw: sum_t1,
+                        t1_percent: roundTwo((sum_t1 / TOTAL_PARC_CAPACITY_MW) * 100),
+                        t1_day_max_mw: sum_max_t1,
+                        t1_day_max_percent: roundTwo((sum_max_t1 / TOTAL_PARC_CAPACITY_MW) * 100),
+                        t1_temperature_c: rawData.summary.t1_temperature_c,
+                        t2_unavailability_mw: sum_t2,
+                        t2_percent: roundTwo((sum_t2 / TOTAL_PARC_CAPACITY_MW) * 100),
+                        t2_day_max_mw: sum_max_t2,
+                        t2_day_max_percent: roundTwo((sum_max_t2 / TOTAL_PARC_CAPACITY_MW) * 100),
+                        t2_next_day_max_mw: sum_max_next_t2,
+                        t2_next_day_max_percent: roundTwo((sum_max_next_t2 / TOTAL_PARC_CAPACITY_MW) * 100)
+                    }
+                };
 
                 lastAnalysisData = { data, t1Raw, t2Raw };
 
@@ -343,38 +415,17 @@
             }
         }
 
+        function roundTwo(val) {
+            return Math.round(val * 100) / 100;
+        }
+
         function fillTable(tbodyId, list) {
             if (!list || list.length === 0) {
                 document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
                 return;
             }
 
-            const filteredList = list.filter(r => {
-                if (!r.from || !r.to) return true;
-                
-                const dFrom = new Date(r.from);
-                const dTo = new Date(r.to);
-                
-                // Condition 1: Durée minimale d'au moins 60 minutes
-                const durationMinutes = (dTo - dFrom) / (1000 * 60);
-                if (durationMinutes < 60) return false;
-
-                // Condition 2: Plage horaire UTC (début > 00:59 UTC et fin <= 23:00 UTC)
-                const startUtcMinutes = dFrom.getUTCHours() * 60 + dFrom.getUTCMinutes();
-                const endUtcMinutes = dTo.getUTCHours() * 60 + dTo.getUTCMinutes();
-
-                const isStartValid = startUtcMinutes > 59; // strict sous-entendu > 00:59
-                const isEndValid = endUtcMinutes <= 1380 || (dTo.getUTCHours() === 0 && dTo.getUTCMinutes() === 0); // 23:00 UTC = 1380 minutes
-
-                return isStartValid && isEndValid;
-            });
-
-            if (filteredList.length === 0) {
-                document.getElementById(tbodyId).innerHTML = "<tr><td colspan='4'>No reactor concerned.</td></tr>";
-                return;
-            }
-
-            const sortedList = [...filteredList].sort((a, b) => a.reactor.localeCompare(b.reactor));
+            const sortedList = [...list].sort((a, b) => a.reactor.localeCompare(b.reactor));
             const html = sortedList.map(r => `
                 <tr>
                     <td>${r.reactor}</td>
