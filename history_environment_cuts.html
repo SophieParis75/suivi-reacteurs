@@ -255,13 +255,20 @@
             };
 
             // =========================================================================
-            // STEP 1: IDENTIFY LATEST VERSION OF EACH REMIT MESSAGE
+            // STEP 1: IDENTIFY LATEST VERSION CONTAINING "ENVIRON" FOR EACH REMIT MESSAGE
             // =========================================================================
             let latestVersionMap = new Map();
 
             for (let i = headerRowIndex + 1; i < lines.length; i++) {
                 const cols = lines[i].split(';').map(c => c.replace(/^"|"$/g, '').trim());
                 if (cols.length <= idxStop) continue;
+
+            // Vérification de la présence de la racine "environ"
+                const fullLine = cols.join(' ').toLowerCase();
+                const isEnvironmental = fullLine.includes('environ');
+
+            // Si la version ne contient pas "environ", on passe directement à la suivante
+                if (!isEnvironmental) continue;
 
                 const startStr = cols[idxStart] || '';
                 const stopStr = cols[idxStop] || '';
@@ -270,11 +277,11 @@
 
                 if (!latestVersionMap.has(msgId) || version > latestVersionMap.get(msgId).version) {
                     latestVersionMap.set(msgId, {
-                        version: version,
-                        cols: cols
-                    });
-                }
+                    version: version,
+                    cols: cols
+                });
             }
+        }
 
             // =========================================================================
             // STEP 2: FILTER ONLY LATEST ACTIVE & ENVIRONMENTAL VERSIONS
