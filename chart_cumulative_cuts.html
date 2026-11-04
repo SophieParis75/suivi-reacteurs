@@ -4,7 +4,7 @@
         const generateDailyDates = (year) => {
             const dates = [];
             const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
-            const daysInMonths = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 30, 31, 30, 31, 31];
+            const daysInMonths = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
             for (let month = 0; month < 12; month++) {
                 const days = daysInMonths[month];
@@ -26,10 +26,9 @@
             const progressText = document.getElementById('progressText');
 
             progressContainer.style.display = 'block';
-            progressBar.style.width = '30%';
-            progressText.innerText = 'Loading API data...';
+            progressBar.style.width = '20%';
+            progressText.innerText = 'Interrogation de l\'API Vercel...';
 
-            // Plage complète de l'année en un seul appel
             const t1Iso = `${year}-01-01T00:00:00+01:00`;
             const t2Iso = `${year}-12-31T23:59:59+01:00`;
 
@@ -43,29 +42,28 @@
                 });
 
                 if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}`);
+                    throw new Error(`Erreur serveur HTTP ${res.status}`);
                 }
 
                 progressBar.style.width = '70%';
-                progressText.innerText = 'Processing cumulative data...';
+                progressText.innerText = 'Calcul du cumul quotidien...';
 
                 const data = await res.json();
                 const allDates = generateDailyDates(year);
                 
-                // Construire la liste des événements
-                const events = data.list_max_day_t1 || data.list_t1 || [];
+                // Récupération souple des événements selon le format renvoyé par Vercel
+                const events = data.list_max_day_t1 || data.list_t1 || data.list_max_day_t2 || data.list_t2 || [];
 
                 let cumulativeTotal = 0;
                 const dataPoints = [];
 
                 allDates.forEach(dateStr => {
-                    // Somme des indisponibilités actives à cette date
                     const dailySum = events.reduce((acc, item) => {
                         if (!item.from || !item.to) return acc;
                         const itemStart = item.from.split('T')[0];
                         const itemEnd = item.to.split('T')[0];
                         if (dateStr >= itemStart && dateStr <= itemEnd) {
-                            return acc + (item.unavailability_mw || 0);
+                            return acc + (item.unavailability_mw || item.unavailable || 0);
                         }
                         return acc;
                     }, 0);
@@ -75,7 +73,7 @@
                 });
 
                 progressBar.style.width = '100%';
-                progressText.innerText = '100%';
+                progressText.innerText = 'Terminé !';
 
                 setTimeout(() => {
                     progressContainer.style.display = 'none';
@@ -132,9 +130,9 @@
                 });
 
             } catch (err) {
-                console.error("Error generating chart:", err);
+                console.error("Erreur lors de la génération :", err);
                 progressContainer.style.display = 'none';
-                alert("Error loading data from API: " + err.message);
+                alert("Erreur lors du chargement des données : " + err.message);
             }
         }
     </script>
