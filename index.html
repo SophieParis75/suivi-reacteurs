@@ -231,8 +231,19 @@
                 }
 
                 // Appel unique avec le filtre strict activé
-                const res = await fetch(`/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
-                const data = await res.json();
+                const backendUrl = "https://analyseur-environnement-3qnr1np55-sophie-paris75.vercel.app";
+const res = await fetch(`${backendUrl}/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
+
+if (!res.ok) {
+    throw new Error(`Erreur HTTP Vercel: ${res.status} ${res.statusText}`);
+}
+
+const contentType = res.headers.get("content-type");
+if (!contentType || !contentType.includes("application/json")) {
+    throw new Error("L'API Vercel a renvoyé du HTML au lieu du JSON attendu. Vérifiez la route de votre serveur.");
+}
+
+const data = await res.json();
 
                 if (data.status !== "success") {
                     alert("Error during RTE API analysis: " + JSON.stringify(data));
