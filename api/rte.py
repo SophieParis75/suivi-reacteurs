@@ -35,7 +35,53 @@ def get_rte_token(client_id, client_secret):
             res_data = json.loads(resp.read().decode())
             return res_data.get("access_token")
     except urllib.error.HTTPError as e:
-        raise Exception(f"Erreur d'authentification RTE ({e.code}): Vérifiez vos clés RTE_CLIENT_ID et RTE_CLIENT_SECRET dans Vercel.")
+        error_detail = e.read().decode("utf-8", errors="ignore")
+        raise Exception(f"[Erreur Authentification RTE] HTTP {e.code} sur {url} - Détail: {error_detail}")
+
+
+def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
+    if not eq_api_key:
+        return {}
+
+    series_id = urllib.parse.quote("FR Consumption Temperature °C H Actual")
+    url = f"https://app.energyquantified.com/api/timeseries/{series_id}/?begin={start_date_str}&end={end_date_str}&frequency=PT1H"
+
+    req = urllib.request.Request(
+        url,
+        headers={"accept": "application/json", "X-API-Key": eq_api_key},
+        method="GET",
+    )
+
+    daily_temps = {}
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            values_list = data.get("data", []) or data.get("values", [])
+
+            buckets = {}
+            for item in values_list:
+                d_str = item.get("date") or item.get("d")
+                val = item.get("value") or item.get("v")
+                if d_str and val is not None:
+                    dt = datetime.fromisoformat(
+                        d_str.replace("Z", "+00:00")
+                    ).astimezone(PARIS_TZ)
+                    day_key = dt.strftime("%Y-%m-%d")
+                    if day_key not in buckets:
+                        buckets[day_key] = []
+                    buckets[day_key].append(float(val))
+
+            for day_key, vals in buckets.items():
+                if vals:
+                    daily_temps[day_key] = round(sum(vals) / len(vals), 1)
+
+    except urllib.error.HTTPError as e:
+        # On logue l'erreur météo sans faire planter l'analyse principale
+        print(f"[Erreur Energy Quantified] HTTP {e.code} sur URL: {url}")
+    except Exception as e:
+        print(f"Error fetching EQ temperature data: {e}")
+
+    return daily_temps
 
     headers = {
         "Authorization": f"Basic {b64_auth}",
