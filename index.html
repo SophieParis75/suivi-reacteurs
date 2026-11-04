@@ -214,146 +214,141 @@
         }
 
         async function runAnalysis() {
-            const btn = document.getElementById('btn_analyse');
-            btn.disabled = true;
-            btn.innerText = "Loading...";
+    const btn = document.getElementById('btn_analyse');
+    btn.disabled = true;
+    btn.innerText = "Loading...";
 
-            try {
-                const t1Raw = document.getElementById('t1_input').value.trim();
-                const t2Raw = document.getElementById('t2_input').value.trim();
+    try {
+        const t1Raw = document.getElementById('t1_input').value.trim();
+        const t2Raw = document.getElementById('t2_input').value.trim();
 
-                const t1Iso = parseFrenchDateToISO(t1Raw);
-                const t2Iso = parseFrenchDateToISO(t2Raw);
+        const t1Iso = parseFrenchDateToISO(t1Raw);
+        const t2Iso = parseFrenchDateToISO(t2Raw);
 
-                if (!t1Iso || !t2Iso) {
-                    alert("Please enter dates in a valid format: dd/mm/yyyy hh:mm (e.g. 15/08/2026 14:30)");
-                    return;
-                }
-
-                // Appel unique avec le filtre strict activé
-                const backendUrl = "https://analyseur-environnement-3qnr1np55-sophie-paris75.vercel.app";
-const res = await fetch(`${backendUrl}/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
-
-if (!res.ok) {
-    throw new Error(`Erreur HTTP Vercel: ${res.status} ${res.statusText}`);
-}
-
-const contentType = res.headers.get("content-type");
-if (!contentType || !contentType.includes("application/json")) {
-    throw new Error("L'API Vercel a renvoyé du HTML au lieu du JSON attendu. Vérifiez la route de votre serveur.");
-}
-
-const data = await res.json();
-
-                if (data.status !== "success") {
-                    alert("Error during RTE API analysis: " + JSON.stringify(data));
-                    return;
-                }
-
-                lastAnalysisData = { data, t1Raw, t2Raw };
-
-                const dateOnlyT1 = t1Raw.split(' ')[0];
-                const dateOnlyT2 = t2Raw.split(' ')[0];
-                const nextDayT2 = getNextDayFormatted(dateOnlyT2);
-
-                document.getElementById('title_summary_changes').innerText = `Summary of changes between ${t1Raw} and ${t2Raw}`;
-                document.getElementById('title_table_changes').innerText = `Changes between ${t1Raw} and ${t2Raw}`;
-                document.getElementById('th_status_t1').innerText = `Status at ${t1Raw}`;
-                document.getElementById('th_status_t2').innerText = `Status at ${t2Raw}`;
-                document.getElementById('title_t1_reactors').innerText = `Reactors selected for unavailability at ${t1Raw}`;
-                document.getElementById('title_t2_reactors').innerText = `Reactors selected for unavailability at ${t2Raw}`;
-                document.getElementById('title_max_t1').innerText = `Maximum cumulative total for ${dateOnlyT1}`;
-                document.getElementById('title_max_t2').innerText = `Maximum cumulative total for ${dateOnlyT2}`;
-                document.getElementById('title_max_next_t2').innerText = `Maximum cumulative total for ${nextDayT2}`;
-
-                document.getElementById('results').style.display = 'block';
-
-                const s = data.summary;
-                document.getElementById('kpi_container').innerHTML = `
-                    <div class="kpi">
-                        <div>Unavailability at ${t1Raw}</div>
-                        <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}% of fleet)</div>
-                        <div>
-                            Day Max:
-                            <span class="kpi-val">${s.t1_day_max_mw} MW (${s.t1_day_max_percent}% of fleet)</span>
-                        </div>
-                    </div>
-
-                    <div class="kpi">
-                        <div>Unavailability at ${t2Raw}</div>
-                        <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}% of fleet)</div>
-                        <div>
-                            Day Max:
-                            <span class="kpi-val">${s.t2_day_max_mw} MW (${s.t2_day_max_percent}% of fleet)</span>
-                        </div>
-                    </div>
-
-                    <div class="kpi">
-                        <div>Max on ${nextDayT2}</div>
-                        <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}% of fleet)</div>
-                    </div>
-                `;
-
-                const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
-                const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
-                const sortedReactors = Array.from(new Set([...t1Map.keys(), ...t2Map.keys()])).sort((a, b) => a.localeCompare(b));
-
-                let changesHtml = "";
-                let summaryHtml = "";
-
-                sortedReactors.forEach(reactor => {
-                    const mw1 = t1Map.get(reactor) || 0;
-                    const mw2 = t2Map.get(reactor) || 0;
-                    const diff = mw2 - mw1;
-
-                    if (diff !== 0) {
-                        let evo = "";
-                        let summaryText = "";
-
-                        if (mw1 === 0 && mw2 > 0) {
-                            evo = "🚨 Increased restriction / New outage";
-                            summaryText = `<b>${reactor}</b>: New unavailability of ${mw2} MW.`;
-                        } else if (mw1 > 0 && mw2 === 0) {
-                            evo = "✅ Partial or full grid restoration";
-                            summaryText = `<b>${reactor}</b>: Unavailability of ${mw1} MW has ended.`;
-                        } else if (diff > 0) {
-                            evo = "🚨 Increased restriction / New outage";
-                            summaryText = `<b>${reactor}</b>: Unavailability increased by ${diff} MW (from ${mw1} MW to ${mw2} MW).`;
-                        } else {
-                            evo = "✅ Partial or full grid restoration";
-                            summaryText = `<b>${reactor}</b>: Unavailability decreased by ${Math.abs(diff)} MW (from ${mw1} MW to ${mw2} MW).`;
-                        }
-
-                        changesHtml += `
-                            <tr>
-                                <td>${reactor}</td>
-                                <td>${mw1} MW</td>
-                                <td>${mw2} MW</td>
-                                <td>${diff > 0 ? '+' : ''}${diff} MW</td>
-                                <td>${evo}</td>
-                            </tr>
-                        `;
-                        summaryHtml += `<li>${summaryText}</li>`;
-                    }
-                });
-
-                document.getElementById('changes_table_body').innerHTML = changesHtml || `<tr><td colspan='5'>No changes observed between ${t1Raw} and ${t2Raw}.</td></tr>`;
-                document.getElementById('summary_list').innerHTML = summaryHtml || `<li>No changes to report between ${t1Raw} and ${t2Raw}.</li>`;
-
-                fillTable('t1_table_body', data.list_t1);
-                fillTable('t2_table_body', data.list_t2);
-                fillTable('max_t1_table_body', data.list_max_day_t1);
-                fillTable('max_next_t2_table_body', data.list_max_day_t2);
-                fillTable('max_next_t2_table_body_real', data.list_max_next_day_t2);
-
-            } catch (err) {
-                alert("An unexpected error occurred: " + err.message);
-                console.error(err);
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "Analysis";
-            }
+        if (!t1Iso || !t2Iso) {
+            alert("Please enter dates in a valid format: dd/mm/yyyy hh:mm (e.g. 15/08/2026 14:30)");
+            return;
         }
+
+        // Appel vers votre serveur Vercel qui fonctionne désormais
+        const backendUrl = "https://suivi-reacteurs.vercel.app";
+        const res = await fetch(`${backendUrl}/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`);
+        
+        if (!res.ok) {
+            throw new Error(`Erreur HTTP Vercel: ${res.status} ${res.statusText}`);
+        }
+
+        const data = await res.json();
+
+        if (data.status !== "success") {
+            alert("Error during RTE API analysis: " + JSON.stringify(data));
+            return;
+        }
+
+        lastAnalysisData = { data, t1Raw, t2Raw };
+
+        const dateOnlyT1 = t1Raw.split(' ')[0];
+        const dateOnlyT2 = t2Raw.split(' ')[0];
+        const nextDayT2 = getNextDayFormatted(dateOnlyT2);
+
+        document.getElementById('title_summary_changes').innerText = `Summary of changes between ${t1Raw} and ${t2Raw}`;
+        document.getElementById('title_table_changes').innerText = `Changes between ${t1Raw} and ${t2Raw}`;
+        document.getElementById('th_status_t1').innerText = `Status at ${t1Raw}`;
+        document.getElementById('th_status_t2').innerText = `Status at ${t2Raw}`;
+        document.getElementById('title_t1_reactors').innerText = `Reactors selected for unavailability at ${t1Raw}`;
+        document.getElementById('title_t2_reactors').innerText = `Reactors selected for unavailability at ${t2Raw}`;
+        document.getElementById('title_max_t1').innerText = `Maximum cumulative total for ${dateOnlyT1}`;
+        document.getElementById('title_max_t2').innerText = `Maximum cumulative total for ${dateOnlyT2}`;
+        document.getElementById('title_max_next_t2').innerText = `Maximum cumulative total for ${nextDayT2}`;
+
+        document.getElementById('results').style.display = 'block';
+
+        const s = data.summary;
+        document.getElementById('kpi_container').innerHTML = `
+            <div class="kpi">
+                <div>Unavailability at ${t1Raw}</div>
+                <div class="kpi-val">${s.t1_unavailability_mw} MW (${s.t1_percent}% of fleet)</div>
+                <div>
+                    Day Max:
+                    <span class="kpi-val">${s.t1_day_max_mw} MW (${s.t1_day_max_percent}% of fleet)</span>
+                </div>
+            </div>
+
+            <div class="kpi">
+                <div>Unavailability at ${t2Raw}</div>
+                <div class="kpi-val">${s.t2_unavailability_mw} MW (${s.t2_percent}% of fleet)</div>
+                <div>
+                    Day Max:
+                    <span class="kpi-val">${s.t2_day_max_mw} MW (${s.t2_day_max_percent}% of fleet)</span>
+                </div>
+            </div>
+
+            <div class="kpi">
+                <div>Max on ${nextDayT2}</div>
+                <div class="kpi-val">${s.t2_next_day_max_mw} MW (${s.t2_next_day_max_percent}% of fleet)</div>
+            </div>
+        `;
+
+        const t1Map = new Map((data.list_t1 || []).map(r => [r.reactor, r.unavailability_mw]));
+        const t2Map = new Map((data.list_t2 || []).map(r => [r.reactor, r.unavailability_mw]));
+        const sortedReactors = Array.from(new Set([...t1Map.keys(), ...t2Map.keys()])).sort((a, b) => a.localeCompare(b));
+
+        let changesHtml = "";
+        let summaryHtml = "";
+
+        sortedReactors.forEach(reactor => {
+            const mw1 = t1Map.get(reactor) || 0;
+            const mw2 = t2Map.get(reactor) || 0;
+            const diff = mw2 - mw1;
+
+            if (diff !== 0) {
+                let evo = "";
+                let summaryText = "";
+
+                if (mw1 === 0 && mw2 > 0) {
+                    evo = "🚨 Increased restriction / New outage";
+                    summaryText = `<b>${reactor}</b>: New unavailability of ${mw2} MW.`;
+                } else if (mw1 > 0 && mw2 === 0) {
+                    evo = "✅ Partial or full grid restoration";
+                    summaryText = `<b>${reactor}</b>: Unavailability of ${mw1} MW has ended.`;
+                } else if (diff > 0) {
+                    evo = "🚨 Increased restriction / New outage";
+                    summaryText = `<b>${reactor}</b>: Unavailability increased by ${diff} MW (from ${mw1} MW to ${mw2} MW).`;
+                } else {
+                    evo = "✅ Partial or full grid restoration";
+                    summaryText = `<b>${reactor}</b>: Unavailability decreased by ${Math.abs(diff)} MW (from ${mw1} MW to ${mw2} MW).`;
+                }
+
+                changesHtml += `
+                    <tr>
+                        <td>${reactor}</td>
+                        <td>${mw1} MW</td>
+                        <td>${mw2} MW</td>
+                        <td>${diff > 0 ? '+' : ''}${diff} MW</td>
+                        <td>${evo}</td>
+                    </tr>
+                `;
+                summaryHtml += `<li>${summaryText}</li>`;
+            }
+        });
+
+        document.getElementById('changes_table_body').innerHTML = changesHtml || `<tr><td colspan='5'>No changes observed between ${t1Raw} and ${t2Raw}.</td></tr>`;
+        document.getElementById('summary_list').innerHTML = summaryHtml || `<li>No changes to report between ${t1Raw} and ${t2Raw}.</li>`;
+
+        fillTable('t1_table_body', data.list_t1);
+        fillTable('t2_table_body', data.list_t2);
+        fillTable('max_t1_table_body', data.list_max_day_t1);
+        fillTable('max_next_t2_table_body', data.list_max_day_t2);
+        fillTable('max_next_t2_table_body_real', data.list_max_next_day_t2);
+
+    } catch (err) {
+        alert("An unexpected error occurred: " + err.message);
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Analysis";
+    }
+}
 
         function fillTable(tbodyId, list) {
             if (!list || list.length === 0) {
