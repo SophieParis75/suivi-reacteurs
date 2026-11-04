@@ -30,7 +30,7 @@
         const backendUrl = "https://suivi-reacteurs.vercel.app";
 
         async function fetchDataForDate(dateStr) {
-            const t1Raw = `${dateStr} 23:59`;
+            const t1Raw = `${dateStr} 00:00`;
             const t2Raw = `${dateStr} 23:59`;
             const t1Iso = parseFrenchDateToISO(t1Raw);
             const t2Iso = parseFrenchDateToISO(t2Raw);
@@ -50,7 +50,7 @@
             }
 
             const data = await res.json();
-            return data.summary ? data.summary.t1_day_max_mw : 0;
+            return data.summary ? (data.summary.t1_day_max_mw || 0) : 0;
         }
 
         let chartInstance = null;
@@ -77,7 +77,7 @@
                     cumulativeTotal += dailyMaxMw;
                     dataPoints.push({ x: dateStr, y: cumulativeTotal });
                 } catch (err) {
-                    console.error(`Error fetching date ${dateStr}`, err);
+                    console.error(`Error fetching date ${dateStr}:`, err);
                     dataPoints.push({ x: dateStr, y: cumulativeTotal });
                 }
 
