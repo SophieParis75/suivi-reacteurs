@@ -1,350 +1,140 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Cumulative Nuclear Environmental Unavailabilities</title>
-    <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- SheetJS (XLSX) CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background: #0f172a; color: #f8fafc; }
-        h1, h2 { color: #38bdf8; }
-        .top-link-box a { color: #38bdf8; font-weight: bold; text-decoration: none; font-size: 15px; }
-        .top-link-box a:hover { text-decoration: underline; }
-        .card { background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155; }
-        .controls { display: flex; gap: 15px; align-items: center; margin-bottom: 15px; }
-        button { padding: 10px 24px; background: #0284c7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 15px; }
-        button:hover { background: #0369a1; }
-        button:disabled { background: #475569; cursor: not-allowed; }
-        .btn-clear { background: #64748b; margin-left: auto; }
-        .btn-clear:hover { background: #475569; }
-        .btn-excel { background: #10b981; margin-top: 15px; }
-        .btn-excel:hover { background: #059669; }
-        .progress-bar-bg { background: #0f172a; border-radius: 4px; height: 10px; overflow: hidden; margin-top: 10px; border: 1px solid #334155; }
-        .progress-bar-fill { background: #38bdf8; height: 100%; width: 0%; transition: width 0.2s; }
-        .status-text { font-size: 14px; color: #94a3b8; margin-top: 5px; }
-        .rules-info { color: #94a3b8; font-size: 14px; margin-bottom: 15px; line-height: 1.5; background: #0f172a; padding: 10px 15px; border-radius: 6px; border: 1px solid #334155; }
-        .chart-container { position: relative; height: 480px; width: 100%; }
-        .export-row { display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid #334155; }
-    </style>
-</head>
-<body>
+<script>
+        const parseFrenchDateToISO = (str) => {
+            if (!str) return null;
+            const [datePart, timePart] = str.split(' ');
+            if (!datePart || !timePart) return null;
+            const [d, m, y] = datePart.split('/');
+            const [h, min] = timePart.split(':');
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${h.padStart(2, '0')}:${min.padStart(2, '0')}:00+02:00`;
+        };
 
-    <div class="card top-link-box">
-        <h2 style="margin-top: 0; margin-bottom: 10px;">Nuclear Environmental Unavailabilities Analysis</h2>
-        <a href="index.html" target="_blank">View Detailed Analysis →</a>
-    </div>
-
-    <h1>Cumulative Nuclear Environmental Unavailabilities</h1>
-
-    <div class="card">
-        <div class="rules-info">
-            • <b>All cuts, regardless of duration, are taken into account.<br>
-            • <b>For reactors with multiple outages on the same day, only the daily maximum outage is considered..<br>
-            • <b>Temperature curve:</b> Displays national average daily temperature (°C) overlaid on top.<br>
-            • <b>Fast loading:</b> Historical data older than 5 days is saved in local memory.
-        </div>
-        <div class="controls">
-            <button id="btn_generate" onclick="generateChart()">Generate Chart</button>
-            <button class="btn-clear" onclick="clearCache()">Clear Cache</button>
-        </div>
-        <div id="progress_container" style="display: none;">
-            <div class="status-text" id="status_text">Preparing analysis...</div>
-            <div class="progress-bar-bg">
-                <div class="progress-bar-fill" id="progress_fill"></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card" id="chart_card" style="display: none;">
-        <div class="chart-container">
-            <canvas id="cutsChart"></canvas>
-        </div>
-        <div class="export-row">
-            <button class="btn-excel" onclick="exportToExcel()">📥 Download Chart Data (.xlsx)</button>
-        </div>
-    </div>
-
-    <script>
-        let myChart = null;
-        let currentChartData = [];
-        const CACHE_KEY = "rte_cumulative_cuts_cache_v3";
-        const TOTAL_FLEET_MW = 62990;
-
-        function getDatesRange() {
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            
-            const startDate = new Date(currentYear, 4, 1);
-            const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            
+        const generateDailyDates = (year) => {
             const dates = [];
-            let cur = new Date(startDate);
+            const isLeap = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+            const daysInMonths = [31, isLeap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-            while (cur <= endDate) {
-                const day = String(cur.getDate()).padStart(2, '0');
-                const month = String(cur.getMonth() + 1).padStart(2, '0');
-                const year = cur.getFullYear();
-                const isToday = cur.toDateString() === now.toDateString();
-
-                dates.push({
-                    display: isToday ? `${day}/${month}/${year} (Today)` : `${day}/${month}/${year}`,
-                    rawDate: `${day}/${month}/${year}`,
-                    iso: `${year}-${month}-${day}T12:00:00`,
-                    dt: new Date(cur),
-                    year: year,
-                    month: cur.getMonth(),
-                    isToday: isToday
-                });
-                
-                cur.setDate(cur.getDate() + 1);
-            }
-
-            return dates;
-        }
-
-        function loadCache() {
-            try {
-                const raw = localStorage.getItem(CACHE_KEY);
-                return raw ? JSON.parse(raw) : {};
-            } catch (e) {
-                console.error("Cache read error", e);
-                return {};
-            }
-        }
-
-        function saveCache(cacheData) {
-            try {
-                localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-            } catch (e) {
-                console.error("Cache write error", e);
-            }
-        }
-
-        function clearCache() {
-            localStorage.removeItem(CACHE_KEY);
-            alert("Local cache cleared. The next execution will re-fetch all historical data.");
-        }
-
-        async function generateChart() {
-            const btn = document.getElementById('btn_generate');
-            const progressContainer = document.getElementById('progress_container');
-            const progressFill = document.getElementById('progress_fill');
-            const statusText = document.getElementById('status_text');
-            const chartCard = document.getElementById('chart_card');
-
-            btn.disabled = true;
-            progressContainer.style.display = 'block';
-            chartCard.style.display = 'none';
-
-            const dates = getDatesRange();
-            if (dates.length === 0) {
-                alert("Current date is before May 1st. No analysis range available yet.");
-                btn.disabled = false;
-                return;
-            }
-
-            const cache = loadCache();
-            const now = new Date();
-            const fiveDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5);
-
-            let fetchCount = 0;
-            const fullResults = [];
-
-            for (let i = 0; i < dates.length; i++) {
-                const dateObj = dates[i];
-                const pct = Math.round(((i + 1) / dates.length) * 100);
-                
-                progressFill.style.width = `${pct}%`;
-
-                const isOlderThan5Days = dateObj.dt < fiveDaysAgo;
-                const cachedValue = cache[dateObj.display];
-
-                if (isOlderThan5Days && cachedValue !== undefined && !dateObj.isToday) {
-                    fullResults.push({ dateObj, val: cachedValue.val, temp: cachedValue.temp });
-                    statusText.innerText = `Loading from cache: ${dateObj.display}...`;
-                } else {
-                    fetchCount++;
-                    statusText.innerText = `Fetching API for ${dateObj.display} (${i + 1}/${dates.length})...`;
-
-                    try {
-                        const res = await fetch(`/api/rte?t1=${encodeURIComponent(dateObj.iso)}&t2=${encodeURIComponent(dateObj.iso)}`);
-                        const data = await res.json();
-
-                        let val = 0;
-                        let temp = null;
-                        if (data.status === "success") {
-                            val = data.summary.t1_day_max_mw || 0;
-                            temp = data.summary.t1_temperature_c;
-                        }
-
-                        fullResults.push({ dateObj, val, temp });
-                        
-                        if (!dateObj.isToday) {
-                            cache[dateObj.display] = { val, temp };
-                        }
-                    } catch (err) {
-                        console.error("Error fetching date " + dateObj.display, err);
-                        fullResults.push({ dateObj, val: 0, temp: null });
-                    }
+            for (let month = 0; month < 12; month++) {
+                const days = daysInMonths[month];
+                for (let day = 1; day <= days; day++) {
+                    const dStr = String(day).padStart(2, '0');
+                    const mStr = String(month + 1).padStart(2, '0');
+                    dates.push(`${dStr}/${mStr}/${year}`);
                 }
             }
+            return dates;
+        };
 
-            saveCache(cache);
+        const dates2025 = generateDailyDates(2025);
+        const dates2026 = generateDailyDates(2026);
 
-            const firstOutageEntry = fullResults.find(item => item.val > 0);
-            let filteredResults = fullResults;
+        const backendUrl = "https://suivi-reacteurs.vercel.app";
 
-            if (firstOutageEntry) {
-                const targetYear = firstOutageEntry.dateObj.year;
-                const targetMonth = firstOutageEntry.dateObj.month;
+        async function fetchDataForDate(dateStr) {
+            const t1Raw = `${dateStr} 23:59`;
+            const t2Raw = `${dateStr} 23:59`;
+            const t1Iso = parseFrenchDateToISO(t1Raw);
+            const t2Iso = parseFrenchDateToISO(t2Raw);
 
-                filteredResults = fullResults.filter(item => {
-                    if (item.dateObj.year > targetYear) return true;
-                    if (item.dateObj.year === targetYear && item.dateObj.month >= targetMonth) return true;
-                    return false;
-                });
+            const url = `${backendUrl}/api/rte?t1=${encodeURIComponent(t1Iso)}&t2=${encodeURIComponent(t2Iso)}&strict_filter=true`;
+            
+            const res = await fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
             }
 
-            currentChartData = filteredResults;
-
-            const labels = filteredResults.map(item => item.dateObj.display);
-            const dataPoints = filteredResults.map(item => item.val);
-            const tempPoints = filteredResults.map(item => item.temp);
-            
-            const pointColors = filteredResults.map(item => item.dateObj.isToday ? '#f59e0b' : '#f43f5e');
-            const pointRadii = filteredResults.map(item => item.dateObj.isToday ? 6 : 3);
-
-            statusText.innerText = "Rendering chart...";
-            renderChart(labels, dataPoints, tempPoints, pointColors, pointRadii);
-            
-            chartCard.style.display = 'block';
-            btn.disabled = false;
-            statusText.innerText = `Analysis complete! (${fetchCount} API calls made, ${dates.length - fetchCount} loaded from cache)`;
+            const data = await res.json();
+            return data.summary ? data.summary.t1_day_max_mw : 0;
         }
 
-        function renderChart(labels, dataPoints, tempPoints, pointColors, pointRadii) {
-            const ctx = document.getElementById('cutsChart').getContext('2d');
+        let chartInstance = null;
 
-            if (myChart) {
-                myChart.destroy();
+        async function generateChart() {
+            const year = document.getElementById('yearSelect').value;
+            const dates = year === '2025' ? dates2025 : dates2026;
+
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.innerText = '0%';
+
+            const dataPoints = [];
+            let cumulativeTotal = 0;
+
+            for (let i = 0; i < dates.length; i++) {
+                const dateStr = dates[i];
+                try {
+                    const dailyMaxMw = await fetchDataForDate(dateStr);
+                    cumulativeTotal += dailyMaxMw;
+                    dataPoints.push({ x: dateStr, y: cumulativeTotal });
+                } catch (err) {
+                    console.error(`Error fetching date ${dateStr}`, err);
+                    dataPoints.push({ x: dateStr, y: cumulativeTotal });
+                }
+
+                const percent = Math.round(((i + 1) / dates.length) * 100);
+                progressBar.style.width = `${percent}%`;
+                progressText.innerText = `${percent}%`;
             }
 
-            myChart = new Chart(ctx, {
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+            }, 1000);
+
+            const ctx = document.getElementById('cumulativeChart').getContext('2d');
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'National Avg Temperature (°C)',
-                            data: tempPoints,
-                            borderColor: '#38bdf8',
-                            backgroundColor: '#38bdf8',
-                            borderWidth: 3,
-                            fill: false,
-                            tension: 0.3,
-                            pointRadius: 2,
-                            pointHoverRadius: 6,
-                            yAxisID: 'yTemp',
-                            order: 1
-                        },
-                        {
-                            label: 'Daily Max Environmental Unavailability (MW)',
-                            data: dataPoints,
-                            borderColor: '#f43f5e',
-                            backgroundColor: 'rgba(244, 63, 94, 0.15)',
-                            borderWidth: 3,
-                            fill: true,
-                            tension: 0.2,
-                            pointBackgroundColor: pointColors,
-                            pointBorderColor: pointColors,
-                            pointRadius: pointRadii,
-                            pointHoverRadius: 7,
-                            yAxisID: 'y',
-                            order: 2
-                        }
-                    ]
+                    labels: dates.map(d => d.substring(0, 5)),
+                    datasets: [{
+                        label: `Cumulative Environmental Unavailability Max (MW) - ${year}`,
+                        data: dataPoints.map(p => p.y),
+                        borderColor: '#0056b3',
+                        backgroundColor: 'rgba(0, 86, 179, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Date (DD/MM)' },
+                            ticks: { maxTicksLimit: 20 }
+                        },
+                        y: {
+                            title: { display: true, text: 'Cumulative Max MW' },
+                            beginAtZero: true
+                        }
+                    },
                     plugins: {
-                        legend: { labels: { color: '#f8fafc', font: { size: 14 } } },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    if (context.dataset.yAxisID === 'yTemp') {
-                                        return ` Temperature: ${context.parsed.y !== null ? context.parsed.y + ' °C' : 'N/A'}`;
-                                    }
-                                    const mw = context.parsed.y || 0;
-                                    const percent = ((mw / TOTAL_FLEET_MW) * 100).toFixed(1);
-                                    const isToday = context.label.includes('(Today)');
-                                    const prefix = isToday ? ' Today Max (Ongoing)' : ' Daily Max';
-                                    return `${prefix}: ${mw} MW (${percent}% of fleet)`;
+                                    return `Cumulative: ${context.parsed.y} MW`;
                                 }
                             }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { color: '#334155' },
-                            ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 }
-                        },
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            beginAtZero: true,
-                            title: { display: true, text: 'Unavailability (MW)', color: '#f43f5e' },
-                            grid: { color: '#334155' },
-                            ticks: { color: '#94a3b8', callback: function(v) { return v + ' MW'; } }
-                        },
-                        yTemp: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: { display: true, text: 'Temperature (°C)', color: '#38bdf8' },
-                            grid: { drawOnChartArea: false },
-                            ticks: { color: '#38bdf8', callback: function(v) { return v + ' °C'; } }
                         }
                     }
                 }
             });
         }
-
-        function exportToExcel() {
-            if (!currentChartData || currentChartData.length === 0) {
-                alert("No data available to export. Please generate the chart first.");
-                return;
-            }
-
-            const rows = currentChartData.map(item => {
-                const mw = item.val || 0;
-                const percent = ((mw / TOTAL_FLEET_MW) * 100).toFixed(2);
-                return {
-                    "Date": item.dateObj.rawDate,
-                    "Daily Max Unavailability (MW)": mw,
-                    "Fleet Unavailability (%)": parseFloat(percent),
-                    "National Avg Temperature (°C)": item.temp !== null && item.temp !== undefined ? item.temp : ""
-                };
-            });
-
-            const worksheet = XLSX.utils.json_to_sheet(rows);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Environmental Outages");
-
-            worksheet['!cols'] = [
-                { wch: 15 },
-                { wch: 30 },
-                { wch: 25 },
-                { wch: 30 }
-            ];
-
-            const todayStr = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(workbook, `nuclear_environmental_cuts_${todayStr}.xlsx`);
-        }
     </script>
-</body>
-</html>
