@@ -36,7 +36,7 @@ def get_rte_token(client_id, client_secret):
             return res_data.get("access_token")
     except urllib.error.HTTPError as e:
         error_detail = e.read().decode("utf-8", errors="ignore")
-        raise Exception(f"[Erreur Authentification RTE] HTTP {e.code} sur {url} - Détail: {error_detail}")
+        raise Exception(f"[Erreur Auth RTE] HTTP {e.code} sur {url} - Détail: {error_detail}")
 
 
 def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
@@ -76,61 +76,7 @@ def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
                     daily_temps[day_key] = round(sum(vals) / len(vals), 1)
 
     except urllib.error.HTTPError as e:
-        # On logue l'erreur météo sans faire planter l'analyse principale
         print(f"[Erreur Energy Quantified] HTTP {e.code} sur URL: {url}")
-    except Exception as e:
-        print(f"Error fetching EQ temperature data: {e}")
-
-    return daily_temps
-
-    headers = {
-        "Authorization": f"Basic {b64_auth}",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-    data = "grant_type=client_credentials".encode("utf-8")
-
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        res_data = json.loads(resp.read().decode())
-        return res_data.get("access_token")
-
-
-def get_eq_temperatures(start_date_str, end_date_str, eq_api_key):
-    if not eq_api_key:
-        return {}
-
-    series_id = urllib.parse.quote("FR Consumption Temperature °C H Actual")
-    url = f"https://app.energyquantified.com/api/timeseries/{series_id}/?begin={start_date_str}&end={end_date_str}&frequency=PT1H"
-
-    req = urllib.request.Request(
-        url,
-        headers={"accept": "application/json", "X-API-Key": eq_api_key},
-        method="GET",
-    )
-
-    daily_temps = {}
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            values_list = data.get("data", []) or data.get("values", [])
-
-            buckets = {}
-            for item in values_list:
-                d_str = item.get("date") or item.get("d")
-                val = item.get("value") or item.get("v")
-                if d_str and val is not None:
-                    dt = datetime.fromisoformat(
-                        d_str.replace("Z", "+00:00")
-                    ).astimezone(PARIS_TZ)
-                    day_key = dt.strftime("%Y-%m-%d")
-                    if day_key not in buckets:
-                        buckets[day_key] = []
-                    buckets[day_key].append(float(val))
-
-            for day_key, vals in buckets.items():
-                if vals:
-                    daily_temps[day_key] = round(sum(vals) / len(vals), 1)
-
     except Exception as e:
         print(f"Error fetching EQ temperature data: {e}")
 
@@ -242,7 +188,6 @@ def get_reactor_daily_max_unavailability(
 
 
 def app(environ, start_response):
-    # En-têtes CORS systématiques
     cors_headers = [
         ("Content-Type", "application/json"),
         ("Access-Control-Allow-Origin", "*"),
@@ -250,7 +195,6 @@ def app(environ, start_response):
         ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
     ]
 
-    # Réponse rapide aux requêtes OPTIONS (pré-vol CORS du navigateur)
     request_method = environ.get("REQUEST_METHOD", "GET").upper()
     if request_method == "OPTIONS":
         start_response("200 OK", cors_headers)
@@ -324,8 +268,12 @@ def app(environ, start_response):
                 method="GET",
             )
 
-            with urllib.request.urlopen(req_rte, timeout=20) as resp:
-                raw_data = json.loads(resp.read().decode("utf-8"))
+            try:
+                with urllib.request.urlopen(req_rte, timeout=20) as resp:
+                    raw_data = json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode("utf-8", errors="ignore")
+                raise Exception(f"[Erreur API Données RTE] HTTP {e.code} sur URL: {next_url} - Réponse: {error_body}")
 
             batch = raw_data.get("generation_unavailabilities", [])
             unavailabilities.extend(batch)
