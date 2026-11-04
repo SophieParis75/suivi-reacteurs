@@ -30,6 +30,20 @@ def get_rte_token(client_id, client_secret):
     data = "grant_type=client_credentials".encode("utf-8")
 
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            res_data = json.loads(resp.read().decode())
+            return res_data.get("access_token")
+    except urllib.error.HTTPError as e:
+        raise Exception(f"Erreur d'authentification RTE ({e.code}): Vérifiez vos clés RTE_CLIENT_ID et RTE_CLIENT_SECRET dans Vercel.")
+
+    headers = {
+        "Authorization": f"Basic {b64_auth}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    data = "grant_type=client_credentials".encode("utf-8")
+
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=10) as resp:
         res_data = json.loads(resp.read().decode())
         return res_data.get("access_token")
