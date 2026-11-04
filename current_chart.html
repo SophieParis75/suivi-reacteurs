@@ -1,87 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Unavailabilities Chart and Table</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/patternomaly"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        .chart-container {
-            width: 90%;
-            margin: auto;
-            height: 500px;
-        }
-        .table-container {
-            width: 95%;
-            margin: 40px auto;
-            overflow-x: auto;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            font-size: 12px;
-            text-align: center;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 6px 4px;
-            white-space: nowrap;
-        }
-        th {
-            background-color: #f2f2f2;
-            font-weight: bold;
-        }
-        th.reactor-col, td.reactor-col {
-            text-align: left;
-            font-weight: bold;
-            position: sticky;
-            left: 0;
-            background-color: #fff;
-            z-index: 1;
-        }
-        th.reactor-col {
-            background-color: #e6e6e6;
-            z-index: 2;
-        }
-        tr:nth-child(even) td:not(.reactor-col) {
-            background-color: #fafafa;
-        }
-        .has-value {
-            font-weight: bold;
-            color: #d9534f;
-            background-color: #fdf2f2 !important;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="card top-link-box">
-        <h2 style="margin-top: 0; margin-bottom: 10px;">Nuclear Environmental Unavailabilities Analysis</h2>
-        <a href="index.html" target="_blank">View Detailed Analysis →</a>
-    </div>
-    <h2>Cumulative Daily Nuclear Unavailabilities</h2>
-    <div class="chart-container">
-        <canvas id="myChart"></canvas>
-    </div>
-
-    <div class="table-container">
-        <h3>Selected Unavailability Volumes Breakdown (MW)</h3>
-        <table id="summaryTable">
-            <thead>
-                <tr id="tableHeader">
-                    <th class="reactor-col">Reactor</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-            </tbody>
-        </table>
-    </div>
-
-    <script>
+<script>
         const configReacteurs = {
             "BELLEVILLE 1": { pattern: 'diagonal', color: '#FF306B' },
             "BELLEVILLE 2": { pattern: 'diagonal', color: '#FFACC4' },
@@ -115,14 +32,19 @@
             "TRICASTIN 4": { pattern: 'disc', color: '#E6AAAF' }
         };
 
-        const API_URL = '/api/rte?strict_filter=true';
+        // URL pointant vers le serveur backend Vercel
+        const API_URL = 'https://suivi-reacteurs.vercel.app/api/rte?strict_filter=true';
 
         async function loadDataAndRender() {
             let rawData = [];
             let t2Iso = new Date().toISOString();
 
             try {
-                const response = await fetch(API_URL);
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: { 'Accept': 'application/json' }
+                });
                 if (response.ok) {
                     const json = await response.json();
                     rawData = json.list_max_day_t2 || json.list_t2 || [];
@@ -253,5 +175,3 @@
 
         loadDataAndRender();
     </script>
-</body>
-</html>
