@@ -85,7 +85,6 @@ def parse_iso_date(dt_str):
 
 
 def is_valid_strict_slot(v):
-    """Vérifie uniquement que la durée globale de l'événement d'origine est >= 60 min."""
     v_start = parse_iso_date(v.get("start_date"))
     v_end = parse_iso_date(v.get("end_date"))
     if not v_start or not v_end:
@@ -156,14 +155,12 @@ def get_reactor_daily_max_unavailability(
         v_start_ts = v_start.timestamp()
         v_end_ts = v_end.timestamp()
 
-        # Chevauchement en secondes sur la journée évaluée
         o_start = max(v_start_ts, start_ts)
         o_end = min(v_end_ts, end_ts)
 
         overlap_seconds = o_end - o_start
         overlap_minutes = overlap_seconds / 60.0
 
-        # Filtre strict : la portion d'événement sur la journée consultée doit faire au moins 60 minutes
         if strict_filter and overlap_minutes < 60:
             continue
 
@@ -185,6 +182,20 @@ def get_reactor_daily_max_unavailability(
 
 
 def app(environ, start_response):
+    # En-têtes CORS systématiques
+    cors_headers = [
+        ("Content-Type", "application/json"),
+        ("Access-Control-Allow-Origin", "*"),
+        ("Access-Control-Allow-Methods", "GET, OPTIONS"),
+        ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+    ]
+
+    # Réponse rapide aux requêtes OPTIONS (pré-vol CORS du navigateur)
+    request_method = environ.get("REQUEST_METHOD", "GET").upper()
+    if request_method == "OPTIONS":
+        start_response("200 OK", cors_headers)
+        return [b""]
+
     try:
         query_string = environ.get("QUERY_STRING", "")
         query_components = urllib.parse.parse_qs(query_string)
@@ -205,9 +216,7 @@ def app(environ, start_response):
         eq_api_key = os.environ.get("EQ_API_KEY")
 
         if not client_id or not client_secret:
-            status = "500 Internal Server Error"
-            headers = [("Content-Type", "application/json")]
-            start_response(status, headers)
+            start_response("500 Internal Server Error", cors_headers)
             return [
                 json.dumps({
                     "status": "error",
@@ -270,7 +279,6 @@ def app(environ, start_response):
             else:
                 next_url = None
 
-        # 1. Deduplication par identifiant unique (version la plus récente)
         latest_by_identifier = {}
         for item in unavailabilities:
             identifier = item.get("identifier")
@@ -282,7 +290,6 @@ def app(environ, start_response):
             ):
                 latest_by_identifier[identifier] = item
 
-        # 2. Filtrage : Exclusion des messages annulés/dismissed, conservation de la racine 'environ'
         filtered_items = []
         for item in latest_by_identifier.values():
             event_status = str(item.get("event_status") or "").upper()
@@ -422,19 +429,12 @@ def app(environ, start_response):
             "list_max_next_day_t2": list_max_next_day_t2,
         }
 
-        status = "200 OK"
-        headers = [
-            ("Content-Type", "application/json"),
-            ("Access-Control-Allow-Origin", "*"),
-        ]
-        start_response(status, headers)
+        start_response("200 OK", cors_headers)
         return [json.dumps(payload).encode("utf-8")]
 
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="ignore")
-        status = f"{e.code} HTTP Error"
-        headers = [("Content-Type", "application/json")]
-        start_response(status, headers)
+        start_response(f"{e.code} HTTP Error", cors_headers)
         return [
             json.dumps({
                 "status": "HTTPError",
@@ -443,9 +443,7 @@ def app(environ, start_response):
             }).encode("utf-8")
         ]
     except Exception as e:
-        status = "500 Internal Server Error"
-        headers = [("Content-Type", "application/json")]
-        start_response(status, headers)
+        start_response("500 Internal Server Error", cors_headers)
         return [
             json.dumps({"status": "Exception", "message": str(e)}).encode("utf-8")
         ]
