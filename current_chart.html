@@ -54,10 +54,11 @@
                 console.error("Error fetching /api/rte data:", err);
             }
 
-            if (!rawData || rawData.length === 0) {
-                document.body.innerHTML = "<h2>No data available from the API.</h2>";
-                return;
-            }
+           // ✅ NOUVEAU CODE :
+if (!rawData || rawData.length === 0) {
+    document.body.innerHTML = "<h2 style='text-align: center; margin-top: 50px; color: #555;'>There are no environmental nuclear cuts currently.</h2>";
+    return;
+}
 
             const datePart = t2Iso.split('T')[0];
             let dateRef = new Date(datePart);
